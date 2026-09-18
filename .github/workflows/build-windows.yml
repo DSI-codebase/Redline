@@ -1,0 +1,231 @@
+name: Build Windows
+
+# Produces a portable one-folder app and an Inno Setup installer as artifacts.
+# Run manually (Actions ▸ Build Windows ▸ Run workflow) or on a version tag.
+# On a v* tag it also publishes a GitHub Release with both attached.
+on:
+  workflow_dispatch:
+    inputs:
+      pydrc_ref:
+        description: "PyDRC ref to build against (blank = packaging/pydrc-ref.txt)"
+        required: false
+        default: ""
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write   # needed to create the Release on a tag
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    # `secrets` is not available in a step-level `if:`, so the token is lifted
+    # to job env where it can be tested.
+    env:
+      PYDRC_TOKEN: ${{ secrets.PYDRC_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          # Pinned, unlike tests.yml's matrix, and deliberately: this job
+          # freezes ONE installer and the interpreter baked into it should
+          # not vary run to run. What must work on 3.11-3.13 is running
+          # from source, and the test matrix is where that is established.
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r packaging/requirements-build.txt
+
+      # The design rule library is a private sibling repository (see
+      # CI.md). Without a PYDRC_TOKEN secret the app still builds and
+      # runs -- the Audit tab reports itself unavailable -- so this does not
+      # block a release, but the log says which kind of build it was.
+      # The ref is resolved to a commit SHA and *that* is installed, so a
+      # branch cannot move underneath a build in progress and two runs of one
+      # tag cannot quietly differ. The SHA is recorded for the log and the
+      # release notes: an installer that cannot say which rules it contains
+      # is one nobody can reproduce.
+      - name: Install the design rule library (optional)
+        if: env.PYDRC_TOKEN != ''
+        shell: bash
+        env:
+          INPUT_REF: ${{ inputs.pydrc_ref }}
+        run: |
+          set -euo pipefail
+          ref="$INPUT_REF"
+          # `|| true` because `set -euo pipefail` makes a grep that matches
+          # nothing kill the script HERE -- measured, exit 1 with no output at
+          # all -- so the refusal written for that case, five lines below, could
+          # never print. The safe half was never in doubt (it does not reach the
+          # install); what was missing is the sentence saying why.
+          if [ -z "$ref" ]; then
+            ref=$(grep -v '^\s*#' packaging/pydrc-ref.txt | grep -v '^\s*$' | head -n1 | tr -d '[:space:]' || true)
+          fi
+          if [ -z "$ref" ]; then
+            # An empty ref is not a harmless default: `git ls-remote <url> ""`
+            # lists *every* ref, and the resolution below would take the first
+            # one and install it. Fail loudly instead of shipping an installer
+            # built from whatever sorted first.
+            echo "::error::packaging/pydrc-ref.txt names no ref (and no pydrc_ref input was given). It must contain one git ref: a branch, a tag, or a commit SHA."
+            exit 1
+          fi
+          echo "PyDRC ref requested: $ref"
+          url="https://x-access-token:${PYDRC_TOKEN}@github.com/${{ github.repository_owner }}/PyDRC"
+          # An annotated tag resolves to two lines -- the tag object, then the
+          # commit it points at as "<ref>^{}". The commit is the one to
+          # install; the tag object is not a thing pip can check out.
+          refs=$(git ls-remote "$url" "$ref" || true)
+          sha=$(printf '%s\n' "$refs" | awk '/\^\{\}$/ {print $1; found=1; exit}
+                                             END {if (!found) exit 1}' || true)
+          if [ -z "$sha" ]; then
+            sha=$(printf '%s\n' "$refs" | awk 'NF {print $1; exit}' || true)
+          fi
+          if [ -z "$sha" ]; then
+            # `git ls-remote` EXITS 0 WHEN IT MATCHES NOTHING -- measured --
+            # so an empty answer is the only signal that the ref is not on the
+            # remote. A commit SHA is legitimately unlistable, which is the
+            # whole reason this branch exists; what it must NOT do is answer
+            # both cases the same way. It did: a ref naming a tag that is not
+            # there reached pip as though it were a commit, and the log line
+            # below printed "PyDRC resolved to: v0.2.0" -- a line that reads as
+            # a successful resolution -- before the checkout failed about
+            # something else. A fallback written for a legitimate SHA turning
+            # "this ref is gone" into "assume it is a SHA" is the
+            # does-it-fail-or-stop-finding shape this repository is written
+            # against.
+            #
+            # The discriminator is the ref's own SHAPE, which is all that is
+            # available here: hex, and long enough to be an abbreviation git
+            # would accept. Stated false positive, because it is real and
+            # small -- a BRANCH named in hex and at least seven characters
+            # long (`deadbeef`) is read as a SHA and reaches pip, which then
+            # fails on its own terms. No branch in this portfolio is named
+            # that way.
+            case "$ref" in
+              *[!0-9a-fA-F]* | "" ) ref_is_sha=no ;;
+              * ) [ "${#ref}" -ge 7 ] && ref_is_sha=yes || ref_is_sha=no ;;
+            esac
+            if [ "$ref_is_sha" = no ]; then
+              echo "::error::packaging/pydrc-ref.txt names '$ref', which is neither a branch or tag on ${{ github.repository_owner }}/PyDRC nor a commit SHA. If PyDRC was recreated under a new account its tags did NOT travel -- a fresh repository has no history to hang one on -- so pin a ref that exists there."
+              exit 1
+            fi
+            echo "PyDRC ref '$ref' is not on the remote; it is shaped like a commit SHA, so it is installed as one."
+            sha="$ref"
+          fi
+          echo "PyDRC resolved to: $sha"
+          pip install "pydrc[dxf] @ git+${url}@${sha}"
+          echo "PYDRC_REF=$ref"  >> "$GITHUB_ENV"
+          echo "PYDRC_SHA=$sha"  >> "$GITHUB_ENV"
+
+      - name: Report whether design rule checking is included
+        shell: bash
+        run: |
+          if [ -z "$PYDRC_TOKEN" ]; then
+            echo "::warning::Built WITHOUT design rule checking -- no PYDRC_TOKEN secret. The Audit tab will report the rule library as unavailable. See CI.md."
+            echo "PYDRC_BUILT=none" >> "$GITHUB_ENV"
+          else
+            python -c "from app import audit; ok, msg = audit.status(); print(msg); raise SystemExit(0 if ok else 1)"
+            lib=$(python -c "import pydrc; print(pydrc.__version__)")
+            pack=$(python -c "from pydrc.packs import loader; print(loader.load_by_id('drc-base').ref)")
+            echo "Design rule checking: pydrc $lib, $pack, commit $PYDRC_SHA (ref $PYDRC_REF)"
+            echo "PYDRC_BUILT=pydrc $lib | $pack | ${PYDRC_SHA} (ref ${PYDRC_REF})" >> "$GITHUB_ENV"
+          fi
+
+      - name: Run tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        # Per-module process isolation, shared with the Tests workflow.
+        # tools/run_tests.py explains why the suite cannot run in one process.
+        run: python tools/run_tests.py -v --strict
+
+      - name: Build app (PyInstaller)
+        run: pyinstaller packaging/DSI_Redline.spec --noconfirm
+
+      - name: Build installer (Inno Setup)
+        run: |
+          choco install innosetup --no-progress -y
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging\installer.iss
+
+      - name: Package portable zip
+        shell: pwsh
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          New-Item -ItemType Directory -Force dist_installer | Out-Null
+          $ver = ($env:REF_NAME -replace '[^\w.\-]', '_')
+          Compress-Archive -Path "dist/DSI Redline/*" `
+            -DestinationPath "dist_installer/DSI-Redline-$ver-portable.zip" -Force
+
+      - name: Upload portable app
+        uses: actions/upload-artifact@v5
+        with:
+          name: DSI-Redline-portable
+          path: "dist/DSI Redline/**"
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v5
+        with:
+          name: DSI-Redline-installer
+          path: "dist_installer/*.exe"
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_NAME: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          # This step decides everything from $LASTEXITCODE, so a non-zero exit
+          # from gh must be a value to test rather than a thrown error. PS 7.4
+          # turns those into terminating errors by default, and the runner sets
+          # ErrorActionPreference to Stop.
+          $ErrorActionPreference = 'Continue'
+          $PSNativeCommandUseErrorActionPreference = $false
+
+          $assets = Get-ChildItem "dist_installer/*.exe","dist_installer/*.zip" `
+            -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+
+          $drc = $env:PYDRC_BUILT
+          if (-not $drc -or $drc -eq "none") {
+            $drcNote = "Design rule checking is NOT included in this build."
+          } else {
+            $drcNote = "Design rule checking: $drc"
+          }
+
+          # idempotent: works whether the tag was pushed via git (no release yet)
+          # or created from the GitHub "Draft a new release" UI (release exists)
+          $existing = gh release view "$env:REF_NAME" --repo "$env:REPO" `
+            --json body -q .body 2> $null
+          # Read the code before anything else can clobber it. Out-String
+          # because a multi-line body comes back as an *array* of lines, and
+          # -notmatch over an array filters it rather than answering yes or no
+          # -- a body that already carried the note would still test true (the
+          # non-matching lines) and get a second copy appended.
+          $noRelease = $LASTEXITCODE -ne 0
+          $existing = ($existing | Out-String).Trim()
+          if ($noRelease) {
+            gh release create "$env:REF_NAME" --repo "$env:REPO" `
+              --title "DSI Redline $env:REF_NAME" `
+              --notes "Automated Windows build for $env:REF_NAME. Download the installer (DSI_Redline_Setup) or the portable .zip below.`n`n$drcNote"
+          } elseif ($existing -notmatch 'Design rule checking') {
+            # Drafting the release in the UI first and then pushing the tag is
+            # the common path, and it skips the branch above -- which is how
+            # v1.5.0 shipped with empty notes. Say which rules are in the build
+            # either way, and append rather than replace: whatever a human
+            # wrote in the body is theirs to keep.
+            if ([string]::IsNullOrWhiteSpace($existing)) {
+              $body = $drcNote
+            } else {
+              $body = "$existing`n`n$drcNote"
+            }
+            gh release edit "$env:REF_NAME" --repo "$env:REPO" --notes "$body"
+          }
+          gh release upload "$env:REF_NAME" $assets --clobber --repo "$env:REPO"

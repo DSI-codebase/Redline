@@ -1,0 +1,17 @@
+PySide6>=6.6
+PyMuPDF>=1.25
+openpyxl>=3.1
+python-docx>=1.1
+pdf2docx>=0.5.8
+pytesseract>=0.3.10
+Pillow>=10.0
+anthropic>=0.40
+PyYAML>=6.0
+
+# Design rule checking lives in PyDRC, a sibling project rather than a PyPI
+# package. It is deliberately NOT pinned here: the repository is private, so a
+# plain `pip install -r requirements.txt` would fail for anyone -- and for any
+# CI runner -- without credentials for it. The app reports the audit
+# unavailable rather than breaking when it is absent.
+#
+# To install it too:  pip install -r requirements-drc.txt

@@ -1,0 +1,8 @@
+# The design rule check library. Separate from requirements.txt because the
+# repository is private: installing this needs credentials (a GitHub account
+# with access, or a token in CI -- see CI.md). Everything else in the app
+# installs and runs without it.
+# The [dxf] extra pulls ezdxf, which Tools > Import project drawings needs to
+# read the AutoCAD Electrical source files. Without it the import stops with
+# "Reading drawings requires the ezdxf package" while everything else works.
+pydrc[dxf] @ git+https://github.com/MoogMan1073/PyDRC@main

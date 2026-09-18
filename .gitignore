@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+dist_installer/
+.venv/
+venv/
+env/
+
+# App artifacts (generated next to source PDFs)
+*.marked.pdf
+*.markup.db
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Test / tooling
+.pytest_cache/
+.coverage
+htmlcov/

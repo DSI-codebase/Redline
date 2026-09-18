@@ -1,0 +1,94 @@
+name: Tests
+
+# Every push and every pull request. The Windows build workflow also runs the
+# suite, but only on a manual dispatch or a version tag -- far too late to be
+# the first time a regression is noticed.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # CONTRIBUTING and the README both say "Python 3.11+". The matrix
+        # varied only the operating system and pinned 3.11 on both runners, so
+        # 3.12 and 3.13 -- increasingly the default on a fresh machine -- were
+        # a claim made to contributors and never checked. The frozen Windows
+        # build pins its own interpreter, so a shipped installer is unaffected;
+        # what this covers is running from source, which the README documents
+        # as a first-class way to use the app.
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.12", "3.13"]
+    runs-on: ${{ matrix.os }}
+
+    # The secret is lifted to job env because the `secrets` context is not
+    # available in a step-level `if:` -- testing it there would silently never
+    # match. `env` is available, so the token's presence can gate the step.
+    env:
+      PYDRC_TOKEN: ${{ secrets.PYDRC_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      # A bare Ubuntu runner has no Qt system libraries, so importing
+      # PySide6.QtGui fails with "libEGL.so.1: cannot open shared object file"
+      # before any test body runs. Offscreen rendering still needs these.
+      - name: Install Qt system libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1 libglib2.0-0 libdbus-1-3 \
+            libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
+            libxcb-shape0 libxcb-xinerama0 libxcb-xfixes0
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # PyDRC is a private sibling repository, so the default GITHUB_TOKEN
+      # cannot reach it. With a PYDRC_TOKEN secret the design rule tests run;
+      # without one they skip, and the runner says so loudly rather than
+      # letting a green tick imply they passed. See CI.md.
+      #
+      # THE `[dxf]` EXTRA IS LOAD-BEARING and was missing here from the day
+      # this step was written. `requirements-drc.txt` installs `pydrc[dxf]`;
+      # this installed bare `pydrc`, so ezdxf was never present on any runner
+      # and the five tests guarded by `skipUnless(HAVE_EZDXF and HAVE_PYDRC)`
+      # never ran. Every run printed "5 tests were SKIPPED because the design
+      # rule library is absent" -- naming the library that WAS installed --
+      # and passed.
+      - name: Install the design rule library (optional)
+        if: env.PYDRC_TOKEN != ''
+        shell: bash
+        run: |
+          pip install "pydrc[dxf] @ git+https://x-access-token:${PYDRC_TOKEN}@github.com/${{ github.repository_owner }}/PyDRC@main"
+
+      # Qt needs a display; offscreen gives it one. Each test module runs in
+      # its own process -- see tools/run_tests.py for why.
+      #
+      # `--require-drc` is passed only when the install step above actually
+      # ran, so a fork without the secret still gets a clean run while THIS
+      # workflow goes red if the rule-library tests stop executing. Without it
+      # the failure mode is a banner under a green tick, which is how the
+      # missing `[dxf]` extra survived.
+      - name: Run tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        shell: bash
+        run: |
+          ARGS="--strict"
+          if [ -n "$PYDRC_TOKEN" ]; then ARGS="$ARGS --require-drc"; fi
+          echo "running: python tools/run_tests.py $ARGS"
+          python tools/run_tests.py $ARGS
