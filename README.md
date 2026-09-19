@@ -106,7 +106,7 @@ pip install -r requirements.txt
 
 ### Design rule checking (optional)
 
-The rule library lives in [PyDRC](https://github.com/MoogMan1073/PyDRC), a
+The rule library lives in [PyDRC](https://github.com/DSI-codebase/PyDRC), a
 separate project. It is kept out of `requirements.txt` so the app installs
 without needing access to that repository:
 

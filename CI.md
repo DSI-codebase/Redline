@@ -34,7 +34,7 @@ there is nothing to remember locally.
 
 ## The design rule library is optional, and CI says so
 
-Design rule checking lives in [PyDRC](https://github.com/MoogMan1073/PyDRC), a
+Design rule checking lives in [PyDRC](https://github.com/DSI-codebase/PyDRC), a
 separate library. It is **not** in `requirements.txt`, because that repository
 is private and a plain `pip install -r requirements.txt` would fail for anyone
 without credentials — including every CI runner. It lives in
@@ -67,9 +67,10 @@ Both workflows install the library when a `PYDRC_TOKEN` secret exists, and skip
 it (loudly) when it does not. To set it up:
 
 1. Create a fine-grained personal access token with **Contents: read-only** on
-   `MoogMan1073/PyDRC`.
-2. In `MoogMan1073/Redline` (the repository was renamed from `PDF_MarkupApp`;
-   GitHub redirects a clone but not a settings page), go to
+   `DSI-codebase/PyDRC`.
+2. In `DSI-codebase/Redline` (the repository moved accounts and was
+   recreated rather than transferred, so nothing under the old account
+   redirects -- not a clone and not a settings page), go to
    **Settings ▸ Secrets and variables ▸
    Actions ▸ New repository secret**.
 3. Name it `PYDRC_TOKEN` and paste the token.

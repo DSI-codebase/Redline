@@ -5,4 +5,4 @@
 # The [dxf] extra pulls ezdxf, which Tools > Import project drawings needs to
 # read the AutoCAD Electrical source files. Without it the import stops with
 # "Reading drawings requires the ezdxf package" while everything else works.
-pydrc[dxf] @ git+https://github.com/MoogMan1073/PyDRC@main
+pydrc[dxf] @ git+https://github.com/DSI-codebase/PyDRC@main
