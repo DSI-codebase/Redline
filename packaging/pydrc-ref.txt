@@ -29,4 +29,18 @@
 # Whatever this names is resolved to a commit SHA and that SHA is installed,
 # so the ref cannot move underneath a build in progress. The SHA is printed in
 # the log and written into the release notes.
-v0.2.0
+#
+# CHANGED 2026-09-20, from `v0.2.0`. The move to the company account recreated
+# every repository fresh from `main` -- one import commit, no tags -- so
+# `v0.2.0` names nothing in `DSI-codebase/PyDRC`. Measured:
+# `git ls-remote https://github.com/DSI-codebase/PyDRC v0.2.0` returns an empty
+# listing and exits 0, which is the state the shape test below it exists to
+# catch and the only one of the four move-day tag casualties that stops a
+# build. `main` is what the paragraph above already prescribes while
+# developing, and it resolves: `09dbb19` on the day this was set.
+#
+# RESTORING A TAG PIN NEEDS A TAG CUT IN THE NEW ACCOUNT FIRST, and the three
+# steps above are unchanged by that -- what changed is that step 1 no longer
+# has a tag to reuse. PyDRC's release workflow refuses to publish when the tag
+# disagrees with the package version, so the version there decides the name.
+main

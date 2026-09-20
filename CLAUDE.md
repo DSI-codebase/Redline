@@ -971,6 +971,18 @@ cause on the one day the account moves.
   the installer contains, which is the question that file exists to answer, so
   it is a move-day edit recorded in Pathforward's runbook rather than a silent
   one now.
+- **AND MOVE DAY CAME: the pin is `main` as of 2026-09-20.** That bullet said
+  *"it is a move-day edit recorded in Pathforward's runbook rather than a silent
+  one now"*, which is what happened rather than something that was avoided.
+  Measured on the new account: `git ls-remote
+  https://github.com/DSI-codebase/PyDRC v0.2.0` returns an empty listing and
+  exits 0, and `main` resolves to `09dbb19`. **`main` is the convention rather
+  than a fallback** — `packaging/pydrc-ref.txt`'s own opening paragraph has
+  always read *"`main` while developing … set it to a PyDRC tag before tagging
+  a release"* — so what the move cost is not the pin, it is that **step 1 of the
+  three-step release ordering no longer has a tag to reuse**: PyDRC's two tags
+  were left behind with its history, and the next app release needs one cut in
+  the new account before step 2 has anything to name.
 
 **Two checks, because one cannot run everywhere.** `tests/test_drc_ref_resolution.py`
 asserts the structure on any platform — the shape test exists, the not-a-SHA arm
