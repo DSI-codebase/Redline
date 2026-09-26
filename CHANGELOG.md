@@ -4,7 +4,9 @@ All notable changes to **DSI Redline** are documented here. Versions are tagged
 `vX.Y.Z`; each tag triggers the Windows build that publishes the installer and a
 portable zip to the matching GitHub release.
 
-## Unreleased
+## v1.6.0
+
+Design rule checking in this release is PyDRC `v0.2.1` (`09dbb19`).
 
 - **Add to workspace.** File ▸ Add to workspace — or right-click a Recent row
   in the File view — copies a drawing into a workspace folder: the quick
