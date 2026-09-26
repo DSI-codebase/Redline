@@ -75,8 +75,11 @@ def open_document(win, path):
         except Exception:
             pass
     win.document = doc
-    # remember it in File ▸ Open Recent (only once the open has succeeded)
+    # remember it in File ▸ Open Recent (only once the open has succeeded), and
+    # on its workspace's own recent list when it is in one -- whatever route
+    # opened it, so casual viewing elsewhere never pushes it off that list
     win.config.add_recent_file(path)
+    win.config.record_workspace_open(path)
     win._rebuild_recent_menu()
     # Feature 4: a .marked.pdf was opened but its original markup database
     # couldn't be found, so a new one was started — let the user know.

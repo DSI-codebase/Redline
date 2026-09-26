@@ -37,6 +37,12 @@ comment, and how pages print.
   **Recent** (10–200, default 50). **File ▸ Open Recent** always shows the newest
   10. Pinned files are a separate list and never age out.
 
+### Workspaces
+- **Recent files per workspace** — how many each [[Workspaces|workspace]] keeps
+  on its own recent list (5–100, default 25).
+- **Quick subfolders** — comma-separated; the folders **New workspace…** creates
+  (default `drawings, documentation, notes`).
+
 ## Wire numbers
 - **Sheet / Rung / Wire-index width** and **Zero-pad** — define the label layout
   ([[Wire Encoding]]).

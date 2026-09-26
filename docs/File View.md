@@ -14,6 +14,10 @@ Microsoft Office. It covers the whole window below the menu bar.
 **File ▸ Open PDF…** still goes straight to the file dialog, and **File ▸ Open
 Recent** still lists the newest 10 — both skip the File view.
 
+The left side has two selections: **Recent**, below, and **Workspaces** — your
+project folders. See [[Workspaces]]. When you have a current workspace, the File
+view opens on it.
+
 ## Recent
 
 Your recently opened drawings, newest first, in four groups: **Today**,
@@ -38,8 +42,9 @@ Recent ▸ Clear list**. **Unpin** to let one go.
 
 ## Search
 
-The search field filters **Recent** and **Pinned** together as you type. Every
-word you type must appear in the file's name or folder, so `2417 panel` finds
+The search field filters **Recent**, **Pinned** and every workspace's PDFs as
+you type, and lists each hit under where it came from. Every word you type must
+appear in the file's name or folder, so `2417 panel` finds
 `E-101 Panel Schedule.pdf` in a `Project 2417` folder.
 
 ## Right-click a row
@@ -56,6 +61,6 @@ word you type must appear in the file's name or folder, so `2417 panel` finds
 **Browse…** at the bottom left opens the normal file dialog. You can also drop a
 PDF anywhere on the File view to open it.
 
-Related: [[Getting Started]] · [[Keyboard Shortcuts]]
+Related: [[Workspaces]] · [[Getting Started]] · [[Keyboard Shortcuts]]
 
 #files

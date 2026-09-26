@@ -36,7 +36,10 @@ if _QT_OK:
     from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox
     from app.config import AppConfig, RECENT_FILES_BOUNDS
 
-_KEYS = ("recent/files", "recent/opened", "recent/pinned", "recent/max")
+# the workspace keys too: open_page lands on the selected workspace, so a
+# workspace left selected on this machine would change which page a test sees
+_KEYS = ("recent/files", "recent/opened", "recent/pinned", "recent/max",
+         "workspaces/list", "workspaces/selected")
 
 
 def _touch(path, pdf=True):

@@ -16,6 +16,7 @@ to see related pages.
 
 - [[Getting Started]] — install, open a PDF, save your work
 - [[File View]] — recent and pinned drawings, search, Browse
+- [[Workspaces]] — project folders with their own recent list and favorites
 - [[Viewer]] — scroll, zoom, pan, page navigation
 - [[Markup Tools]] — highlight, pen, comments, text boxes, shapes
 - [[Comments Sidebar]] — find, filter and delete comments

@@ -6,6 +6,19 @@ portable zip to the matching GitHub release.
 
 ## Unreleased
 
+- **Workspaces.** Declare a project folder — Add workspace… for an existing one,
+  New workspace… to create one with its quick subfolders — and the File view
+  gets a page for it: Favorites, its own recent list, and every PDF under the
+  folder as a tree by subfolder. Every open of a file inside it lands on that
+  recent list whatever route opened it, so a morning of unrelated PDFs no
+  longer pushes a project's drawings out of reach. The File view opens on the
+  workspace of the drawing you have open, else the one you last used.
+  Workspaces can be pinned, renamed and located after a move; folders like
+  `Superseded` can be hidden per workspace; the Recent search reaches every
+  workspace. Workspaces can't nest, a missing folder shows as unavailable
+  rather than vanishing, and nothing is written into a workspace folder except
+  what New workspace… creates.
+
 - **A File view, like Office's.** DSI Redline now starts on it when launched
   without a file, and `Ctrl+O` brings it up: pinned drawings, then recent ones
   grouped Today / Yesterday / This week / Older, a search field over both, and
