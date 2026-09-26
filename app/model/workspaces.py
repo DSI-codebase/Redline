@@ -182,15 +182,22 @@ def ordered(workspaces: Iterable[Workspace]) -> list:
     return sorted(by_use, key=lambda ws: not ws.pinned)      # stable
 
 
+def check_folder_name(name: str) -> str:
+    """``name`` stripped, or WorkspaceError when it can't name one folder --
+    a separator would make it a path, and Windows refuses the rest."""
+    name = (name or "").strip()
+    if not name or name in (".", "..") or any(c in name for c in '\\/:*?"<>|'):
+        raise WorkspaceError(f"“{name}” can't be used as a folder name.")
+    return name
+
+
 def create_workspace(parent: str, name: str, subfolders: Iterable[str]) -> str:
     """Make ``parent/name`` and its quick subfolders; return the new root.
 
     Refuses a folder that already exists -- New workspace… is for a new one,
     and Add workspace… is how an existing folder becomes a workspace.
     """
-    name = (name or "").strip()
-    if not name or name in (".", "..") or any(c in name for c in '\\/:*?"<>|'):
-        raise WorkspaceError(f"“{name}” can't be used as a folder name.")
+    name = check_folder_name(name)
     root = norm_root(os.path.join(parent, name))
     if os.path.exists(root):
         raise WorkspaceError(
@@ -314,4 +321,29 @@ def scan(ws: Workspace, show_hidden: bool = False,
     out.folders = len(folders_with_files)
     out.files.sort(key=lambda wf: (wf.folder.lower(), wf.name.lower()))
     return out
+
+
+# --- where a file can be added ------------------------------------------------
+
+def subfolders(root: str) -> list:
+    """The folders directly under ``root``, by name, leaving out dot-folders
+    and folders the OS marks hidden or system."""
+    try:
+        names = [e.name for e in os.scandir(root)
+                 if e.is_dir() and not _system_hidden(root, e.name)]
+    except OSError:
+        return []
+    return sorted(names, key=str.lower)
+
+
+def destinations(ws: Workspace, quick: Iterable[str]) -> tuple:
+    """(quick folders, other folders) a file can be added to: the quick
+    subfolders first, whether or not they exist yet -- they are created on
+    first use -- then every other folder at the workspace's top level, except
+    ones the user hid from it."""
+    quick = [q for q in quick if q]
+    taken = {rel_key(q) for q in quick}
+    others = [d for d in subfolders(ws.root)
+              if rel_key(d) not in taken and not ws.is_hidden(d)]
+    return quick, others
 

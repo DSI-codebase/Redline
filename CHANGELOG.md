@@ -6,6 +6,16 @@ portable zip to the matching GitHub release.
 
 ## Unreleased
 
+- **Add to workspace.** File ▸ Add to workspace — or right-click a Recent row
+  in the File view — copies a drawing into a workspace folder: the quick
+  subfolders first (created on first use), the workspace's other folders, New
+  folder…, and Other workspaces ▸. The PDF, its `.marked.pdf` and its markup
+  database travel together, so the marks and TODOs come along; unsaved marks
+  are saved first. Nothing is ever replaced: a different file of the same name
+  is kept alongside as `E-101 (2)`, and the same file already there is offered
+  to open instead. Copying the open drawing switches to the copy, so the next
+  marks land in the project rather than on the original.
+
 - **Workspaces.** Declare a project folder — Add workspace… for an existing one,
   New workspace… to create one with its quick subfolders — and the File view
   gets a page for it: Favorites, its own recent list, and every PDF under the

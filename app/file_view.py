@@ -166,6 +166,9 @@ class FileView(QWidget):
         self._scans = {}                 # (root key, show hidden) -> ScanResult
         self._tasks = {}                 # same key -> running BackgroundTask
         self._ws_root = None             # the workspace the page shows
+        # fill_add_menu(menu, path) fills a Recent row's "Add to workspace"
+        # submenu; set by the window (app/add_to_workspace.py), None without one
+        self.fill_add_menu = None
         self.setObjectName("FileView")
         self.setAutoFillBackground(True)
         self.setAcceptDrops(True)
@@ -794,6 +797,9 @@ class FileView(QWidget):
             menu.addAction("Unpin", lambda: self._pin(path, False))
         else:
             menu.addAction("Pin", lambda: self._pin(path, True))
+        if (self.fill_add_menu is not None and found
+                and source in (SRC_PINNED, SRC_RECENT, SRC_WORKSPACE)):
+            self.fill_add_menu(menu.addMenu("Add to workspace"), target)
         if source in (SRC_FAVORITE, SRC_WS_RECENT, SRC_WS_ALL) and rel:
             ws = self.config.find_workspace(self._ws_root)
             if ws is not None and ws.is_favorite(rel):
@@ -846,13 +852,13 @@ class FileView(QWidget):
         menu.addAction("Remove from list", lambda: self._remove_workspace(root))
         return menu
 
-    def _refresh_current(self):
+    def refresh_page(self):
         {PAGE_RECENT: self.refresh, PAGE_WORKSPACES: self.refresh_workspaces,
          PAGE_WORKSPACE: self.refresh_workspace}[self.page()]()
 
     def _pin(self, path, on: bool):
         (self.config.pin_file if on else self.config.unpin_file)(path)
-        self._refresh_current()
+        self.refresh_page()
 
     def _remove(self, path):
         self.config.remove_recent_file(path)
@@ -903,7 +909,7 @@ class FileView(QWidget):
         # the folder's own name (or nothing) means "follow the folder"
         ws.name = "" if text in ("", os.path.basename(ws.root)) else text
         self.config.update_workspace(ws)
-        self._refresh_current()
+        self.refresh_page()
 
     def _add_workspace(self):
         folder = self.ask_folder("Choose the project folder to use as a workspace")
