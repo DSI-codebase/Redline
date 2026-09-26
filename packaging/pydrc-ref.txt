@@ -43,4 +43,13 @@
 # steps above are unchanged by that -- what changed is that step 1 no longer
 # has a tag to reuse. PyDRC's release workflow refuses to publish when the tag
 # disagrees with the package version, so the version there decides the name.
-main
+#
+# CHANGED 2026-09-26, from `main` to `v0.2.1`, for the app's v1.6.0 release.
+# `v0.2.1` exists in `DSI-codebase/PyDRC` now (a lightweight tag on `09dbb19`,
+# the commit `main` resolved to when the note above was written), and it
+# carries the same rules `main` does: `git diff --stat v0.2.1 main` there
+# touches six files, none under `pydrc/` -- CLAUDE.md, three decision records,
+# a skill and one test. So step 1 needed no new tag, and a rebuild of v1.6.0
+# installs the rule set it shipped with. Set this back to `main` after the
+# release to track the library again.
+v0.2.1
