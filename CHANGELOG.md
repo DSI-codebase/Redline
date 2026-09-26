@@ -6,6 +6,19 @@ portable zip to the matching GitHub release.
 
 ## Unreleased
 
+- **A File view, like Office's.** DSI Redline now starts on it when launched
+  without a file, and `Ctrl+O` brings it up: pinned drawings, then recent ones
+  grouped Today / Yesterday / This week / Older, a search field over both, and
+  Browse… for the file dialog. It covers the window until you open something or
+  press Back / Esc. File ▸ Open PDF… still goes straight to the dialog.
+- **Recent keeps 50 drawings, one row each.** It kept 10, and a drawing opened as
+  both `foo.pdf` and `foo.marked.pdf` took two of them. Opening either now
+  updates one row, which opens `foo.pdf` — or the marked copy when its markup
+  database is missing, since that copy then holds the marks. The size is a
+  setting (Settings ▸ Files); File ▸ Open Recent shows the newest 10.
+- **Pins.** Right-click a recent file ▸ Pin keeps it at the top of the File view
+  for good: pins never age out and Clear list leaves them alone.
+
 - **Double-click any mark to edit its note.** Highlights, pen strokes,
   rectangles, circles, arrows, lines and clouds open the same editor as
   right-click ▸ *Add note… / Edit note…*, with the Select tool. The comment

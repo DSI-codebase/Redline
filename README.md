@@ -148,7 +148,7 @@ The app is **fully functional with no key** — AI is never required.
 ## Run
 
 ```bash
-python main.py            # then File ▸ Open PDF…
+python main.py            # opens on the File view: pinned + recent, Browse…
 python main.py drawings.pdf   # or open a file directly
 ```
 
@@ -195,14 +195,16 @@ app/
   toolbar.py                 The main toolbar: tool group, style widgets,
                              zoom + page
   menus.py                   The menu bar, and the Open Recent list
+  file_view.py               The File view (Ctrl+O): pinned + recent, search, Browse
   lifecycle.py               Open / Save As fork / unsaved guard / close
-  settings_dialog.py         The preferences dialog (five tabs)
+  settings_dialog.py         The preferences dialog (six tabs)
   dialogs.py                 Text/callout editor, fill picker, waive-a-finding
   printing.py                Printer, print + preview dialogs, page raster
   config.py                  Persisted settings (QSettings) + defaults
   help.py                    In-app user-manual (vault) reader
   viewer/                    Continuous-scroll canvas, annotation items, tools, undo
-  model/                     Document, annotation model, PDF+SQLite storage
+  model/                     Document, annotation model, PDF+SQLite storage,
+                             recent-file rules (one entry per drawing)
   panels/                    Comment sidebar, TODO, Wire Numbers, Component Labels,
                              PDF Tools, Navigation
   extraction/                Text extraction, OCR, wire parser/classifier, Claude assist

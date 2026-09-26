@@ -9,7 +9,7 @@ from __future__ import annotations
 import getpass
 import json
 import os
-from typing import Any
+from typing import Any, Optional
 
 from PySide6.QtCore import QSettings
 
@@ -17,12 +17,18 @@ from .extraction.wire_parser import WireConfig
 from .extraction.component_parser import ComponentConfig, DEFAULT_FAMILY_CODES
 from .export.wire_export import WireExportOptions, SORT_NUMERICAL
 from .model.storage import DEFAULT_IGNORE_PATTERNS
+from .model import recent as _recent
+from .model.annotations import now_iso
 
 ORG = "PDFMarkup"
 APP = "PDFMarkupApp"
 
-# how many paths the File ▸ Open Recent list remembers
-MAX_RECENT_FILES = 10
+# How many drawings the recent list remembers (Settings ▸ Files), and the bounds
+# that setting is held to. The File view shows all of them; File ▸ Open Recent
+# shows the newest MENU_RECENT_FILES, one per &1..&0 accelerator.
+DEFAULT_RECENT_FILES = 50
+RECENT_FILES_BOUNDS = (10, 200)
+MENU_RECENT_FILES = 10
 MAX_RECENT_SEARCHES = 10
 
 # Minimum line weight presets for printing, as (label, PDF points).
@@ -87,8 +93,14 @@ DEFAULTS: dict = {
     "audit/severity_overrides": json.dumps({}),
     "audit/draw_on_sheet": True,
     "audit/oda_path": "",
-    # File ▸ Open Recent (most-recent-first list of PDF paths)
+    # Recent files: most-recent-first PDF paths, one per drawing. Still a plain
+    # list of paths, so a build from before open times were kept reads it.
     "recent/files": json.dumps([]),
+    "recent/max": DEFAULT_RECENT_FILES,
+    # {drawing key: ISO time it was last opened}, for the File view's groups
+    "recent/opened": json.dumps({}),
+    # pinned paths, in the order they were pinned; never aged out, never cleared
+    "recent/pinned": json.dumps([]),
     # Minimum printed line weight, in PDF points (0 = print widths as drawn).
     # See PRINT_LINE_WEIGHTS for why this defaults on.
     "print/min_line_pt": 0.5,
@@ -161,37 +173,94 @@ class AppConfig:
     # -- recently opened files ----------------------------------------------
 
     @property
-    def recent_files(self) -> list:
-        """Recently opened PDF paths, most recent first."""
-        raw = self.get("recent/files")
+    def recent_max(self) -> int:
+        """How many drawings the recent list keeps (Settings ▸ Files)."""
+        lo, hi = RECENT_FILES_BOUNDS
+        return max(lo, min(hi, int(self.get("recent/max"))))
+
+    def _path_list(self, key: str) -> list:
+        raw = self.get(key)
         try:
             val = json.loads(raw) if isinstance(raw, str) else raw
             if isinstance(val, list):
-                return [str(p) for p in val][:MAX_RECENT_FILES]
+                return [str(p) for p in val]
         except Exception:
             pass
         return []
 
-    def set_recent_files(self, paths: list) -> None:
-        self.set("recent/files",
-                 json.dumps([str(p) for p in paths][:MAX_RECENT_FILES]))
+    @property
+    def recent_files(self) -> list:
+        """Recently opened PDF paths, most recent first, one per drawing."""
+        return _recent.dedupe(self._path_list("recent/files"))[:self.recent_max]
 
-    def add_recent_file(self, path: str) -> list:
+    def set_recent_files(self, paths: list) -> None:
+        kept = _recent.dedupe(str(p) for p in paths)[:self.recent_max]
+        self.set("recent/files", json.dumps(kept))
+        self._prune_opened()
+
+    def _opened_map(self) -> dict:
+        return {str(k): str(v) for k, v in
+                self._json_setting("recent/opened", {}).items()}
+
+    def _prune_opened(self) -> None:
+        """Drop open times for drawings neither listed nor pinned."""
+        live = {_recent.drawing_key(p) for p in
+                self._path_list("recent/files") + self.pinned_files}
+        times = self._opened_map()
+        kept = {k: v for k, v in times.items() if k in live}
+        if kept != times:
+            self.set("recent/opened", json.dumps(kept))
+
+    def recent_opened(self, path: str) -> str:
+        """When the drawing ``path`` names was last opened (ISO), or ``""``."""
+        return self._opened_map().get(_recent.drawing_key(path), "")
+
+    def add_recent_file(self, path: str, when: Optional[str] = None) -> list:
         """Move ``path`` to the top of the recent list and return the new list.
 
-        Paths are stored absolute and de-duplicated case-insensitively (so the
-        same file opened via a different spelling doesn't take two slots), and
-        the list is capped at :data:`MAX_RECENT_FILES`.
+        Stored absolute. Any entry for the same DRAWING goes -- a different
+        spelling of the path, or ``foo.marked.pdf`` after ``foo.pdf`` -- so one
+        drawing never takes two slots. ``when`` defaults to now.
         """
         p = os.path.abspath(str(path))
-        key = os.path.normcase(p)
-        out = [p] + [q for q in self.recent_files if os.path.normcase(q) != key]
-        out = out[:MAX_RECENT_FILES]
-        self.set_recent_files(out)
-        return out
+        key = _recent.drawing_key(p)
+        times = self._opened_map()
+        times[key] = when or now_iso()
+        self.set("recent/opened", json.dumps(times))
+        rest = [q for q in self._path_list("recent/files")
+                if _recent.drawing_key(q) != key]
+        self.set_recent_files([p] + rest)
+        return self.recent_files
+
+    def remove_recent_file(self, path: str) -> None:
+        """Take the drawing ``path`` names off the recent list (not its pin)."""
+        key = _recent.drawing_key(path)
+        self.set_recent_files([q for q in self._path_list("recent/files")
+                               if _recent.drawing_key(q) != key])
 
     def clear_recent_files(self) -> None:
+        """Empty the recent list. Pins are a separate list and stay."""
         self.set_recent_files([])
+
+    @property
+    def pinned_files(self) -> list:
+        """Pinned PDF paths, in the order they were pinned, one per drawing."""
+        return _recent.dedupe(self._path_list("recent/pinned"))
+
+    def is_pinned(self, path: str) -> bool:
+        key = _recent.drawing_key(path)
+        return any(_recent.drawing_key(p) == key for p in self.pinned_files)
+
+    def pin_file(self, path: str) -> None:
+        if not self.is_pinned(path):
+            self.set("recent/pinned", json.dumps(
+                self.pinned_files + [os.path.abspath(str(path))]))
+
+    def unpin_file(self, path: str) -> None:
+        key = _recent.drawing_key(path)
+        self.set("recent/pinned", json.dumps(
+            [p for p in self.pinned_files if _recent.drawing_key(p) != key]))
+        self._prune_opened()
 
     # -- search history ------------------------------------------------------
 

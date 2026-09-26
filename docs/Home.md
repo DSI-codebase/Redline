@@ -15,6 +15,7 @@ to see related pages.
 ## Start here
 
 - [[Getting Started]] — install, open a PDF, save your work
+- [[File View]] — recent and pinned drawings, search, Browse
 - [[Viewer]] — scroll, zoom, pan, page navigation
 - [[Markup Tools]] — highlight, pen, comments, text boxes, shapes
 - [[Comments Sidebar]] — find, filter and delete comments

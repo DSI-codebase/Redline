@@ -173,6 +173,18 @@ class SettingsDialog(QDialog):
 
         gb_drc = self._build_audit_group()
 
+        # files: what the File view (Ctrl+O) remembers
+        gb_f = QGroupBox("Recent files")
+        ff = QFormLayout(gb_f)
+        from .config import RECENT_FILES_BOUNDS
+        self.recent_max = QSpinBox()
+        self.recent_max.setRange(*RECENT_FILES_BOUNDS)
+        self.recent_max.setValue(config.recent_max)
+        self.recent_max.setToolTip(
+            "How many drawings the File view lists under Recent. File ▸ Open "
+            "Recent shows the newest 10; pinned files are kept regardless.")
+        ff.addRow("Recent files kept:", self.recent_max)
+
         # organise the group boxes into tabs so the dialog never outgrows the
         # screen (was a single tall column of every section stacked vertically)
         def _page(*boxes):
@@ -182,6 +194,7 @@ class SettingsDialog(QDialog):
             v.addStretch(1)
             return w
         tabs.addTab(_page(gb_id, gb_e, gb_c, gb_p), "General")
+        tabs.addTab(_page(gb_f), "Files")
         tabs.addTab(_page(gb_w), "Wire numbers")
         tabs.addTab(_page(gb_cmp), "Component labels")
         tabs.addTab(_page(gb_a), "OCR / AI")
@@ -218,6 +231,7 @@ class SettingsDialog(QDialog):
         c.set_ignore_patterns([l.strip() for l in self.ignore.toPlainText().splitlines() if l.strip()])
         c.set("print/min_line_pt",
               float(self.min_line.currentData() or 0.0))
+        c.set("recent/max", self.recent_max.value())
         c.set("ocr/enabled", self.ocr.isChecked())
         c.set("ai/enabled", self.ai.isChecked())
         c.set("ai/api_key", self.ai_key.text().strip())

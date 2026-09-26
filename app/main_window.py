@@ -34,6 +34,8 @@ from .dialogs import (
 from .settings_dialog import SettingsDialog
 from . import lifecycle, menus, printing, toolbar
 from .model.annotations import Annotation, KIND_CALLOUT, KIND_TEXTBOX
+from .model.recent import drawing_key
+from .file_view import FileView
 from .viewer.pdf_view import PdfView
 from .viewer import tools as T
 from .viewer.command_stack import ModifyAnnotationCommand, RemoveAnnotationCommand, capture
@@ -270,6 +272,13 @@ class MainWindow(QMainWindow):
         toolbar.build(self)
         self._update_actions_enabled(False)
 
+        # The File view covers everything below the menu bar while it is up
+        # (Ctrl+O, and a launch with no file); see app/file_view.py.
+        self.file_view = FileView(self.config, self)
+        self.file_view.openRequested.connect(self._open_from_file_view)
+        self.file_view.browseRequested.connect(self.open_pdf)
+        self.file_view.backRequested.connect(self.hide_file_view)
+
         # Remember the freshly-built default arrangement (for "Reset panel
         # layout"), then apply whatever layout the user left last session.
         self._default_state = self.saveState(_UI_STATE_VERSION)
@@ -437,6 +446,25 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(self, "Open PDF", "", "PDF (*.pdf)")
         if path:
             self.load_document(path)
+
+    # -- the File view -------------------------------------------------------
+
+    def show_file_view(self):
+        self.file_view.open_page()
+
+    def hide_file_view(self):
+        self.file_view.close_page()
+
+    def _open_from_file_view(self, path):
+        """Open a drawing picked in the File view. A successful open hides the
+        view (`lifecycle.open_document` does that for every route); picking the
+        drawing that is already open just goes back to it, without the "Already
+        open" box the menu gives."""
+        if self.document is not None and \
+                drawing_key(path) == drawing_key(self.document.path):
+            self.hide_file_view()
+            return
+        self.load_document(path)
 
     # -- drag & drop (open a dropped PDF in the viewer) ----------------------
 

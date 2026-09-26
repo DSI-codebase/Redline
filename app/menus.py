@@ -36,7 +36,12 @@ def build(win):
     """Build the whole menu bar and hang its actions on `win`."""
     mb = win.menuBar()
     m_file = mb.addMenu("&File")
-    win.act_open = m_file.addAction("&Open PDF…", win.open_pdf, QKeySequence.Open)
+    win.act_file_view = m_file.addAction("&Open…", win.show_file_view,
+                                         QKeySequence.Open)
+    win.act_file_view.setToolTip(
+        "The File view: pinned and recent drawings, search, and Browse")
+    win.act_open = m_file.addAction("Open &PDF…", win.open_pdf)
+    win.act_open.setToolTip("Straight to the file dialog")
     win.m_recent = m_file.addMenu("Open &Recent")
     rebuild_recent(win)
     win.act_save = m_file.addAction("&Save markup", win.save_markup,
@@ -151,12 +156,19 @@ def build(win):
 
 
 def rebuild_recent(win):
-    """Refill File ▸ Open Recent from the saved list (most recent first)."""
+    """Refill File ▸ Open Recent: the newest drawings of the saved list.
+
+    The menu is the fast path and shows `MENU_RECENT_FILES`, one per &1..&0
+    accelerator; the File view shows the whole list. Each entry opens the file
+    `recent.open_target` picks for its drawing.
+    """
+    from .config import MENU_RECENT_FILES
+    from .model.recent import open_target
     menu = getattr(win, "m_recent", None)
     if menu is None:
         return
     menu.clear()
-    paths = win.config.recent_files
+    paths = win.config.recent_files[:MENU_RECENT_FILES]
     if not paths:
         empty = menu.addAction("(no recent files)")
         empty.setEnabled(False)
@@ -167,9 +179,10 @@ def rebuild_recent(win):
         act = menu.addAction(label)
         act.setToolTip(path)
         act.setStatusTip(path)
-        if os.path.exists(path):
+        target = open_target(path)
+        if os.path.exists(target):
             act.triggered.connect(
-                lambda _=False, p=path: win.load_document(p))
+                lambda _=False, p=target: win.load_document(p))
         else:
             # keep it listed but obviously unusable rather than silently
             # dropping a file that's just on a disconnected drive

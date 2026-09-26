@@ -31,6 +31,12 @@ comment, and how pages print.
   raises those to a minimum weight and leaves heavier geometry and all text
   alone.
 
+## Files
+
+- **Recent files kept** — how many drawings the [[File View]] lists under
+  **Recent** (10–200, default 50). **File ▸ Open Recent** always shows the newest
+  10. Pinned files are a separate list and never age out.
+
 ## Wire numbers
 - **Sheet / Rung / Wire-index width** and **Zero-pad** — define the label layout
   ([[Wire Encoding]]).
