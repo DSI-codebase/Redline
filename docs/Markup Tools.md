@@ -56,10 +56,13 @@ right-click.
 
 ## Notes on any mark
 
-Any mark — not just comments and text boxes — can carry a **note**. Right-click a
-highlight, pen stroke, rectangle, arrow or cloud and choose **Add note… /
-Edit note…**. Noted marks show a small orange badge and appear in the
-[[Comments Sidebar]]. On export, each note also becomes a **standalone
+Any mark — not just comments and text boxes — can carry a **note**. With the
+**Select** tool, **double-click** a highlight, pen stroke, rectangle, circle,
+arrow, line or cloud, or right-click it and choose **Add note… / Edit note…**.
+Noted marks show a small **orange** badge and appear in the
+[[Comments Sidebar]]. A mark flagged as a [[TODO]] shows a **blue** badge
+instead — text boxes and callouts included — and a TODO comment bubble turns
+blue itself. On export, each note also becomes a **standalone
 sticky-note comment** so it's visible in any PDF viewer (Adobe, browsers,
 Preview), and it round-trips back onto its mark when reopened here.
 

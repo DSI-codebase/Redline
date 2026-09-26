@@ -2,7 +2,8 @@
 
 A dockable, Chrome-bookmarks-style list of every non-ignored comment / text box
 (and optionally highlights & pen strokes) with live filter + sort.  Clicking a
-row asks the viewer to scroll to and flash the mark.
+row asks the viewer to zoom to and flash the mark; right-clicking one offers
+edit, go-to, the TODO flag, the commenter, copy and delete.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from PySide6.QtGui import QShortcut, QKeySequence
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QComboBox, QLabel,
     QTreeWidget, QTreeWidgetItem, QCheckBox, QPushButton, QMenu, QMessageBox,
+    QApplication,
 )
 
 from ..model.annotations import (
@@ -33,6 +35,8 @@ class CommentPanel(QWidget):
     todoToggled = Signal(object)     # Annotation
     deleteRequested = Signal(object)  # Annotation (already user-confirmed)
     authorEditRequested = Signal(object)  # Annotation (double-clicked the "By" column)
+    editRequested = Signal(object)        # Annotation (right-click ▸ Edit…)
+    revealTodoRequested = Signal(object)  # Annotation (right-click ▸ Show in TODO list)
 
     _COL_BY = 3                      # the "By" (commenter) column
 
@@ -218,16 +222,63 @@ class CommentPanel(QWidget):
         item = self.tree.itemAt(pos)
         if item is None:
             return
-        item.setSelected(True)
+        ann = item.data(0, Qt.UserRole)
+        if ann is None:
+            return
+        self.tree.setCurrentItem(item)
+        self._context_menu_for(ann).exec(self.tree.viewport().mapToGlobal(pos))
+
+    def _context_menu_for(self, ann) -> QMenu:
+        """A row's right-click menu. Built apart from ``exec`` so its actions can
+        be read and triggered without a modal menu."""
         menu = QMenu(self)
-        act = menu.addAction("Delete comment")
-        if menu.exec(self.tree.viewport().mapToGlobal(pos)) == act:
-            self._delete_selected()
+        if ann.kind == KIND_COMMENT:
+            edit_label = "Edit comment…"
+        elif ann.kind in (KIND_TEXTBOX, KIND_CALLOUT):
+            edit_label = "Edit text…"
+        else:   # the same wording as the mark's own menu on the page
+            edit_label = "Edit note…" if ann.has_note else "Add note…"
+        menu.addAction(edit_label, lambda: self.editRequested.emit(ann))
+        menu.addAction("Go to in PDF", lambda: self.activated.emit(ann))
+        menu.addSeparator()
+        if ann.is_todo:
+            menu.addAction("Mark not done" if ann.todo_done else "Mark done",
+                           lambda: self._set_todo(ann, True, not ann.todo_done))
+            menu.addAction("Show in TODO list",
+                           lambda: self.revealTodoRequested.emit(ann))
+            menu.addAction("Remove TODO flag",
+                           lambda: self._set_todo(ann, False, False))
+        else:
+            menu.addAction("Flag as TODO", lambda: self._set_todo(ann, True, False))
+        menu.addSeparator()
+        menu.addAction("Change commenter…",
+                       lambda: self.authorEditRequested.emit(ann))
+        copy_act = menu.addAction(
+            "Copy text", lambda: QApplication.clipboard().setText(ann.text or ""))
+        copy_act.setEnabled(ann.has_note)
+        menu.addSeparator()
+        menu.addAction("Delete comment", lambda: self._confirm_delete(ann))
+        return menu
+
+    def _set_todo(self, ann, is_todo: bool, done: bool) -> None:
+        """Flag, unflag or check off a TODO from the list. Not undoable, the same
+        as the TODO tab's checkbox: an undo snapshot does not carry TODO state.
+
+        Unflagging clears ``todo_done`` too, because the comment bubble paints
+        green on ``todo_done`` alone and would otherwise stay green."""
+        if self.store is None:
+            return
+        ann.is_todo = bool(is_todo)
+        ann.todo_done = bool(done) if is_todo else False
+        self.store.update(ann)
 
     def _delete_selected(self):
         ann = self._selected_annotation()
         if ann is None:
             return
+        self._confirm_delete(ann)
+
+    def _confirm_delete(self, ann):
         resp = QMessageBox.question(
             self, "Delete comment",
             f"Delete this {ann.kind}?\n\n{ann.snippet(80)}",

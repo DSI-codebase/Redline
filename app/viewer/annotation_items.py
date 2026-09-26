@@ -49,19 +49,28 @@ def fill_brush(ann):
     return QBrush(qcolor(fc, alpha))
 
 
+NOTE_BADGE_RGB = (232, 119, 46)   # orange: the mark carries a note
+TODO_BADGE_RGB = (30, 110, 220)   # blue: the mark is a TODO (the bubble's TODO hue, darkened)
+
+
 class _NoteBadge(QGraphicsEllipseItem):
-    """A small orange dot pinned to a mark's corner to flag that it carries a
-    note (highlights, pens, arrows and rectangles don't otherwise show text)."""
+    """A small dot pinned to a mark's corner: orange when it carries a note,
+    blue when it is a TODO. Highlights, pens, arrows and rectangles don't
+    otherwise show their text, and text boxes don't otherwise show a TODO."""
 
     _R = 5.0
 
     def __init__(self, parent):
         super().__init__(-self._R, -self._R, 2 * self._R, 2 * self._R, parent)
-        self.setBrush(QBrush(QColor(232, 119, 46)))
         self.setPen(QPen(QColor("white"), 1.0))
         self.setZValue(70)
         self.setAcceptedMouseButtons(Qt.NoButton)
-        self.setToolTip("Has a note — right-click ▸ Edit note…")
+        self.set_todo(False)
+
+    def set_todo(self, todo: bool) -> None:
+        self.setBrush(QBrush(QColor(*(TODO_BADGE_RGB if todo else NOTE_BADGE_RGB))))
+        self.setToolTip(("TODO" if todo else "Has a note")
+                        + " — double-click the mark to edit")
 
 
 class _DoneStrike(QGraphicsLineItem):
@@ -112,6 +121,18 @@ class _BaseMixin:
                     ModifyAnnotationCommand(self.view, self.ann,
                                             self._press_snap, after, "Move"))
             self._press_snap = None
+
+    def mouseDoubleClickEvent(self, event):
+        # Any mark can carry a note, so double-clicking one opens the same editor
+        # as right-click ▸ Add note… / Edit note…. The comment bubble and the text
+        # box override this with their own editors. Select tool only: with a
+        # drawing tool or the eraser the press belongs to the tool, and a
+        # read-only reference pane is never in select mode.
+        if not self._selectable():
+            event.ignore()
+            return
+        self.view.edit_note_annotation(self.ann)
+        event.accept()
 
     def contextMenuEvent(self, event):
         # A read-only reference pane offers no mark actions at all — every entry
@@ -197,11 +218,15 @@ class _BaseMixin:
         pass
 
     def _refresh_note_badge(self):
-        """Show a small badge at the corner when a non-text mark carries a note
-        (comment/text-box already display their text)."""
-        if self.ann.is_comment_like:
+        """Show a small badge at the corner when a mark carries a note (orange)
+        or is a TODO (blue). The comment bubble never gets one — it turns blue
+        itself — and a text box or callout, which displays its text, gets one
+        only for a TODO."""
+        ann = self.ann
+        if ann.kind == KIND_COMMENT:
             return
-        want = self.ann.has_note
+        todo = bool(ann.is_todo)
+        want = todo or (ann.has_note and not ann.is_comment_like)
         badge = getattr(self, "_note_badge", None)
         if want and badge is None:
             badge = _NoteBadge(self)
@@ -209,6 +234,7 @@ class _BaseMixin:
         if badge is not None:
             badge.setVisible(want)
             if want:
+                badge.set_todo(todo)
                 br = self.boundingRect()
                 badge.setPos(br.right(), br.top())
 

@@ -10,8 +10,12 @@ appears here.
 ## Flagging
 
 - Tick **Flag as TODO** in the comment/text-box editor, **or**
+- right-click its row in the [[Comments Sidebar]] ▸ **Flag as TODO**, **or**
 - turn on **Treat all comments as TODO** in [[Settings]] so every new comment
   starts as a TODO.
+
+On the sheet, a TODO mark carries a **blue** badge at its corner (a plain
+note's badge is orange), and a TODO comment bubble is blue.
 
 ## Working the list
 
@@ -21,7 +25,7 @@ appears here.
   edit without the view moving away.
 - **Double-click the Commenter** to change who the mark is by (confirm, then
   edit; optionally rename everyone by that name). Undoable.
-- **Jump to the mark** in the [[Viewer]] (scrolls there and flashes) by either
+- **Jump to the mark** in the [[Viewer]] (zooms to it and flashes) by either
   **right-clicking the row → "Go to in PDF"**, or **double-clicking the Pg
   cell** (the page number is read-only and kept as the quick-jump shortcut).
 - **Group** by **Page**, **Sheet**, or **Commenter**, or turn grouping off.

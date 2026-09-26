@@ -359,15 +359,31 @@ class PdfView(QGraphicsView):
             self.centerOn(r.center().x(), r.top() + 20)
             self._render_timer.start()
 
-    def go_to_location(self, page_no: int, x: float, y: float):
-        """Centre on a page-local point (PDF points) — used to jump a wire /
-        component row to its spot on the drawing, with a brief pulse marker."""
-        if not (0 <= page_no < len(self._page_items)):
-            return
-        page = self._page_items[page_no]
-        self.centerOn(page.mapToScene(QPointF(x, y)))
+    # A jump from a list (Comments, TODO, Wire Numbers, Component Labels, Audit)
+    # ZOOMS to its target rather than only scrolling to it. Scrolling kept the
+    # zoom on screen, which at fit-width is readable on an 11x17 schematic and
+    # on a 36x48 in site plan leaves the target a few pixels across.
+    LOCATE_MAX_ZOOM = 3.0   # a small target is framed at this zoom, never closer
+    LOCATE_MARGIN = 0.25    # context each side, as a fraction of the larger side
+    LOCATE_MIN_PAD = 24.0   # ...and never less than this many page points
+
+    def zoom_to_scene_rect(self, r: QRectF) -> None:
+        """Zoom so the scene rect ``r`` fills the viewport with a margin round
+        it -- zooming OUT when it is larger than the view -- and center on it."""
+        pad = max(self.LOCATE_MIN_PAD,
+                  self.LOCATE_MARGIN * max(r.width(), r.height()))
+        target = r.adjusted(-pad, -pad, pad, pad)
+        aw = max(1.0, self.viewport().width() - 24.0)
+        ah = max(1.0, self.viewport().height() - 24.0)
+        self.set_zoom(min(aw / target.width(), ah / target.height(),
+                          self.LOCATE_MAX_ZOOM))
+        self.centerOn(r.center())
         self._render_timer.start()
-        self._pulse_at(page, x, y)
+
+    def go_to_location(self, page_no: int, x: float, y: float):
+        """Zoom to a page-local point (PDF points) — used to jump a wire /
+        component row to its spot on the drawing, with a brief pulse marker."""
+        self.go_to_rect(page_no, x, y, x, y)
 
     def _pulse_at(self, page, x: float, y: float):
         """A short-lived ring drawn on the page to draw the eye to a jump target."""
@@ -1250,15 +1266,43 @@ class PdfView(QGraphicsView):
     # -- panel jump ----------------------------------------------------------
 
     def flash_annotation(self, ann: Annotation):
-        self.go_to_page(ann.page)
-        x0, y0, x1, y1 = ann.rect
-        page = self._page_items[ann.page]
-        self.centerOn(page.mapToScene(QPointF((x0 + x1) / 2, (y0 + y1) / 2)))
+        """Zoom to a mark's extents and flash it (a jump from a panel row)."""
+        r = self._annotation_scene_rect(ann)
+        if r is None:
+            self.go_to_page(ann.page)
+            return
+        self.zoom_to_scene_rect(r)
         item = self._item_by_ann.get(ann.id)
         if item is not None:
             item.setSelected(True)
             self._flash_item = item
             QTimer.singleShot(700, lambda: item.setSelected(False) if item else None)
+
+    def _annotation_scene_rect(self, ann: Annotation):
+        """A mark's extent in scene coords, or ``None`` when it has none.
+
+        Its item's drawn extent when it has one -- which follows the mark's own
+        rotation, the view rotation and a callout's leader. Otherwise the model
+        geometry: ``ann.rect`` is all zeros for a pen stroke or a cloud, whose
+        shape is its ``points``, so centering on the rect alone put a pen
+        stroke's or a cloud's jump at the page's top-left corner.
+        """
+        if not (0 <= ann.page < len(self._page_items)):
+            return None
+        item = self._item_by_ann.get(ann.id)
+        if item is not None:
+            return item.sceneBoundingRect()
+        pts = list(ann.points or [])
+        if tuple(ann.rect) != (0.0, 0.0, 0.0, 0.0):
+            x0, y0, x1, y1 = ann.rect
+            pts += [(x0, y0), (x1, y1)]
+        if ann.callout_point is not None:
+            pts.append(tuple(ann.callout_point))
+        if not pts:
+            return None
+        xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+        local = QRectF(QPointF(min(xs), min(ys)), QPointF(max(xs), max(ys)))
+        return self._page_items[ann.page].mapRectToScene(local)
 
     # -- text selection (Chrome-style, in Select mode) ----------------------
 
@@ -1730,13 +1774,14 @@ class PdfView(QGraphicsView):
 
     def go_to_rect(self, page_no: int, x0: float, y0: float,
                    x1: float, y1: float) -> None:
-        """Centre on a page-local rect, zooming out if it does not fit."""
+        """Zoom to a page-local rect (PDF points) and pulse its center."""
         if not (0 <= page_no < len(self._page_items)):
             return
         page = self._page_items[page_no]
-        cx, cy = (float(x0) + float(x1)) / 2.0, (float(y0) + float(y1)) / 2.0
-        self.centerOn(page.mapToScene(QPointF(cx, cy)))
-        self._render_timer.start()
+        local = QRectF(QPointF(float(x0), float(y0)),
+                       QPointF(float(x1), float(y1))).normalized()
+        self.zoom_to_scene_rect(page.mapRectToScene(local))
+        self._pulse_at(page, local.center().x(), local.center().y())
 
     def _clear_search_highlights(self):
         for it in self._search_items:
