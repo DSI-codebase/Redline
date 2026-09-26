@@ -167,7 +167,11 @@ class _KeepsSettings(unittest.TestCase):
         self.cfg.sync()
 
     def p(self, *parts):
-        return os.path.join(self.tmp, *parts)
+        # normpath: a caller writing "dwg/foo.pdf" gets C:\...\dwg\foo.pdf on
+        # Windows, the spelling the app stores (abspath) and hands back. Joined
+        # as-is it was ...\dwg/foo.pdf, which is the same file and a different
+        # string -- four tests failed on windows-latest on exactly that.
+        return os.path.normpath(os.path.join(self.tmp, *parts))
 
 
 @unittest.skipUnless(_QT_OK, _QT_REASON)

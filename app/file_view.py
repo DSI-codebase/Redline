@@ -333,7 +333,9 @@ class FileView(QWidget):
         if md is not None and md.hasUrls():
             for u in md.urls():
                 if u.isLocalFile() and u.toLocalFile().lower().endswith(".pdf"):
-                    return u.toLocalFile()
+                    # Qt spells a Windows path C:/Users/...; hand on the
+                    # native form, as every row of the list already does
+                    return os.path.normpath(u.toLocalFile())
         return ""
 
     def dragEnterEvent(self, event):
