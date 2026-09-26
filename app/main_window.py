@@ -32,7 +32,7 @@ from .dialogs import (
     FillDialog, TextEditDialog, WaiveDialog, _apply_font, _fill_swatch, _swatch,
 )
 from .settings_dialog import SettingsDialog
-from . import lifecycle, menus, printing, toolbar
+from . import add_to_workspace, lifecycle, menus, printing, toolbar
 from .model.annotations import Annotation, KIND_CALLOUT, KIND_TEXTBOX
 from .model.recent import drawing_key
 from .file_view import FileView
@@ -278,6 +278,8 @@ class MainWindow(QMainWindow):
         self.file_view.openRequested.connect(self._open_from_file_view)
         self.file_view.browseRequested.connect(self.open_pdf)
         self.file_view.backRequested.connect(self.hide_file_view)
+        self.file_view.fill_add_menu = \
+            lambda menu, path: add_to_workspace.populate(menu, self, path)
 
         # Remember the freshly-built default arrangement (for "Reset panel
         # layout"), then apply whatever layout the user left last session.

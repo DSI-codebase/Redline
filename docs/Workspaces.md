@@ -59,6 +59,36 @@ filter for the whole page. The folder is read in the background each time the
 page is shown, so a large project on a network drive fills in as it goes. If a
 folder can't be read, the count says so rather than leaving it out quietly.
 
+## Add a drawing to a workspace
+
+**File ▸ Add to workspace** copies the drawing you have open into a workspace —
+or right-click a row on the [[File View]]'s **Recent** page ▸ **Add to
+workspace**. The menu lists:
+
+- the current workspace's **quick subfolders** first (`drawings`,
+  `documentation`, `notes` unless you change them under **Files** in
+  [[Settings]]) — a missing one is created when you first use it;
+- its other folders, then **New folder…** to make one on the spot;
+- **Other workspaces ▸**, each with the same list.
+
+A drawing that is already in a workspace shows **Already in …** for it. With no
+workspaces yet, the menu has **Add a workspace…**.
+
+**The whole drawing is copied**: the PDF, its `.marked.pdf` and its markup
+database, so every mark, TODO and wire extraction comes along. Unsaved marks
+are saved first — you're asked. The original stays where it was, untouched.
+
+**Nothing is ever replaced.** If a different drawing with the same name is
+already in that folder, you can **Keep both** — this one arrives as
+`E-101 (2).pdf`, with its marked copy and database renamed to match — or cancel.
+If the very same file is already there, you're offered to open that one
+instead.
+
+When the drawing you copied is the one open, DSI Redline **switches to the
+copy**, so your next marks go into the project rather than onto the original.
+The status bar says where it went. Copying a file from the Recent page leaves
+whatever you have open alone.
+
 ## Hide a folder
 
 Project folders often hold `Superseded` or `Archive` folders full of old PDFs.

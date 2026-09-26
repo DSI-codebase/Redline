@@ -196,6 +196,7 @@ app/
                              zoom + page
   menus.py                   The menu bar, and the Open Recent list
   file_view.py               The File view (Ctrl+O): recent, pinned, workspaces
+  add_to_workspace.py        Add to workspace: the menu, and copying a drawing in
   lifecycle.py               Open / Save As fork / unsaved guard / close
   settings_dialog.py         The preferences dialog (six tabs)
   dialogs.py                 Text/callout editor, fill picker, waive-a-finding
@@ -204,7 +205,8 @@ app/
   help.py                    In-app user-manual (vault) reader
   viewer/                    Continuous-scroll canvas, annotation items, tools, undo
   model/                     Document, annotation model, PDF+SQLite storage,
-                             recent-file rules, workspaces (scan, no nesting)
+                             recent-file rules, workspaces (scan, no nesting),
+                             copying a drawing's three files (never replacing)
   panels/                    Comment sidebar, TODO, Wire Numbers, Component Labels,
                              PDF Tools, Navigation
   extraction/                Text extraction, OCR, wire parser/classifier, Claude assist

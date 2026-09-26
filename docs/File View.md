@@ -51,6 +51,8 @@ appear in the file's name or folder, so `2417 panel` finds
 
 - **Open**
 - **Pin / Unpin**
+- **Add to workspace ▸** — copy it into a workspace folder. See
+  [[Workspaces]].
 - **Show in folder** — opens the file's folder (on Windows, with the file
   selected).
 - **Copy path**

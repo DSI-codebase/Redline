@@ -29,7 +29,7 @@ import os
 
 from PySide6.QtGui import QKeySequence
 
-from . import __app_name__
+from . import __app_name__, add_to_workspace
 
 
 def build(win):
@@ -44,6 +44,10 @@ def build(win):
     win.act_open.setToolTip("Straight to the file dialog")
     win.m_recent = m_file.addMenu("Open &Recent")
     rebuild_recent(win)
+    # rebuilt as it opens: a workspace's folders change on disk
+    m_add = win.m_add_ws = m_file.addMenu("Add to &workspace")
+    m_add.aboutToShow.connect(lambda: add_to_workspace.populate(
+        m_add, win, win.document.path if win.document else None))
     win.act_save = m_file.addAction("&Save markup", win.save_markup,
                                     QKeySequence.Save)
     win.act_save_as = m_file.addAction(
