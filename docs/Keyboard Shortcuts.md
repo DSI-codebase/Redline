@@ -6,7 +6,7 @@ tags: [reference, basics]
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+O` | Open PDF (or **drag a PDF** onto the window) |
+| `Ctrl+O` | The [[File View]]: pinned and recent drawings, search, Browse… (or **drag a PDF** onto the window) |
 | `Ctrl+S` | Save markup (`.marked.pdf` + sidecar) |
 | `Ctrl+Shift+S` | Save As… (fork to a new working file) |
 | `Ctrl+Shift+E` | Export annotated PDF… |

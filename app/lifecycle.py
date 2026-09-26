@@ -110,6 +110,9 @@ def open_document(win, path):
     win.statusBar().showMessage(
         f"Opened {os.path.basename(path)} ({doc.page_count} pages, "
         f"{len(doc.store.all())} existing marks)", 6000)
+    # Whatever route opened it -- the File view, Open Recent, a drop, the
+    # command line -- the drawing is what should be on screen now.
+    win.hide_file_view()
 
 
 def save_as_fork(win):

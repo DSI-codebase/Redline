@@ -36,6 +36,22 @@ def pdf_from_argv(argv) -> Optional[str]:
     return None
 
 
+def land(win, pdf_path: Optional[str], splash=None) -> None:
+    """Where a launch lands: the PDF it was given, or the File view.
+
+    A PDF passed on the command line / via "Open with…" opens in the Viewer and
+    the PDF Tools tab (keeping the splash up for it). With nothing to open, the
+    window shows the File view -- pinned and recent drawings -- as Office does,
+    rather than an empty gray canvas.
+    """
+    if pdf_path:
+        if splash is not None:
+            splash.message(f"Opening {os.path.basename(pdf_path)}…", 98)
+        win.load_document(pdf_path)
+    else:
+        win.show_file_view()
+
+
 def main(argv=None) -> int:
     argv = list(sys.argv if argv is None else argv)
     _set_windows_app_id()
@@ -64,12 +80,7 @@ def main(argv=None) -> int:
     splash.message("Finishing up…", 95)
     win.show()
 
-    # open a PDF passed on the command line / via "Open with…" (keep the splash
-    # up for it) — it lands in the Viewer and the PDF Tools tab (load_document)
-    pdf_path = pdf_from_argv(argv)
-    if pdf_path:
-        splash.message(f"Opening {os.path.basename(pdf_path)}…", 98)
-        win.load_document(pdf_path)
+    land(win, pdf_from_argv(argv), splash)
 
     splash.finish(win)
     return app.exec()

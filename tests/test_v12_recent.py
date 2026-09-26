@@ -1,4 +1,8 @@
-"""File ▸ Open Recent — the last N opened PDFs, remembered between sessions."""
+"""File ▸ Open Recent — the last N opened PDFs, remembered between sessions.
+
+The list keeps `recent_max` drawings (Settings ▸ Files, default 50) and the
+menu shows the newest `MENU_RECENT_FILES`; the File view that shows the rest is
+`tests/test_file_view.py`."""
 
 import os
 import tempfile
@@ -14,7 +18,7 @@ from tests._qt import QT_OK as _QT_OK, REASON as _QT_REASON
 # module ERROR -- the direct PySide6 probe that used to sit below it never
 # got the chance to run.
 if _QT_OK:
-    from app.config import AppConfig, MAX_RECENT_FILES
+    from app.config import AppConfig, MENU_RECENT_FILES
     from PySide6.QtWidgets import QApplication
 
 
@@ -47,12 +51,13 @@ class TestRecentConfig(unittest.TestCase):
                          ["b.pdf", "a.pdf"])
 
     def test_capped_at_max(self):
-        for i in range(MAX_RECENT_FILES + 5):
+        cap = self.cfg.recent_max
+        for i in range(cap + 5):
             self.cfg.add_recent_file(f"/tmp/f{i}.pdf")
         rec = self.cfg.recent_files
-        self.assertEqual(len(rec), MAX_RECENT_FILES)
-        self.assertIn(f"f{MAX_RECENT_FILES + 4}.pdf", rec[0])   # newest kept
-        self.assertTrue(all("f0.pdf" not in p for p in rec))    # oldest dropped
+        self.assertEqual(len(rec), cap)
+        self.assertIn(f"f{cap + 4}.pdf", rec[0])                # newest kept
+        self.assertTrue(all(os.path.basename(p) != "f0.pdf" for p in rec))
 
     def test_reopening_moves_to_top_without_duplicating(self):
         for n in ("a", "b", "c"):
@@ -168,6 +173,16 @@ class TestRecentMenu(unittest.TestCase):
         act = next(a for a in self._entries(win) if "first.pdf" in a.text())
         act.trigger()
         self.assertIn("first.pdf", win.document.path)
+
+    def test_menu_shows_the_newest_ten_of_a_longer_list(self):
+        win = self._win()
+        for i in range(MENU_RECENT_FILES + 3):
+            win.config.add_recent_file(os.path.join(self.tmp, f"r{i}.pdf"))
+        win._rebuild_recent_menu()
+        entries = self._entries(win)
+        self.assertEqual(len(entries), MENU_RECENT_FILES)
+        self.assertIn(f"r{MENU_RECENT_FILES + 2}.pdf", entries[0].text())
+        self.assertEqual(len(win.config.recent_files), MENU_RECENT_FILES + 3)
 
     def test_clear_list_empties_the_menu(self):
         win = self._win()
