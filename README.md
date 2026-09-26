@@ -195,7 +195,7 @@ app/
   toolbar.py                 The main toolbar: tool group, style widgets,
                              zoom + page
   menus.py                   The menu bar, and the Open Recent list
-  file_view.py               The File view (Ctrl+O): pinned + recent, search, Browse
+  file_view.py               The File view (Ctrl+O): recent, pinned, workspaces
   lifecycle.py               Open / Save As fork / unsaved guard / close
   settings_dialog.py         The preferences dialog (six tabs)
   dialogs.py                 Text/callout editor, fill picker, waive-a-finding
@@ -204,7 +204,7 @@ app/
   help.py                    In-app user-manual (vault) reader
   viewer/                    Continuous-scroll canvas, annotation items, tools, undo
   model/                     Document, annotation model, PDF+SQLite storage,
-                             recent-file rules (one entry per drawing)
+                             recent-file rules, workspaces (scan, no nesting)
   panels/                    Comment sidebar, TODO, Wire Numbers, Component Labels,
                              PDF Tools, Navigation
   extraction/                Text extraction, OCR, wire parser/classifier, Claude assist

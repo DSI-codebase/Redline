@@ -185,6 +185,21 @@ class SettingsDialog(QDialog):
             "Recent shows the newest 10; pinned files are kept regardless.")
         ff.addRow("Recent files kept:", self.recent_max)
 
+        gb_ws = QGroupBox("Workspaces")
+        fw = QFormLayout(gb_ws)
+        from .config import WORKSPACE_RECENT_BOUNDS
+        self.ws_recent_max = QSpinBox()
+        self.ws_recent_max.setRange(*WORKSPACE_RECENT_BOUNDS)
+        self.ws_recent_max.setValue(config.workspace_recent_max)
+        self.ws_recent_max.setToolTip(
+            "Each workspace keeps its own recent list, so opening unrelated PDFs "
+            "never pushes a project's files off it.")
+        fw.addRow("Recent files per workspace:", self.ws_recent_max)
+        self.quick_folders = QLineEdit(", ".join(config.quick_folders()))
+        self.quick_folders.setToolTip(
+            "Comma-separated. New workspace… creates these subfolders.")
+        fw.addRow("Quick subfolders:", self.quick_folders)
+
         # organise the group boxes into tabs so the dialog never outgrows the
         # screen (was a single tall column of every section stacked vertically)
         def _page(*boxes):
@@ -194,7 +209,7 @@ class SettingsDialog(QDialog):
             v.addStretch(1)
             return w
         tabs.addTab(_page(gb_id, gb_e, gb_c, gb_p), "General")
-        tabs.addTab(_page(gb_f), "Files")
+        tabs.addTab(_page(gb_f, gb_ws), "Files")
         tabs.addTab(_page(gb_w), "Wire numbers")
         tabs.addTab(_page(gb_cmp), "Component labels")
         tabs.addTab(_page(gb_a), "OCR / AI")
@@ -232,6 +247,8 @@ class SettingsDialog(QDialog):
         c.set("print/min_line_pt",
               float(self.min_line.currentData() or 0.0))
         c.set("recent/max", self.recent_max.value())
+        c.set("workspaces/recent_max", self.ws_recent_max.value())
+        c.set_quick_folders(self.quick_folders.text().split(","))
         c.set("ocr/enabled", self.ocr.isChecked())
         c.set("ai/enabled", self.ai.isChecked())
         c.set("ai/api_key", self.ai_key.text().strip())

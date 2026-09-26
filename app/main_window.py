@@ -450,7 +450,7 @@ class MainWindow(QMainWindow):
     # -- the File view -------------------------------------------------------
 
     def show_file_view(self):
-        self.file_view.open_page()
+        self.file_view.open_page(self.document.path if self.document else None)
 
     def hide_file_view(self):
         self.file_view.close_page()
@@ -1123,4 +1123,6 @@ class MainWindow(QMainWindow):
         if not lifecycle.on_close(self, event):
             event.ignore()
             return
+        # a workspace scan still running would outlive its QThread object
+        self.file_view.stop_scans()
         super().closeEvent(event)

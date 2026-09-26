@@ -40,18 +40,19 @@ def drawing_key(path: str) -> str:
     return os.path.normcase(os.path.realpath(sidecar_path(os.path.abspath(path))))
 
 
-def open_target(path: str) -> str:
+def open_target(path: str, exists=os.path.isfile) -> str:
     """The file to open for the drawing ``path`` names (see the module docstring).
 
     Returns ``path`` itself when neither file exists, so the caller can report
-    it as not found by the name the user knows it by.
+    it as not found by the name the user knows it by. ``exists`` lets a folder
+    scan answer from the listing it already holds rather than stat each file
+    again -- the rule stays this one function either way.
     """
     original = original_pdf_path(path)
     marked = marked_pdf_path(path)
-    if os.path.isfile(original) and (os.path.isfile(sidecar_path(path))
-                                     or not os.path.isfile(marked)):
+    if exists(original) and (exists(sidecar_path(path)) or not exists(marked)):
         return original
-    if os.path.isfile(marked):
+    if exists(marked):
         return marked
     return path
 

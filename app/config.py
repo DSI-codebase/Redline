@@ -18,6 +18,7 @@ from .extraction.component_parser import ComponentConfig, DEFAULT_FAMILY_CODES
 from .export.wire_export import WireExportOptions, SORT_NUMERICAL
 from .model.storage import DEFAULT_IGNORE_PATTERNS
 from .model import recent as _recent
+from .model import workspaces as _ws
 from .model.annotations import now_iso
 
 ORG = "PDFMarkup"
@@ -29,6 +30,11 @@ APP = "PDFMarkupApp"
 DEFAULT_RECENT_FILES = 50
 RECENT_FILES_BOUNDS = (10, 200)
 MENU_RECENT_FILES = 10
+# each workspace's own recent list (Settings ▸ Files)
+DEFAULT_WORKSPACE_RECENT = 25
+WORKSPACE_RECENT_BOUNDS = (5, 100)
+# the subfolders New workspace… creates (and Add to workspace offers first)
+DEFAULT_QUICK_FOLDERS = ("drawings", "documentation", "notes")
 MAX_RECENT_SEARCHES = 10
 
 # Minimum line weight presets for printing, as (label, PDF points).
@@ -101,6 +107,11 @@ DEFAULTS: dict = {
     "recent/opened": json.dumps({}),
     # pinned paths, in the order they were pinned; never aged out, never cleared
     "recent/pinned": json.dumps([]),
+    # workspaces: declared folders, per user (nothing is written into them)
+    "workspaces/list": json.dumps([]),
+    "workspaces/selected": "",
+    "workspaces/recent_max": DEFAULT_WORKSPACE_RECENT,
+    "files/quick_folders": json.dumps(list(DEFAULT_QUICK_FOLDERS)),
     # Minimum printed line weight, in PDF points (0 = print widths as drawn).
     # See PRINT_LINE_WEIGHTS for why this defaults on.
     "print/min_line_pt": 0.5,
@@ -261,6 +272,137 @@ class AppConfig:
         self.set("recent/pinned", json.dumps(
             [p for p in self.pinned_files if _recent.drawing_key(p) != key]))
         self._prune_opened()
+
+    # -- workspaces ----------------------------------------------------------
+
+    def workspaces(self) -> list:
+        """Every declared workspace, in the order they were added."""
+        return [_ws.Workspace.from_dict(d)
+                for d in self._json_setting("workspaces/list", [])
+                if isinstance(d, dict) and d.get("root")]
+
+    def _save_workspaces(self, items) -> None:
+        self.set("workspaces/list", json.dumps([w.to_dict() for w in items]))
+
+    def find_workspace(self, root: str):
+        key = _ws._key(root)
+        return next((w for w in self.workspaces() if _ws._key(w.root) == key), None)
+
+    def add_workspace(self, root: str, name: str = ""):
+        """Declare the folder ``root`` a workspace. Refuses a missing folder and
+        one that would nest with another workspace, naming it."""
+        root = _ws.norm_root(root)
+        if not os.path.isdir(root):
+            raise _ws.WorkspaceError(f"“{root}” is not a folder.")
+        clash = _ws.overlap(root, self.workspaces())
+        if clash is not None:
+            raise _ws.WorkspaceError(_ws.nesting_message(root, clash))
+        ws = _ws.Workspace(root=root, name=name.strip(), last_used=now_iso())
+        self._save_workspaces(self.workspaces() + [ws])
+        return ws
+
+    def create_workspace(self, parent: str, name: str):
+        """New workspace…: make ``parent/name`` with the quick subfolders and
+        declare it. The nesting check runs FIRST, so a refusal leaves no folder
+        behind on disk."""
+        root = _ws.norm_root(os.path.join(parent, (name or "").strip()))
+        clash = _ws.overlap(root, self.workspaces())
+        if clash is not None:
+            raise _ws.WorkspaceError(_ws.nesting_message(root, clash))
+        _ws.create_workspace(parent, name, self.quick_folders())
+        return self.add_workspace(root)
+
+    def update_workspace(self, ws) -> None:
+        """Store ``ws`` over the workspace with the same root."""
+        key = _ws._key(ws.root)
+        self._save_workspaces([ws if _ws._key(w.root) == key else w
+                               for w in self.workspaces()])
+
+    def relocate_workspace(self, old_root: str, new_root: str):
+        """Point a workspace at its folder's new location (Locate…). Everything
+        it remembers is relative, so favorites and hidden folders carry over."""
+        ws = self.find_workspace(old_root)
+        if ws is None:
+            raise _ws.WorkspaceError(f"“{old_root}” is not a workspace.")
+        new_root = _ws.norm_root(new_root)
+        if not os.path.isdir(new_root):
+            raise _ws.WorkspaceError(f"“{new_root}” is not a folder.")
+        clash = _ws.overlap(new_root, self.workspaces(), ignore=old_root)
+        if clash is not None:
+            raise _ws.WorkspaceError(_ws.nesting_message(new_root, clash))
+        key = _ws._key(old_root)
+        was_selected = _ws._key(self.selected_workspace_root or "") == key
+        items = self.workspaces()
+        for w in items:
+            if _ws._key(w.root) == key:
+                w.root = new_root
+                ws = w
+        self._save_workspaces(items)
+        if was_selected:
+            self.set("workspaces/selected", new_root)
+        return ws
+
+    def remove_workspace(self, root: str) -> None:
+        """Take a workspace off the list. The folder is never touched."""
+        key = _ws._key(root)
+        self._save_workspaces([w for w in self.workspaces()
+                               if _ws._key(w.root) != key])
+        if _ws._key(self.selected_workspace_root or "") == key:
+            self.set("workspaces/selected", "")
+
+    @property
+    def selected_workspace_root(self) -> str:
+        return str(self.get("workspaces/selected") or "")
+
+    def select_workspace(self, root: str) -> None:
+        """The workspace the user last opened in the File view."""
+        ws = self.find_workspace(root)
+        if ws is None:
+            return
+        self.set("workspaces/selected", ws.root)
+        ws.last_used = now_iso()
+        self.update_workspace(ws)
+
+    def workspace_for(self, path: str):
+        return _ws.containing(self.workspaces(), path)
+
+    def current_workspace(self, open_path: Optional[str] = None):
+        """The workspace holding the open file, else the one last selected."""
+        if open_path:
+            ws = self.workspace_for(open_path)
+            if ws is not None:
+                return ws
+        return self.find_workspace(self.selected_workspace_root) \
+            if self.selected_workspace_root else None
+
+    def record_workspace_open(self, path: str, when: Optional[str] = None):
+        """Put an opened file on its workspace's own recent list -- whatever
+        route opened it. Returns the workspace, or ``None`` when it is in none."""
+        ws = self.workspace_for(path)
+        if ws is None:
+            return None
+        ws.record_open(_ws.relative(ws.root, path), when or now_iso(),
+                       self.workspace_recent_max)
+        self.update_workspace(ws)
+        return ws
+
+    @property
+    def workspace_recent_max(self) -> int:
+        lo, hi = WORKSPACE_RECENT_BOUNDS
+        return max(lo, min(hi, int(self.get("workspaces/recent_max"))))
+
+    def quick_folders(self) -> list:
+        names = [str(n).strip() for n in self._json_setting("files/quick_folders", [])]
+        return [n for n in names if n] or list(DEFAULT_QUICK_FOLDERS)
+
+    def set_quick_folders(self, names) -> None:
+        cleaned, seen = [], set()
+        for n in names:
+            n = str(n).strip().strip("/\\")
+            if n and n.lower() not in seen:
+                seen.add(n.lower())
+                cleaned.append(n)
+        self.set("files/quick_folders", json.dumps(cleaned))
 
     # -- search history ------------------------------------------------------
 
