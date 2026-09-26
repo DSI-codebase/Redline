@@ -4,6 +4,28 @@ All notable changes to **DSI Redline** are documented here. Versions are tagged
 `vX.Y.Z`; each tag triggers the Windows build that publishes the installer and a
 portable zip to the matching GitHub release.
 
+## Unreleased
+
+- **Double-click any mark to edit its note.** Highlights, pen strokes,
+  rectangles, circles, arrows, lines and clouds open the same editor as
+  right-click ▸ *Add note… / Edit note…*, with the Select tool. The comment
+  bubble, text box and callout keep their own editors.
+- **The Comments sidebar's right-click menu does more than delete.** Edit, Go to
+  in PDF, Flag as TODO (and on a TODO: Mark done / not done, Show in TODO list,
+  Remove TODO flag), Change commenter, Copy text and Delete.
+- **A TODO is blue on the sheet.** The corner badge was orange on every noted
+  mark whether or not it was a TODO; a TODO's is now blue, a plain note's stays
+  orange, and a text box or callout flagged as a TODO is badged too — before, it
+  showed no sign of it at all.
+- **Jumping to a mark from a list zooms to it.** Comments, TODO, Wire Numbers,
+  Component Labels and Audit rows used to scroll the Viewer to the target at the
+  zoom already on screen, which on a full-size site plan left the mark a few
+  pixels across. The Viewer now frames the target's extents — up to 300% for a
+  small one, zoomed out for one larger than the window. An audit finding is
+  framed by its whole printed box rather than centered on its top-left corner,
+  and a pen stroke or cloud is found where it is drawn: both carry an all-zero
+  box, so the jump used to land on the page's top-left corner.
+
 ## v1.5.2
 
 - **Your original drawing can no longer be overwritten — and until now it

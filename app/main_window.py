@@ -33,7 +33,7 @@ from .dialogs import (
 )
 from .settings_dialog import SettingsDialog
 from . import lifecycle, menus, printing, toolbar
-from .model.annotations import Annotation
+from .model.annotations import Annotation, KIND_CALLOUT, KIND_TEXTBOX
 from .viewer.pdf_view import PdfView
 from .viewer import tools as T
 from .viewer.command_stack import ModifyAnnotationCommand, RemoveAnnotationCommand, capture
@@ -199,6 +199,9 @@ class MainWindow(QMainWindow):
         self.comment_panel.activated.connect(self._jump_to)
         self.comment_panel.deleteRequested.connect(self._delete_annotation)
         self.comment_panel.authorEditRequested.connect(self._edit_author)
+        self.comment_panel.editRequested.connect(self._edit_annotation)
+        self.comment_panel.revealTodoRequested.connect(
+            lambda ann: self._reveal_in_panel(ann, "todo"))
         dock = QDockWidget("Comments", self)
         dock.setObjectName("CommentDock")
         dock.setWidget(self.comment_panel)
@@ -612,6 +615,11 @@ class MainWindow(QMainWindow):
     def _edit_textbox(self, ann: Annotation):
         self._edit_text(ann, is_textbox=True)
 
+    def _edit_annotation(self, ann: Annotation):
+        """Open a mark's editor from a list row: a text box or callout gets the
+        text-box editor (font, fill), any other mark the comment / note one."""
+        self._edit_text(ann, is_textbox=ann.kind in (KIND_TEXTBOX, KIND_CALLOUT))
+
     def _edit_text(self, ann: Annotation, is_textbox: bool):
         before = capture(ann)
         was_todo = ann.is_todo
@@ -892,8 +900,10 @@ class MainWindow(QMainWindow):
     # -- navigation ----------------------------------------------------------
 
     def _jump_to(self, obj):
-        # obj is an Annotation, or a WireNumber / ComponentLabel (which carry a
-        # page + x/y of their FIRST occurrence after dedupe).
+        # obj is an Annotation; a WireNumber / ComponentLabel (a page + x/y of
+        # their FIRST occurrence after dedupe); or an audit Finding / Place,
+        # which also carries the printed box's w/h -- so the view zooms to the
+        # box rather than to its top-left corner.
         ann = obj if isinstance(obj, Annotation) else None
         if ann is not None:
             self.tabs.setCurrentWidget(self.view)
@@ -904,8 +914,13 @@ class MainWindow(QMainWindow):
             return
         self.tabs.setCurrentWidget(self.view)
         x, y = getattr(obj, "x", None), getattr(obj, "y", None)
+        w, h = float(getattr(obj, "w", 0.0) or 0.0), float(getattr(obj, "h", 0.0) or 0.0)
         if x is not None and y is not None and (x or y):
-            self.view.go_to_location(int(page), float(x), float(y))
+            if w > 0 or h > 0:
+                self.view.go_to_rect(int(page), float(x), float(y),
+                                     float(x) + w, float(y) + h)
+            else:
+                self.view.go_to_location(int(page), float(x), float(y))
         else:
             self.view.go_to_page(int(page))
 

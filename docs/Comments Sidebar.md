@@ -15,7 +15,8 @@ shows `☐` (open) or `✓` (done).
 
 ## Find a mark
 
-- **Click a row** to scroll the Viewer to that mark and flash it.
+- **Click a row** to zoom the Viewer to that mark and flash it — see
+  [[Viewer]] for how far it zooms.
 - The other way round: **right-click a mark on the page ▸ "Reveal in Comments"**
   to select its row here.
 - **Search** box filters by text.
@@ -24,6 +25,17 @@ shows `☐` (open) or `✓` (done).
 - **Sort** by page, commenter, datetime or type, ascending or descending.
 
 The list updates live as you add or edit marks.
+
+## Right-click a row
+
+- **Edit comment… / Edit text… / Edit note…** — opens the same editor as
+  double-clicking the mark on the page.
+- **Go to in PDF** — zooms the Viewer to the mark.
+- **Flag as TODO** — or, on a TODO, **Mark done / Mark not done**, **Show in
+  TODO list** and **Remove TODO flag**. See [[TODO]].
+- **Change commenter…** — the same as double-clicking the *By* column, below.
+- **Copy text** — the comment or note text, to the clipboard.
+- **Delete comment** — asks first; undoable.
 
 ## Change who a mark is by
 

@@ -44,6 +44,14 @@ pane toggle with **F9** and **F10**. Clicking a **page thumbnail or bookmark**
 jumps the Viewer to it — and if you're on another tab (TODO, Wire Numbers, …)
 it switches back to the Viewer automatically.
 
+**A jump from a list zooms to what it names.** Clicking a row in the
+[[Comments Sidebar]], or jumping from the [[TODO]], [[Wire Numbers]],
+[[Component Labels]] or Audit tabs, frames the target's extents: a small mark
+or a single label is shown at **300%**, and a mark larger than the window is
+zoomed **out** until all of it fits. The zoom you were at is not kept, so a
+mark on a full-size site plan lands on screen at a readable size rather than as
+a speck in a fit-width view.
+
 ## Arranging the panels
 
 The **Navigation** and **Comments** panes — **and the five main tabs** (Viewer,
