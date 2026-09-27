@@ -72,9 +72,17 @@ OWNER_EXPR = "${{ github.repository_owner }}"
 # `git` and `pip` are shell FUNCTIONS rather than stub files on PATH: a
 # function needs no directory, no execute bit and no PATH edit, so the harness
 # runs the same way under Git bash on the Windows runner as it does here.
+#
+# `LSREMOTE_RC` makes the listing FAIL the way git does when the credential it
+# sent cannot see the repository: git's reason on stderr, exit 128, nothing on
+# stdout. That is not the empty listing (exit 0) a missing ref produces.
 _HARNESS = """
 git() {
   if [ "$1" = "ls-remote" ]; then
+    if [ "${LSREMOTE_RC:-0}" -ne 0 ]; then
+      echo "remote: Repository not found." >&2
+      return "$LSREMOTE_RC"
+    fi
     [ -n "$LSREMOTE_OUT" ] && printf '%s\\n' "$LSREMOTE_OUT"
     return 0
   fi
@@ -148,7 +156,7 @@ def _usable_bash(candidates=None):
 BASH = _usable_bash()
 
 
-def _drive(ref_file_body, lsremote_out, tmpdir):
+def _drive(ref_file_body, lsremote_out, tmpdir, lsremote_rc=0):
     """Run the real step script against a ref file and a canned ls-remote."""
     script = _run_script(WORKFLOW, STEP)
     # Two today -- the clone URL and the refusal's own message -- and the
@@ -174,7 +182,7 @@ def _drive(ref_file_body, lsremote_out, tmpdir):
         fh.write(_HARNESS + script)
     env = dict(os.environ,
                INPUT_REF="", PYDRC_TOKEN="tok",
-               LSREMOTE_OUT=lsremote_out,
+               LSREMOTE_OUT=lsremote_out, LSREMOTE_RC=str(lsremote_rc),
                GITHUB_ENV=os.path.join(tmpdir, "env"))
     r = subprocess.run([BASH, path], cwd=tmpdir, env=env,
                        capture_output=True, text=True, errors="replace")
@@ -224,6 +232,68 @@ class TestTheStepStillDiscriminates(unittest.TestCase):
         # at the read, so without `|| true` the refusal five lines below it can
         # never print: exit 1 with no output at all.
         self.assertRegex(self.code, r"tr -d '\[:space:\]' \|\| true\)")
+
+    def test_a_listing_that_FAILED_is_not_read_as_an_empty_one(self):
+        # `|| true` on the listing turned git's exit 128 -- "Repository not
+        # found", the credential could not see PyDRC -- into the empty answer
+        # a missing ref gives, and the v1.6.0 build blamed a tag that existed.
+        # The invocation, not the refusal's own sentence that names the command.
+        lines = [ln for ln in self.code.splitlines() if "$(git ls-remote" in ln]
+        self.assertEqual(1, len(lines),
+                         f"expected the step to list refs exactly once: {lines}")
+        self.assertNotIn("|| true", lines[0],
+                         "the listing's exit status is discarded again, so a "
+                         "repository the token cannot read is reported as a "
+                         "ref that is not there")
+        self.assertIn("ls_rc", lines[0], "the listing's exit status is not kept")
+        self.assertRegex(
+            self.code, r'if \[ "\$ls_rc" -ne 0 \]; then\s*\n\s*echo "::error::')
+        # ...and it is tested before anything reads the answer as "not there".
+        self.assertLess(self.code.index('"$ls_rc" -ne 0'),
+                        self.code.index("ref_is_sha"))
+
+
+def _checkout_steps(path):
+    """Each `actions/checkout` step in the workflow, as its own lines."""
+    with open(path, encoding="utf-8") as fh:
+        lines = fh.read().splitlines()
+    steps = []
+    for i, ln in enumerate(lines):
+        if re.match(r"\s*- uses: actions/checkout@", ln):
+            indent = len(ln) - len(ln.lstrip())
+            block = [ln]
+            for nxt in lines[i + 1:]:
+                lead = len(nxt) - len(nxt.lstrip())
+                if nxt.strip() and lead <= indent:
+                    break
+                block.append(nxt)
+            steps.append(block)
+    return steps
+
+
+class TestTheCheckoutDoesNotOutrankTheToken(unittest.TestCase):
+    """Structural. The step's harness stubs git, so it cannot see this.
+
+    `actions/checkout` persists the GITHUB_TOKEN as an `AUTHORIZATION` header
+    in the checkout's git config. `git ls-remote` runs inside the checkout,
+    sends that header, and GitHub answers "Repository not found" for PyDRC
+    without ever asking for the `PYDRC_TOKEN` in the URL. Measured against a
+    local server standing in for GitHub: the header went first, drew a 404,
+    and git exited 128; the same command outside the checkout listed the tag.
+    """
+
+    def test_the_build_checkout_persists_no_credential(self):
+        steps = _checkout_steps(WORKFLOW)
+        # Floor: a sweep that found no checkout would pass over nothing.
+        self.assertGreaterEqual(len(steps), 1,
+                                f"no actions/checkout step found in {WORKFLOW}")
+        for block in steps:
+            code = [ln.strip() for ln in block
+                    if ln.strip() and not ln.strip().startswith("#")]
+            self.assertIn("persist-credentials: false", code,
+                          "the checkout persists the GITHUB_TOKEN again, and it "
+                          "outranks PYDRC_TOKEN for every git call in the "
+                          f"checkout:\n" + "\n".join(block))
 
 
 class TestTheHarnessPicksAShellThatCanRun(unittest.TestCase):
@@ -342,6 +412,28 @@ class TestDrivingTheStep(unittest.TestCase):
                          "a ref that is not on the remote reached pip anyway")
         self.assertNotIn("PyDRC resolved to:", out,
                          "the log claims a resolution that did not happen")
+
+    def test_a_repository_the_token_cannot_read_is_not_blamed_on_the_ref(self):
+        # The v1.6.0 build: the tag existed, the listing failed, and the log
+        # said the tag did not. Exit 128 is git's own for "not found".
+        rc, out = _drive("v0.2.1", "", self.tmp, lsremote_rc=128)
+        self.assertEqual(1, rc, out)
+        self.assertIn("could not read TheOrg/PyDRC (exit 128)", out)
+        self.assertIn("'v0.2.1' was never looked up", out)
+        self.assertNotIn("neither a branch or tag", out,
+                         "an unreachable repository is reported as a missing ref")
+        self.assertNotIn("PyDRC resolved to:", out)
+        self.assertNotIn("PIP-CALLED", out)
+
+    def test_a_listing_that_fails_stops_even_a_sha_shaped_ref(self):
+        # The SHA fallback is for a ref git cannot LIST, not for a repository
+        # git cannot READ: pip would fail on the same credential, later and
+        # about something else.
+        rc, out = _drive("1db2d9daabbccddeeff00112233445566778899a", "",
+                         self.tmp, lsremote_rc=128)
+        self.assertEqual(1, rc, out)
+        self.assertIn("could not read", out)
+        self.assertNotIn("PIP-CALLED", out)
 
     def test_a_branch_that_is_NOT_on_the_remote_refuses(self):
         rc, out = _drive("main", "", self.tmp)
