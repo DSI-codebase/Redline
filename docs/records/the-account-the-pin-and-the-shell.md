@@ -197,3 +197,58 @@ anchor holding a Windows path.)*
 
 **775 tests across 60 modules, 345 skipped** — the +4 is the probe's own class,
 and the skip reasons are identical line for line.
+
+### ...and the first tag build blamed the tag, because the checkout's own token answered for PyDRC
+
+2026-09-27. The first **Build Windows** run in this repository — the `v1.6.0`
+tag, run `36349198718` — failed in the resolve step with
+
+    remote: Repository not found.
+    fatal: repository 'https://github.com/DSI-codebase/PyDRC/' not found
+    ::error::packaging/pydrc-ref.txt names 'v0.2.1', which is neither a branch or tag on DSI-codebase/PyDRC nor a commit SHA. …
+
+The tag was there: `v0.2.1` on `09dbb19`, listed by the GitHub API that day.
+The secret was there too: **Tests** on the same commit, `cafb58b`, installed
+`pydrc[dxf]` from the same repository with the same `PYDRC_TOKEN` a day earlier
+and passed with `--require-drc` on all six legs (run `36245807615`). Two defects,
+and the second is why the first read as a missing tag.
+
+- **`actions/checkout` persists the `GITHUB_TOKEN` in the checkout's git
+  config**, as `http.https://github.com/.extraheader` — an `AUTHORIZATION`
+  header, and the job's post-cleanup log unsets exactly that key. That token can
+  read this repository and no other. `git ls-remote` runs inside the checkout,
+  reads the local config and sends the header; GitHub authenticates it, finds no
+  PyDRC it may show, and answers 404 — so git never offers the `PYDRC_TOKEN`
+  written into the URL. `pip`'s `git clone` does not read the checkout's config,
+  which is why `tests.yml`, whose only git call is pip's, never saw this.
+  **Measured** against a local server standing in for GitHub (the scoped header
+  gets a 404, no auth gets a 401 challenge, the PyDRC credential gets a
+  listing): inside a repository carrying the header, the server saw
+  `GITHUB_TOKEN` first and git exited 128; outside it, the server saw no auth,
+  challenged, then saw `PYDRC_TOKEN`, and the tag was listed; inside with
+  `-c http.<url>.extraheader=`, the same listing.
+- **The listing read `|| true`**, so exit 128 arrived as the empty answer a
+  missing ref gives, and the refusal written for a tag lost in the account move
+  fired — the same sentence, on the day that did not happen. Unreachable is its
+  own state: the step now keeps git's exit status and stops on it, naming the
+  repository and saying the ref was never looked up, before anything reads the
+  answer as "not there". A SHA-shaped ref stops too: the SHA fallback is for a
+  ref git cannot *list*, and pip would fail on the same credential later.
+
+The fix is `persist-credentials: false` on the build's checkout. Nothing in that
+job pushes, and the release step takes `GH_TOKEN` from its own env. Gated in
+`tests/test_drc_ref_resolution.py`: a structural check that every
+`actions/checkout` in `build-windows.yml` sets it (with a floor, so a renamed
+action cannot pass over nothing), a structural check that the one listing keeps
+its exit status and tests it before the SHA arm, and two behavioral tests
+driving the step with a stub `git ls-remote` that exits 128.
+
+Falsified four ways, each on its own arm: the original `|| true` listing
+restored (3 tests), the exit status kept but never tested (the same 3),
+`persist-credentials` removed (1), and set to `true` (1). **The harness stubs
+git, so no behavioral test can see the header** — the structural check on the
+checkout is the only gate on the cause, and the local server above is the only
+measurement of it.
+
+**909 tests across 65 modules, 0 skipped**, under `--strict --require-drc` with
+PyDRC 0.2.1 installed — 905 at `c0a2ad6`, and the +4 is this section's.

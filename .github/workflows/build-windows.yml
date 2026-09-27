@@ -28,6 +28,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          # NOT PERSISTED, because a persisted credential outranks PYDRC_TOKEN.
+          # checkout writes `http.https://github.com/.extraheader` into this
+          # checkout's git config: an AUTHORIZATION header carrying the
+          # GITHUB_TOKEN, which can see this repository and no other. Every
+          # `git ls-remote` run in here sends it, GitHub answers "Repository
+          # not found" for PyDRC, and the token in the URL is never offered.
+          # That was the first tag build here (v1.6.0, run 36349198718), while
+          # tests.yml installed from the same repository with the same secret
+          # and passed -- pip's `git clone` does not read this config. Nothing
+          # below pushes; the release step takes GH_TOKEN from its own env.
+          persist-credentials: false
 
       - uses: actions/setup-python@v6
         with:
@@ -81,7 +93,18 @@ jobs:
           # An annotated tag resolves to two lines -- the tag object, then the
           # commit it points at as "<ref>^{}". The commit is the one to
           # install; the tag object is not a thing pip can check out.
-          refs=$(git ls-remote "$url" "$ref" || true)
+          #
+          # A FAILED LISTING IS NOT AN EMPTY ONE. This read `|| true`, so git
+          # exiting 128 on "Repository not found" arrived below as an empty
+          # answer, and the log blamed the ref: "names 'v0.2.1', which is
+          # neither a branch or tag" -- about a tag that was there. Unreachable
+          # is its own state, and it stops here with git's reason above it.
+          ls_rc=0
+          refs=$(git ls-remote "$url" "$ref") || ls_rc=$?
+          if [ "$ls_rc" -ne 0 ]; then
+            echo "::error::git ls-remote could not read ${{ github.repository_owner }}/PyDRC (exit $ls_rc), so '$ref' was never looked up. Git's reason is the line above. PYDRC_TOKEN must be able to read that repository, and no credential persisted in this checkout may replace it (see the checkout step)."
+            exit 1
+          fi
           sha=$(printf '%s\n' "$refs" | awk '/\^\{\}$/ {print $1; found=1; exit}
                                              END {if (!found) exit 1}' || true)
           if [ -z "$sha" ]; then
