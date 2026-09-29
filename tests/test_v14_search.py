@@ -391,6 +391,104 @@ class TestSearchPanel(unittest.TestCase):
         self.assertLessEqual(right_gap, 40)
 
 
+def _luminance(c):
+    def lin(v):
+        v /= 255
+        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+    return 0.2126 * lin(c.red()) + 0.7152 * lin(c.green()) + 0.0722 * lin(c.blue())
+
+
+def _contrast(a, b):
+    hi, lo = sorted((_luminance(a), _luminance(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+@unittest.skipUnless(_QT_OK, _QT_REASON)
+class TestHeaderRowsAreLegible(unittest.TestCase):
+    """The page/sheet header rows in the results list, measured off the pixels.
+
+    The panel's stylesheet pins a light look (white list, #1d1d1d text), and
+    the header painted its fill from AlternateBase and its text from
+    PlaceholderText -- roles that stylesheet does not set. Under Windows dark
+    mode the system supplied a dark AlternateBase while the text stayed dark:
+    #292929 on #353535, 1.19:1, unreadable. It was 3.22:1 on a light system.
+    """
+
+    MIN_CONTRAST = 4.5      # WCAG AA for small text; the header font is small
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _dark_system_palette(self):
+        from PySide6.QtGui import QPalette, QColor
+        pal = QPalette()
+        for role, c in ((QPalette.Window, "#202020"), (QPalette.WindowText, "#ffffff"),
+                        (QPalette.Base, "#1c1c1c"), (QPalette.AlternateBase, "#353535"),
+                        (QPalette.Text, "#ffffff"), (QPalette.PlaceholderText, "#9d9d9d"),
+                        (QPalette.Button, "#2d2d2d"), (QPalette.ButtonText, "#ffffff"),
+                        (QPalette.Highlight, "#0078d4"),
+                        (QPalette.HighlightedText, "#ffffff")):
+            pal.setColor(role, QColor(c))
+        return pal
+
+    def _header_contrast(self, palette=None):
+        from types import SimpleNamespace as NS
+        from app.viewer.search_bar import SearchBar, ROLE_INDEX
+        if palette is not None:
+            old = self.app.palette()
+            self.app.setPalette(palette)
+            self.addCleanup(self.app.setPalette, old)
+        bar = SearchBar()
+        self.addCleanup(bar.deleteLater)
+        bar.set_matches([NS(page=p, before="equal to ", text="1000 v",
+                            after=" for a.c.", decode="", source="page",
+                            kind="", author="") for p in (217, 217, 218)],
+                        sheet_labels={217: "5"})
+        bar.show()
+        self.app.processEvents()
+        img = bar.results.viewport().grab().toImage()
+        heads = [bar.results.visualItemRect(bar.results.item(i))
+                 for i in range(bar.results.count())
+                 if bar.results.item(i).data(ROLE_INDEX) == -1]
+        # Floor: a list with no header rows would measure nothing.
+        self.assertEqual(2, len(heads), "expected one header per page")
+        worst = None
+        for r in heads:
+            bg = img.pixelColor(r.right() - 3, r.center().y())   # past the label
+            ink = max((img.pixelColor(x, y)
+                       for x in range(r.left(), min(r.right(), r.left() + 160))
+                       for y in range(r.top(), r.bottom() + 1)),
+                      key=lambda c: _contrast(c, bg))
+            ratio = _contrast(ink, bg)
+            if worst is None or ratio < worst[0]:
+                worst = (ratio, ink.name(), bg.name())
+        return worst
+
+    def test_headers_are_legible_on_a_light_system(self):
+        ratio, ink, bg = self._header_contrast()
+        self.assertGreaterEqual(ratio, self.MIN_CONTRAST,
+                                f"header text {ink} on {bg} is {ratio:.2f}:1")
+
+    def test_headers_are_legible_on_a_dark_system(self):
+        ratio, ink, bg = self._header_contrast(self._dark_system_palette())
+        self.assertGreaterEqual(ratio, self.MIN_CONTRAST,
+                                f"header text {ink} on {bg} is {ratio:.2f}:1 "
+                                f"under a dark system palette")
+
+    def test_the_dark_palette_really_reached_the_panel(self):
+        # Without this the dark test passes on a palette that never applied.
+        from app.viewer.search_bar import SearchBar
+        from PySide6.QtGui import QPalette
+        old = self.app.palette()
+        self.app.setPalette(self._dark_system_palette())
+        self.addCleanup(self.app.setPalette, old)
+        bar = SearchBar()
+        self.addCleanup(bar.deleteLater)
+        self.assertEqual("#353535", bar.results.palette()
+                         .color(QPalette.AlternateBase).name())
+
+
 @unittest.skipUnless(_QT_OK, _QT_REASON)
 class TestMainWindowShortcuts(unittest.TestCase):
     @classmethod

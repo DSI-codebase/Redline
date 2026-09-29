@@ -52,4 +52,9 @@
 # a skill and one test. So step 1 needed no new tag, and a rebuild of v1.6.0
 # installs the rule set it shipped with. Set this back to `main` after the
 # release to track the library again.
-v0.2.1
+#
+# CHANGED 2026-09-29, from `v0.2.1` back to `main`. v1.6.0 shipped with
+# `v0.2.1` (the release notes read `pydrc 0.2.1 | drc-base@1.34.0 | 09dbb19…
+# (ref v0.2.1)`), so development tracks the library again. The next release
+# sets a tag here first, per the three steps above.
+main

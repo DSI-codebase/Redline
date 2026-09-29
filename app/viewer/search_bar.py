@@ -41,6 +41,8 @@ class _ResultDelegate(QStyledItemDelegate):
     PAD_X = 8
     ROW_H = 22
     HEADER_H = 20
+    HEADER_FILL_ALPHA = 22      # over the white list: #ececec
+    HEADER_TEXT_ALPHA = 190     # over that fill: #525252, 6.61:1
 
     # Extra px granted beyond each segment's measured advance. elidedText()
     # at a width exactly equal to horizontalAdvance() still elides — integer
@@ -74,12 +76,23 @@ class _ResultDelegate(QStyledItemDelegate):
         r = option.rect
 
         if index.data(ROLE_INDEX) == -1:                      # header row
-            painter.fillRect(r, pal.color(QPalette.AlternateBase))
+            # Both colors come from the row text color, which the panel's own
+            # stylesheet sets. They read AlternateBase and PlaceholderText
+            # before, which the stylesheet does not set: under Windows dark
+            # mode AlternateBase came from the system, dark, while the text
+            # resolved dark too. Reproduced with a dark palette: #292929 on
+            # #353535, 1.19:1 (tests/test_v14_search.py measures it).
+            text = pal.color(QPalette.Text)
+            fill = QColor(text)
+            fill.setAlpha(self.HEADER_FILL_ALPHA)            # a tint of the list
+            painter.fillRect(r, fill)
             f = QFont(option.font)
             f.setPointSizeF(max(7.5, f.pointSizeF() - 1))
             f.setBold(True)
             painter.setFont(f)
-            painter.setPen(pal.color(QPalette.PlaceholderText))
+            head = QColor(text)
+            head.setAlpha(self.HEADER_TEXT_ALPHA)
+            painter.setPen(head)
             painter.drawText(r.adjusted(self.PAD_X, 0, -self.PAD_X, 0),
                              Qt.AlignVCenter | Qt.AlignLeft,
                              index.data(Qt.DisplayRole) or "")

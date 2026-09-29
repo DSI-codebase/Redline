@@ -4,6 +4,14 @@ All notable changes to **DSI Redline** are documented here. Versions are tagged
 `vX.Y.Z`; each tag triggers the Windows build that publishes the installer and a
 portable zip to the matching GitHub release.
 
+## Unreleased
+
+- **Ctrl+F page headers are readable in Windows dark mode.** The page and
+  sheet rows in the find results list took their colors from the system theme
+  while the rest of the panel stays light, so under dark mode they drew
+  dark gray text on a dark gray band. They now take them from the panel: dark
+  gray text on a light gray band, in either mode.
+
 ## v1.6.0
 
 Design rule checking in this release is PyDRC `v0.2.1` (`09dbb19`).
