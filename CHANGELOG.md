@@ -4,7 +4,10 @@ All notable changes to **DSI Redline** are documented here. Versions are tagged
 `vX.Y.Z`; each tag triggers the Windows build that publishes the installer and a
 portable zip to the matching GitHub release.
 
-## Unreleased
+## v1.6.1
+
+Design rule checking in this release is PyDRC `v0.2.1` (`09dbb19`), the same
+rules as v1.6.0.
 
 - **Ctrl+F page headers are readable in Windows dark mode.** The page and
   sheet rows in the find results list took their colors from the system theme
