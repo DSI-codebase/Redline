@@ -143,6 +143,15 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 The app is **fully functional with no key** — AI is never required.
 
+### Jev sheet roles (optional — opt-in, off by default)
+
+A design rule check needs each sheet's role (schematic, panel layout, …), which
+a keyword table reads from the title block. With **Use Jev to decide sheet
+roles** ticked in **Settings ▸ OCR / AI**, TypeSafe's Jev model decides it from
+the same text. The key is the **TypeSafe key** field or `TYPESAFE_API_KEY`. The
+check asks before sending any title block, keeps each answer in the markup
+database, and never replaces a role a person set.
+
 ---
 
 ## Run
@@ -209,7 +218,8 @@ app/
                              copying a drawing's three files (never replacing)
   panels/                    Comment sidebar, TODO, Wire Numbers, Component Labels,
                              PDF Tools, Navigation
-  extraction/                Text extraction, OCR, wire parser/classifier, Claude assist
+  extraction/                Text extraction, OCR, wire parser/classifier, Claude assist,
+                             Jev client (sheet roles)
   export/                    TODO (md/docx) and wire (xlsx/csv) exporters
   tools/                     PDF ops (split/combine/…), dialogs, sheet/crop wizards
 docs/                        User manual (Obsidian-style markdown vault)

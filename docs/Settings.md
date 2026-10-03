@@ -72,6 +72,11 @@ The same idea as wire numbers, for device tags ([[Component Labels]]).
   at full resolution so small wire numbers survive. Higher is more accurate and
   costs **N² API calls per page**; 1 is the whole page.
 
+### Jev (TypeSafe)
+- **Use Jev to decide sheet roles** — off by default; the keyword table decides.
+- **TypeSafe key**, **Check TypeSafe key** — blank uses `TYPESAFE_API_KEY`. See
+  [[AI Assist]].
+
 ## Design rules
 
 Only present in a build that has the rule library; without it the tab says so

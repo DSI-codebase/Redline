@@ -20,6 +20,77 @@ text tokens** that Claude does today by prompt-and-parse, the vision model
 keeping only the reading of pixels. Two candidates under "Later, not first" stay
 later.
 
+## Progress, 2026-10-03 (the integrating session)
+
+**Owner answers to the four questions at the end, given 2026-10-03:**
+
+1. Label and title-block text from real drawings may go to TypeSafe, under the
+   current plan (not ZDR).
+2. The key comes from `TYPESAFE_API_KEY` **and** a Settings field stored in
+   QSettings; the field wins.
+3. Scanned sets are reviewed with AI assist **rarely**, so **sheet role goes
+   first**. The label split below ("The judgment to build") waits.
+4. Jev may judge text-layer tokens **later**; nothing here does yet.
+
+**Task 1, access:** `GET /v1/models` answered 200 listing `jev-latest` and
+`jev-preview` only. The docs say versioned IDs are accepted whether listed or
+not, and every request below sent `jev-1.13.0` and got `"model": "jev-1.13.0"`
+back.
+
+**Tasks 3 and 4, re-aimed at sheet role, are built** behind
+`jev/sheet_roles`, default off:
+
+- `app/extraction/jev_api.py`: stdlib client; `ask` never raises; retry 408,
+  429, 5xx honoring `retry-after-ms` then `retry-after`, 4 attempts, a wait
+  over 30 s gives up; key in the header only; model pinned to `jev-1.13.0`.
+- `app/extraction/sheet_role.py`: one Choice over the nine `ROLES`, `unknown`
+  last; state is `title_block` (the band `ROLE_KEYWORDS` reads) plus
+  `page_text` on a sparse page, the same two sources; a page with no text is
+  not sent. `JEV_THRESHOLD = 0.6` is **provisional** (myNameJev's). Answers
+  carry `model` and `JEV_WORDING`; either changing makes them stale.
+- `app/model/document.py`: `sheet_role_sources` (only `"user"`, from
+  `set_sheet_role`) and `sheet_role_jev` (answers), each in its own meta key so
+  an older build still opens the sidecar. `roles_for_audit(use_jev)` is user >
+  Jev at or above threshold > keyword. Flag off returns HEAD's roles. Every
+  revision in history was grepped: no `app/` caller of `set_sheet_role` ever
+  existed, so a saved role without a source is keyword output.
+- `MainWindow.run_audit`: counts pages with text and no current answer, asks
+  before sending (the dialog names TypeSafe and the title-block contents),
+  runs Jev in the audit worker on its own handle, and keeps answers even when
+  the check is canceled. Settings ▸ OCR / AI has a **Jev (TypeSafe)** group.
+- Gates, each falsified by injecting its defect (the table below, plus the
+  window's flag check and a scanned page counted as waiting): 12 injections,
+  12 red. The audit wiring is tested with PyDRC faked, so it runs
+  without the private library.
+
+**First live answers, synthetic text only** (sent from this session; nothing
+from a real drawing):
+
+- The 13 titles in `tests/test_sheet_role.py:50-76`, as plotted on rotated
+  pages: Jev 13/13, keywords 13/13. These are the titles the keyword table was
+  written from, so this separates nothing. 643-653 input tokens and 0.23-0.61 s
+  per request; at 653 tokens a 41-sheet set is 26,773 tokens, $0.0011. Real
+  title blocks carry more text, so this is a floor, not the price.
+- 12 title blocks with a client, address, project, drawn/checked names, date
+  and drawing number around the title, **written by this session to break the
+  keyword table** (a client named SYMBOL TECHNOLOGIES, a note "SEE SHEET INDEX
+  ON E-001"): Jev 12/12, keywords 2/12. Biased by construction; it shows the
+  clutter is read, not that Jev beats keywords. One answer, `MOTOR STARTERS`
+  beside "REFER TO PANEL LAYOUT E-500", was right at confidence 0.25, so the
+  threshold handed it back to the keyword answer, `layout`, which is wrong.
+
+**Next, for sheet role, in order:** task 5 on the owner's real 41-sheet set
+(record bodies outside this checkout; price from `usage.input_tokens`); task 6
+(hand-label the 41 roles beside the keyword role, in a keyed file outside the
+repository; replay twice for the noise floor); task 7 (tune `JEV_CRITERIA`,
+bumping `JEV_WORDING` with each change; set `JEV_THRESHOLD` from bands); task 8
+(rerun the 47%/92% measurement with Jev roles, which needs PyDRC; default on
+only if Jev matches or beats keywords); task 9 (CHANGELOG section and the
+version in its three places).
+
+**Still open:** there is no role editor, so a wrong Jev answer can be undone in
+the app only by switching Jev off. The label split stays "later" per answer 3.
+
 ## What exists at HEAD, and the finding that reshapes the ask
 
 **No Claude call classifies already-extracted text.** Every call that asks for

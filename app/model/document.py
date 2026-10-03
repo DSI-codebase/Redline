@@ -64,6 +64,14 @@ class Document:
         # cannot tell a number a human confirmed from one a heuristic guessed.
         self.sheet_sources: dict = {}
         self.sheet_roles: dict = {}    # page_index -> sheet_role name
+        # page_index -> "user" for a role a person set. Detection is the only
+        # other writer, so a page absent here holds a detected role; no build
+        # before this map existed called set_sheet_role from the app.
+        self.sheet_role_sources: dict = {}
+        # page_index -> Jev's recorded answer (sheet_role.jev_document_roles),
+        # kept apart from sheet_roles so switching Jev off restores the keyword
+        # roles rather than freezing Jev's in.
+        self.sheet_role_jev: dict = {}
         self._dirty = False
         # Every path a user's edit can take -- draw, move, resize, delete, edit
         # the text, undo, redo, tick a TODO -- ends in a non-silent store CRUD
@@ -298,6 +306,14 @@ class Document:
             except Exception:
                 saved = {}
         self.sheet_roles = saved
+        # Own meta keys, like sheet_label_sources, so a sidecar written here
+        # still opens in a build that predates them.
+        self.sheet_role_sources = {
+            p: s for p, s in self._int_keyed_meta("sheet_role_sources").items()
+            if s == sheet_number.USER and p in saved}
+        self.sheet_role_jev = {
+            p: a for p, a in self._int_keyed_meta("sheet_role_jev").items()
+            if isinstance(a, dict)}
         try:
             detected = sheet_role.detect_document_roles(self.fitz_doc)
         except Exception:
@@ -305,8 +321,22 @@ class Document:
         for page_no, role in detected.items():
             self.sheet_roles.setdefault(page_no, role)
 
+    def _int_keyed_meta(self, key: str) -> dict:
+        import json
+        raw = self.sidecar.get_meta(key)
+        if not raw:
+            return {}
+        try:
+            return {int(k): v for k, v in json.loads(raw).items()}
+        except Exception:
+            return {}
+
     def sheet_role_of(self, page_no: int) -> str:
         return self.sheet_roles.get(int(page_no), sheet_role.SCHEMATIC)
+
+    def sheet_role_source(self, page_no: int) -> str:
+        """``"user"`` for a role a person set, else ``"detected"``."""
+        return self.sheet_role_sources.get(int(page_no), "detected")
 
     def set_sheet_role(self, page_no: int, role: str) -> None:
         """Override a page's detected role and persist it."""
@@ -314,15 +344,65 @@ class Document:
         role = (role or "").strip()
         if role and role != sheet_role.UNKNOWN:
             self.sheet_roles[page_no] = role
+            self.sheet_role_sources[page_no] = sheet_number.USER
         else:
             self.sheet_roles.pop(page_no, None)
+            self.sheet_role_sources.pop(page_no, None)
         self._save_sheet_roles()
+
+    # -- Jev's answers for sheet roles --------------------------------------
+
+    def pages_needing_jev(self, model: Optional[str] = None) -> list:
+        """Pages Jev has no current answer for, excluding any a person set and
+        any with no text to send.
+
+        A page a person set is never sent: its answer could not be used, and
+        its title block would leave the machine for nothing. A scanned page
+        never gets an answer, so counting it would ask again on every check.
+        """
+        return [p for p in range(self.page_count)
+                if p not in self.sheet_role_sources
+                and not sheet_role.jev_answer_current(
+                    self.sheet_role_jev.get(p), model)
+                and sheet_role.jev_state(self.fitz_doc[p]) is not None]
+
+    def set_jev_roles(self, answers: dict) -> None:
+        """Record Jev's answers (``{page: answer}``) and persist them now, so a
+        request is never paid for twice. A page a person set is skipped."""
+        for page_no, answer in (answers or {}).items():
+            page_no = int(page_no)
+            if page_no in self.sheet_role_sources or not isinstance(answer, dict):
+                continue
+            self.sheet_role_jev[page_no] = dict(answer)
+        self._save_sheet_roles()
+
+    def roles_for_audit(self, use_jev: bool = False,
+                        threshold: float = sheet_role.JEV_THRESHOLD,
+                        model: Optional[str] = None) -> dict:
+        """``{page: role}`` as the audit should see it.
+
+        A role a person set always wins. With ``use_jev``, a current Jev answer
+        at or above ``threshold`` replaces the detected role; below it, or with
+        Jev off, the detected role stands exactly as before Jev existed.
+        """
+        roles = {p: self.sheet_role_of(p) for p in range(self.page_count)}
+        if not use_jev:
+            return roles
+        answers = {p: a for p, a in self.sheet_role_jev.items()
+                   if p not in self.sheet_role_sources}
+        return sheet_role.apply_jev_roles(roles, answers, threshold, model)
 
     def _save_sheet_roles(self) -> None:
         import json
         self.sidecar.set_meta(
             "sheet_roles",
             json.dumps({str(k): v for k, v in self.sheet_roles.items()}))
+        self.sidecar.set_meta(
+            "sheet_role_sources",
+            json.dumps({str(k): v for k, v in self.sheet_role_sources.items()}))
+        self.sidecar.set_meta(
+            "sheet_role_jev",
+            json.dumps({str(k): v for k, v in self.sheet_role_jev.items()}))
 
     # -- saving --------------------------------------------------------------
 

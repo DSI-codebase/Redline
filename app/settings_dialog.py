@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from .config import AppConfig
-from .extraction import claude_api
+from .extraction import claude_api, jev_api
 
 
 class SettingsDialog(QDialog):
@@ -153,6 +153,36 @@ class SettingsDialog(QDialog):
         self._on_ai_toggled(self.ai.isChecked())
         self._refresh_api_status()
 
+        # TypeSafe Jev: sheet roles from title-block text
+        gb_j = QGroupBox("Jev (TypeSafe)")
+        fj = QFormLayout(gb_j)
+        self.jev_roles = QCheckBox("Use Jev to decide sheet roles")
+        self.jev_roles.setChecked(bool(config.get("jev/sheet_roles")))
+        self.jev_roles.setToolTip(
+            "Before a design rule check, send each sheet's title-block text to "
+            "TypeSafe and let Jev decide its role. Off, the keyword table "
+            "decides. A role you set is never replaced.")
+        self.jev_roles.toggled.connect(self._refresh_jev_status)
+        self.jev_key = QLineEdit(str(config.get("jev/api_key") or ""))
+        self.jev_key.setEchoMode(QLineEdit.Password)
+        self.jev_key.setPlaceholderText(
+            f"leave blank to use {jev_api.ENV_KEY}")
+        self.jev_key.textChanged.connect(self._refresh_jev_status)
+        self.jev_show = QCheckBox("Show")
+        self.jev_show.toggled.connect(
+            lambda v: self.jev_key.setEchoMode(QLineEdit.Normal if v else QLineEdit.Password))
+        jrow = QHBoxLayout(); jrow.addWidget(self.jev_key, 1); jrow.addWidget(self.jev_show)
+        jwrap = QWidget(); jwrap.setLayout(jrow)
+        self.jev_status = QLabel()
+        self.btn_check_jev = QPushButton("Check TypeSafe key")
+        self.btn_check_jev.clicked.connect(self._check_jev)
+        fj.addRow(self.jev_roles)
+        fj.addRow("TypeSafe key:", jwrap)
+        fj.addRow("", self.btn_check_jev)
+        fj.addRow("Status:", self.jev_status)
+        fj.addRow("Model:", QLabel(jev_api.DEFAULT_MODEL))
+        self._refresh_jev_status()
+
         # printing
         gb_p = QGroupBox("Printing")
         fp = QFormLayout(gb_p)
@@ -212,7 +242,7 @@ class SettingsDialog(QDialog):
         tabs.addTab(_page(gb_f, gb_ws), "Files")
         tabs.addTab(_page(gb_w), "Wire numbers")
         tabs.addTab(_page(gb_cmp), "Component labels")
-        tabs.addTab(_page(gb_a), "OCR / AI")
+        tabs.addTab(_page(gb_a, gb_j), "OCR / AI")
         tabs.addTab(_page(gb_drc), "Design rules")
 
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -254,6 +284,8 @@ class SettingsDialog(QDialog):
         c.set("ai/api_key", self.ai_key.text().strip())
         c.set("ai/model", self.ai_model.text())
         c.set("ai/tiles", self.ai_tiles.value())
+        c.set("jev/sheet_roles", self.jev_roles.isChecked())
+        c.set("jev/api_key", self.jev_key.text().strip())
         self._apply_audit(c)
         c.sync()
 
@@ -374,6 +406,24 @@ class SettingsDialog(QDialog):
         color = {"present": "#1b7f3a", "missing": "#b8860b", "no_sdk": "#c0392b"}.get(state, "gray")
         self.ai_status.setText(msg)
         self.ai_status.setStyleSheet(f"color: {color};")
+
+    def _refresh_jev_status(self):
+        state, msg = jev_api.status(self.jev_key.text())
+        if not self.jev_roles.isChecked():
+            msg = "Jev off; keyword table decides sheet roles"
+            state = "off"
+        color = {"present": "#1b7f3a", "missing": "#b8860b"}.get(state, "gray")
+        self.jev_status.setText(msg)
+        self.jev_status.setStyleSheet(f"color: {color};")
+
+    def _check_jev(self):
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            ok, msg = jev_api.validate_key(self.jev_key.text())
+        finally:
+            QApplication.restoreOverrideCursor()
+        self.jev_status.setText(msg)
+        self.jev_status.setStyleSheet("color: #1b7f3a;" if ok else "color: #c0392b;")
 
     def _check_api(self):
         QApplication.setOverrideCursor(Qt.WaitCursor)

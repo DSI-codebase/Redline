@@ -164,3 +164,172 @@ def detect_document_roles(doc, config: Optional[SheetRoleConfig] = None) -> dict
         except Exception:
             out[i] = config.default_role
     return out
+
+
+# --- Jev: the same judgment, asked of a model --------------------------------
+#
+# Opt-in and off by default. ROLE_KEYWORDS above stays the answer whenever Jev
+# is off, has no key, fails, or is unsure; Jev only ever replaces a keyword
+# result, never a role a person set (``Document.roles_for_audit``).
+#
+# Changing any text below changes what Jev decides. A role recorded under the
+# old wording is not comparable with one asked under the new, so the answers
+# carry the model that gave them and a version of this wording.
+
+JEV_QUESTION_ID = "role"
+JEV_WORDING = 1
+
+JEV_INSTRUCTIONS = (
+    "Decide what job this sheet does in an electrical control-panel drawing "
+    "set. `title_block` is the text printed in the sheet's title block, in "
+    "reading order: the sheet's descriptive title is in it, alongside the "
+    "client, project, drawing number, dates and revision notes. `page_text`, "
+    "when present, is all the text on a sparse page."
+)
+
+# Ordered as ROLES, with `unknown` last: option order moves a Choice (TypeSafe's
+# jev-1.13 jaggedness note), so it is fixed here rather than left to a dict
+# literal somebody reorders for tidiness.
+JEV_CRITERIA = {
+    SCHEMATIC: "A ladder or wiring schematic: power distribution, control "
+               "circuits, motor or drive wiring, safety circuits. The title "
+               "names a circuit or a voltage, such as 110 VAC DISTRIBUTION.",
+    PLC_IO: "A PLC input or output sheet: the title names digital or analog "
+            "inputs or outputs, an I/O module, or a PLC rack or slot.",
+    LAYOUT: "A physical arrangement drawing: an enclosure, back panel, "
+            "subpanel or door layout, or a nameplate schedule. A terminal "
+            "block layout is not this.",
+    TERMINAL_DETAIL: "A terminal block or terminal strip detail, plan or "
+                     "layout.",
+    TOPOLOGY: "A network topology, network diagram or communications "
+              "architecture.",
+    BOM: "A bill of materials, parts list or material list.",
+    INDEX: "A title page, cover sheet, or drawing or sheet index.",
+    LEGEND: "A symbol legend or symbols page that explains drawing notation.",
+    UNKNOWN: "The text shows no sheet title that fits any option above.",
+}
+
+# Provisional. Set from confidence bands measured on hand-labeled sheets
+# (HANDOFF-JEV.md task 7); until then, myNameJev's 0.6, where its own measured
+# error rate fell from about 1 in 3 to 1 in 6.
+JEV_THRESHOLD = 0.6
+
+
+def jev_question() -> dict:
+    """The one Choice asked per sheet."""
+    return {JEV_QUESTION_ID: {"type": "choice",
+                              "instructions": JEV_INSTRUCTIONS,
+                              "criteria": dict(JEV_CRITERIA)}}
+
+
+def jev_state(page, config: Optional[SheetRoleConfig] = None) -> Optional[dict]:
+    """What Jev is shown for one page: the same two sources the keyword path
+    reads, or ``None`` when the page has no text to judge (a scanned sheet)."""
+    config = config or SheetRoleConfig()
+    band = " ".join(_titleblock_text(page, config).split())
+    try:
+        text = " ".join((page.get_text("text") or "").split())
+    except Exception:
+        text = ""
+    state: dict = {}
+    if band:
+        state["title_block"] = band
+    if text and len(text) < config.sparse_page_chars:
+        state["page_text"] = text
+    return state or None
+
+
+def jev_document_roles(doc, pages, *, ask=None, api_key: str = "",
+                       model: Optional[str] = None,
+                       config: Optional[SheetRoleConfig] = None,
+                       progress=None, should_cancel=None) -> dict:
+    """``{page_index: answer}`` for the ``pages`` Jev answered.
+
+    ``answer`` is ``{role, confidence, probabilities, model, wording}``. A page
+    with no text, a failed request, or a choice outside :data:`ROLES` is simply
+    absent, so the caller keeps the keyword role for it. Never raises.
+    """
+    from . import jev_api
+    ask = ask or jev_api.ask
+    model = model or jev_api.DEFAULT_MODEL
+    config = config or SheetRoleConfig()
+    pages = list(pages)
+    out: dict = {}
+    for n, page_no in enumerate(pages, 1):
+        if should_cancel is not None and should_cancel():
+            break
+        if progress is not None:
+            progress(n, len(pages))
+        try:
+            state = jev_state(doc[page_no], config)
+            if state is None:
+                continue
+            got = jev_api.choice_answer(
+                ask(state, jev_question(), model=model, api_key=api_key),
+                JEV_QUESTION_ID)
+        except Exception:
+            continue
+        if got is None or got["choice"] not in ROLES:
+            continue
+        out[page_no] = {"role": got["choice"],
+                        "confidence": got["confidence"],
+                        "probabilities": got["probabilities"],
+                        "model": got["model"] or model,
+                        "wording": JEV_WORDING}
+    return out
+
+
+def jev_roles_for_path(pdf_path: str, pages, **kwargs) -> dict:
+    """:func:`jev_document_roles` on a file this function opens and closes, for
+    a worker thread that must not touch the open document. Never raises."""
+    import fitz
+    try:
+        doc = fitz.open(pdf_path)
+    except Exception:
+        return {}
+    try:
+        return jev_document_roles(doc, pages, **kwargs)
+    finally:
+        doc.close()
+
+
+def apply_jev_roles(roles: dict, answers: dict,
+                    threshold: float = JEV_THRESHOLD,
+                    model: Optional[str] = None) -> dict:
+    """``roles`` with each page in ``answers`` replaced where its answer applies
+    (:func:`jev_role_applies`); every other page unchanged. The caller passes
+    only pages a person did not set."""
+    out = dict(roles)
+    for page_no, answer in (answers or {}).items():
+        role = jev_role_applies(answer, threshold, model)
+        if role:
+            out[page_no] = role
+    return out
+
+
+def jev_answer_current(answer, model: Optional[str] = None) -> bool:
+    """Whether a recorded answer was asked under this wording of the question
+    and by ``model`` (the pinned default when omitted). Anything else is stale:
+    it is re-asked rather than trusted."""
+    if not isinstance(answer, dict):
+        return False
+    if model is None:
+        from . import jev_api
+        model = jev_api.DEFAULT_MODEL
+    return answer.get("wording") == JEV_WORDING and answer.get("model") == model
+
+
+def jev_role_applies(answer, threshold: float = JEV_THRESHOLD,
+                     model: Optional[str] = None) -> Optional[str]:
+    """The role a recorded Jev answer sets, or ``None`` when it sets none:
+    stale (:func:`jev_answer_current`), ``unknown``, or below the threshold."""
+    if not jev_answer_current(answer, model):
+        return None
+    role = answer.get("role")
+    if role not in ROLES or role == UNKNOWN:
+        return None
+    try:
+        confidence = float(answer.get("confidence"))
+    except (TypeError, ValueError):
+        return None
+    return role if confidence >= threshold else None
