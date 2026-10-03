@@ -217,6 +217,20 @@ Two pieces of per-sheet information do most of the work, and both are editable:
   the comparison means something. A keyword table reads the role from the
   title block; optionally, Jev decides it instead ([[AI Assist]]).
 
+### Sheet roles
+
+**Sheet roles…** on the Audit tab, or **Tools ▸ Sheet roles…**, lists every
+page with the role the check will use and what decided it: **Title-block
+keywords**, **Jev** with its confidence, or **You**.
+
+- Pick a role to set it. A role you set is kept in the markup database, wins
+  over the keyword table and Jev, and is never replaced by either.
+- Pick **Automatic: …** to hand the page back to detection; the entry names the
+  role detection would give it.
+- Changes apply to the next check: run it again to see their effect.
+- A file opened view-only (no markup database) shows the roles but cannot save
+  a change.
+
 ## Settings
 
 **[[Settings]] ▸ Design rules** lists every rule, with a checkbox to turn one

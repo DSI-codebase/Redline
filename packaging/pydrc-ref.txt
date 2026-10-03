@@ -62,4 +62,8 @@
 # PyDRC `main` is still `120b88f`, and `git diff --stat v0.2.1 main -- pydrc/`
 # there is empty, so the rules are the ones v1.6.0 shipped and step 1 needed
 # no new tag. Set this back to `main` after the release.
+#
+# KEPT at `v0.2.1` for the app's v1.7.0 release, 2026-10-03. PyDRC `main` is
+# still `120b88f`, and `git diff v0.2.1 main -- pydrc/` there is empty, so the
+# rules are the ones v1.6.1 shipped and step 1 needed no new tag.
 v0.2.1

@@ -77,7 +77,8 @@ nothing.
 
 What it does and does not change:
 
-- **A role you set is never replaced**, and that sheet is never sent.
+- **A role you set is never replaced**, and that sheet is never sent. Set one
+  with **Sheet roles…** ([[Design Rule Check]]).
 - **Below the confidence threshold the keyword role stays.** Jev only replaces
   a keyword answer it is sure of.
 - **Switching it off restores the keyword roles.** Jev's answers stay recorded

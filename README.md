@@ -208,7 +208,8 @@ app/
   add_to_workspace.py        Add to workspace: the menu, and copying a drawing in
   lifecycle.py               Open / Save As fork / unsaved guard / close
   settings_dialog.py         The preferences dialog (six tabs)
-  dialogs.py                 Text/callout editor, fill picker, waive-a-finding
+  dialogs.py                 Text/callout editor, fill picker, waive-a-finding,
+                             sheet roles
   printing.py                Printer, print + preview dialogs, page raster
   config.py                  Persisted settings (QSettings) + defaults
   help.py                    In-app user-manual (vault) reader
