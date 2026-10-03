@@ -112,10 +112,13 @@ set serves.
   schematic. Its best run fell 0.13 short of the threshold.
 - **No criteria change.** Rewording `schematic` to catch one sheet is tuning to
   that sheet, and `JEV_WORDING` stays 1.
-- **On this set Jev cannot beat keywords where the audit looks.** All three
-  keyword misses are plc-io read as schematic, and neither is in
-  `REFERENCING_ROLES`, so location rules treat the two alike. Whether a PyDRC
-  rule reads `plc-io` was not checked (PyDRC is not installed here).
+- **Retracted 2026-10-03, once PyDRC was installed.** This bullet read: "On
+  this set Jev cannot beat keywords where the audit looks. All three keyword
+  misses are plc-io read as schematic, and neither is in `REFERENCING_ROLES`,
+  so location rules treat the two alike." They do not: `DRC-TAG-LOC-001` runs
+  on `sheet_role in [schematic]` only (PyDRC `drc-base.yaml:218`), so a PLC
+  sheet read as schematic has its tags checked for location. What the misreads
+  cost on these plots is measured below, under "The audit, measured".
 
 **Tasks 6-8 on three more real sets, 2026-10-03.** The owner supplied 5-, 11-
 and 14-sheet vector plots and confirmed every label; the 14-sheet set is
@@ -157,19 +160,48 @@ title-block template, so a second template is still unmeasured.
   is now detected on each open.
 - **Jev stays off by default (task 8).** With both changes, applied roles are
   55/56 with Jev on and 55/56 with keywords alone; the one miss is the same
-  sheet, a PLC-slot power distributor Jev splits below 0.5. Neither crosses the
-  referencing line on any of the 56 sheets, so on this evidence Jev changes no
-  location-rule finding. It would matter only if a PyDRC rule reads `plc-io`
-  (unchecked; PyDRC is not installed here) or on a template whose titles the
-  table does not know.
+  sheet, a PLC-slot power distributor Jev splits below 0.5. This bullet went on
+  to say that neither "crosses the referencing line … so on this evidence Jev
+  changes no location-rule finding. It would matter only if a PyDRC rule reads
+  `plc-io` (unchecked …)". **Retracted the same day:** a PyDRC rule does read
+  it (see the bullet retracted above); the decision stands on the measurement
+  below instead.
 
-**Next, for sheet role:** a set drawn on another firm's title block, where the
-keyword table has never been tuned, is the measurement that could still show
-Jev ahead; then task 8's 47%/92% rerun with PyDRC; task 9 when a release
-carries this.
+**The audit, measured, 2026-10-03 (task 8).** PyDRC 0.2.1 (`main` @ `120b88f`;
+`v0.2.1` is `09dbb19`) installed from a clone in this session; pack
+`drc-base`; the four plots alone, no source drawings. Each set audited four
+times, changing only the roles: the old keyword table, the new one, Jev at
+0.75 with recorded answers, and the owner's labels.
 
-**Still open:** there is no role editor, so a wrong Jev answer can be undone in
-the app only by switching Jev off. The label split stays "later" per answer 3.
+- **Jev's applied roles equal the new keyword roles on all 56 sheets**, so with
+  Jev on, the check reads the same roles and produces the same findings.
+- **Findings were identical under all four**, compared by finding key, not
+  count: 46 across the four sets, 2 of them `DRC-TAG-LOC-001`.
+- **The misread roles changed what was checked, not what was found.** With the
+  old table the check evaluated 2,056 items on the 26-sheet set against 2,030
+  with the owner's labels, and 268 against 250 on the 11-sheet set: 44 tags on
+  PLC sheets checked by a rule written for schematics. None fired here; on a
+  set whose I/O sheets show field devices numbered for other sheets, they
+  would, which is what the new keywords remove.
+- **Not re-measured:** the 47%/92% figures in `sheet_role.py:9-11`, which
+  compare the role restriction against no restriction rather than one role
+  source against another.
+
+**Scope, set by the owner 2026-10-03: drawings on DSI's title block only.** All
+four measured sets are DSI's, which is the scope. Within it, Jev adds nothing
+the keyword table does not, so it stays off and no further role tuning is
+planned. A non-DSI title block is out of scope.
+
+**Role editor, 2026-10-03.** **Sheet roles…** on the Audit tab and **Tools ▸
+Sheet roles…** set or clear a page's role through `set_sheet_role`; the dialog
+shows `Document.sheet_role_decision`, the function the check reads. A wrong
+detected or Jev role can now be corrected in the app.
+
+**Future action item: scanned drawings (out of scope for now, owner
+2026-10-03).** The label split below ("The judgment to build") is not started:
+the vision prompt still reads and judges each label, and Jev is not asked. Pick
+it up from that section and tasks 3-8 aimed at labels, with a hand-labeled
+scanned set as ground truth.
 
 ## What exists at HEAD, and the finding that reshapes the ask
 
@@ -392,7 +424,8 @@ Assumed, unmeasured: 1,500-4,000 input tokens per request (myNameJev's
 
 - `set_sheet_role` (`document.py:311-319`) has no caller in `app/`, only
   `tests/test_sheets.py:201,213-214`, yet `docs/Design Rule Check.md:208` says
-  roles are editable. Check before leaning on an override.
+  roles are editable. Check before leaning on an override. *(Resolved
+  2026-10-03: the Sheet roles editor calls it.)*
 - `.gitignore` covers no recordings directory; keep recordings outside.
 
 ## Not verified, and questions only the owner can answer

@@ -393,12 +393,40 @@ class Document:
         at or above ``threshold`` replaces the detected role; below it, or with
         Jev off, the detected role stands exactly as before Jev existed.
         """
-        roles = {p: self.sheet_role_of(p) for p in range(self.page_count)}
-        if not use_jev:
-            return roles
-        answers = {p: a for p, a in self.sheet_role_jev.items()
-                   if p not in self.sheet_role_sources}
-        return sheet_role.apply_jev_roles(roles, answers, threshold, model)
+        return {p: self.sheet_role_decision(p, use_jev, threshold, model)[0]
+                for p in range(self.page_count)}
+
+    def automatic_sheet_role(self, page_no: int, use_jev: bool = False,
+                             threshold: float = sheet_role.JEV_THRESHOLD,
+                             model: Optional[str] = None) -> tuple:
+        """``(role, decided_by, confidence)`` the page gets when no person has
+        set it: ``"jev"`` with Jev's confidence when a current answer applies,
+        else ``"keywords"`` and ``None``. For a page a person did set, this is
+        what clearing it would hand back to."""
+        p = int(page_no)
+        if use_jev:
+            answer = self.sheet_role_jev.get(p)
+            role = sheet_role.jev_role_applies(answer, threshold, model)
+            if role:
+                return (role, "jev", float(answer["confidence"]))
+        if p in self.sheet_role_sources:
+            # sheet_roles holds the person's role here, so detect afresh.
+            try:
+                return (sheet_role.detect_role(self.fitz_doc[p]), "keywords", None)
+            except Exception:
+                return (sheet_role.SCHEMATIC, "keywords", None)
+        return (self.sheet_role_of(p), "keywords", None)
+
+    def sheet_role_decision(self, page_no: int, use_jev: bool = False,
+                            threshold: float = sheet_role.JEV_THRESHOLD,
+                            model: Optional[str] = None) -> tuple:
+        """``(role, decided_by, confidence)`` the audit uses for this page.
+        ``decided_by`` is ``"user"``, ``"jev"`` or ``"keywords"``; the editor
+        shows this, so what it says and what the check reads cannot differ."""
+        p = int(page_no)
+        if p in self.sheet_role_sources:
+            return (self.sheet_role_of(p), "user", None)
+        return self.automatic_sheet_role(p, use_jev, threshold, model)
 
     def _save_sheet_roles(self) -> None:
         import json

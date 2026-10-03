@@ -148,6 +148,11 @@ def build(win):
         "Run design rule check…", win.run_audit, QKeySequence("F7"))
     win.act_run_audit.setToolTip(
         "Check the drawing against the design rules and list what to confirm")
+    win.act_sheet_roles = m_tools.addAction(
+        "Sheet roles…", win.edit_sheet_roles)
+    win.act_sheet_roles.setToolTip(
+        "Set which sheets are schematics, PLC I/O, layouts and so on; the "
+        "check uses the role to decide which rules apply")
     win.act_import_drawings = m_tools.addAction(
         "Import project drawings…", win.import_project_drawings)
     win.act_import_drawings.setToolTip(

@@ -43,6 +43,7 @@ class AuditPanel(QWidget):
     waiveRequested = Signal(object)         # Finding (right-click ▸ Waive…)
     clearWaiverRequested = Signal(object)   # Finding (right-click ▸ Remove waiver)
     runRequested = Signal()                 # the Run button
+    rolesRequested = Signal()               # the Sheet roles button
 
     COL_SEV, COL_RULE, COL_SHEET, COL_PG, COL_MSG, COL_CLAUSE, COL_STATUS = range(7)
 
@@ -81,6 +82,11 @@ class AuditPanel(QWidget):
         self.hide_waived.toggled.connect(self.refresh)
         self.btn_run = QPushButton("Run check")
         self.btn_run.clicked.connect(self.runRequested)
+        self.btn_roles = QPushButton("Sheet roles…")
+        self.btn_roles.setToolTip(
+            "Which sheets are schematics, PLC I/O, layouts and so on; the "
+            "check uses the role to decide which rules apply")
+        self.btn_roles.clicked.connect(self.rolesRequested)
         self.btn_export = QPushButton("Export report…")
         self.btn_export.clicked.connect(self._export)
         bar.addWidget(self.group_by)
@@ -88,6 +94,7 @@ class AuditPanel(QWidget):
         bar.addWidget(self.show_info)
         bar.addWidget(self.hide_waived)
         bar.addWidget(self.btn_run)
+        bar.addWidget(self.btn_roles)
         bar.addWidget(self.btn_export)
         lay.addLayout(bar)
 

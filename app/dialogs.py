@@ -8,9 +8,9 @@ grown up beside the window instead.
 
 Kept together because they genuinely reference each other -- measured by AST
 rather than assumed: ``TextEditDialog`` opens a ``FillDialog`` and draws both
-swatches, and ``FillDialog`` draws one. ``_apply_font`` and ``WaiveDialog``
-reference nothing here and travel with them only because they are the same
-subject.
+swatches, and ``FillDialog`` draws one. ``_apply_font``, ``WaiveDialog`` and
+``SheetRolesDialog`` reference nothing here and travel with them only because
+they are the same subject.
 """
 
 from __future__ import annotations
@@ -18,11 +18,13 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, QEvent
 from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtWidgets import (
-    QCheckBox, QColorDialog, QDialog, QDialogButtonBox, QFormLayout,
-    QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton, QSlider,
-    QSpinBox, QVBoxLayout,
+    QAbstractItemView, QCheckBox, QColorDialog, QComboBox, QDialog,
+    QDialogButtonBox, QFormLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
+    QPlainTextEdit, QPushButton, QSlider, QSpinBox, QTableWidget,
+    QTableWidgetItem, QVBoxLayout,
 )
 
+from .extraction import sheet_role
 from .model.annotations import (
     Annotation, KIND_CALLOUT, KIND_COMMENT, KIND_TEXTBOX,
 )
@@ -206,6 +208,117 @@ class WaiveDialog(QDialog):
 
     def values(self) -> tuple:
         return self.reason.text().strip(), self.author.text().strip()
+
+
+def decided_by_text(decided_by: str, confidence=None) -> str:
+    """What the Decided by column says for a ``Document.sheet_role_decision``."""
+    if decided_by == "user":
+        return "You"
+    if decided_by == "jev":
+        return f"Jev ({confidence:.2f})" if confidence is not None else "Jev"
+    return "Title-block keywords"
+
+
+class SheetRolesDialog(QDialog):
+    """Set a sheet's role, or hand it back to automatic detection.
+
+    The design rule check reads a role to decide which rules apply to a sheet
+    (a tag-location rule on a schematic, not on a panel layout). Detection
+    reads the title block and is sometimes wrong, and the person reading the
+    drawing knows better -- so a role set here wins over the keyword table and
+    over Jev, and is never replaced by either.
+
+    Each row shows what the check uses now and who decided it, read from
+    ``Document.sheet_role_decision``, the same function the check reads.
+    Nothing is written until OK; :meth:`changes` is what the caller applies,
+    through ``Document.set_sheet_role``.
+    """
+
+    COL_PAGE, COL_SHEET, COL_ROLE, COL_BY = range(4)
+
+    def __init__(self, document, use_jev: bool = False, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Sheet roles")
+        self.setMinimumSize(560, 420)
+        self._doc = document
+        self._use_jev = use_jev
+        self._initial: dict = {}
+        self._combos: dict = {}
+        lay = QVBoxLayout(self)
+
+        source = "the title block and Jev" if use_jev else "the title block"
+        note = QLabel(
+            f"Automatic roles come from {source}. A role you choose here is used "
+            "by the design rule check and is never replaced by detection. Run "
+            "the check again to apply a change.")
+        note.setWordWrap(True)
+        lay.addWidget(note)
+
+        n = document.page_count
+        self.table = QTableWidget(n, 4)
+        self.table.setHorizontalHeaderLabels(["Page", "Sheet", "Role", "Decided by"])
+        self.table.verticalHeader().setVisible(False)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionMode(QAbstractItemView.NoSelection)
+        hdr = self.table.horizontalHeader()
+        hdr.setSectionResizeMode(self.COL_ROLE, QHeaderView.Stretch)
+        for p in range(n):
+            role, by, conf = document.sheet_role_decision(p, use_jev)
+            auto_role, _auto_by, _auto_conf = document.automatic_sheet_role(p, use_jev)
+            self.table.setItem(p, self.COL_PAGE, QTableWidgetItem(str(p + 1)))
+            self.table.setItem(p, self.COL_SHEET,
+                               QTableWidgetItem(document.sheet_label(p) or "-"))
+            combo = QComboBox()
+            combo.addItem(f"Automatic: {sheet_role.ROLE_LABELS[auto_role]}", "")
+            for r in sheet_role.ROLES:
+                if r != sheet_role.UNKNOWN:
+                    combo.addItem(sheet_role.ROLE_LABELS[r], r)
+            initial = role if by == "user" else ""
+            combo.setCurrentIndex(max(0, combo.findData(initial)))
+            combo.currentIndexChanged.connect(
+                lambda _i, page=p: self._refresh_by(page))
+            self.table.setCellWidget(p, self.COL_ROLE, combo)
+            self.table.setItem(p, self.COL_BY, QTableWidgetItem(""))
+            self._initial[p] = initial
+            self._combos[p] = combo
+            self._refresh_by(p)
+        self.table.resizeColumnToContents(self.COL_PAGE)
+        self.table.resizeColumnToContents(self.COL_SHEET)
+        lay.addWidget(self.table, 1)
+
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb.accepted.connect(self.accept)
+        bb.rejected.connect(self.reject)
+        if not getattr(document, "sidecar_available", True):
+            # View-only: a role set here would be saved nowhere.
+            for combo in self._combos.values():
+                combo.setEnabled(False)
+            bb.button(QDialogButtonBox.Ok).setEnabled(False)
+            ro = QLabel("This file has no markup database, so roles cannot be "
+                        "saved. Rename it to something shorter and simpler, then "
+                        "reopen it.")
+            ro.setWordWrap(True)
+            lay.addWidget(ro)
+        lay.addWidget(bb)
+
+    def _refresh_by(self, page: int) -> None:
+        if self._combos[page].currentData():
+            text = decided_by_text("user")
+        else:
+            _role, by, conf = self._doc.automatic_sheet_role(page, self._use_jev)
+            text = decided_by_text(by, conf)
+        self.table.item(page, self.COL_BY).setText(text)
+
+    def set_choice(self, page: int, role: str) -> None:
+        """Pick ``role`` for ``page``; ``""`` for automatic."""
+        combo = self._combos[int(page)]
+        combo.setCurrentIndex(max(0, combo.findData(role or "")))
+
+    def changes(self) -> dict:
+        """``{page: role}`` for every row moved from where it opened; ``""``
+        hands that page back to detection."""
+        return {p: (c.currentData() or "") for p, c in self._combos.items()
+                if (c.currentData() or "") != self._initial[p]}
 
 
 def _swatch(color: QColor) -> QIcon:

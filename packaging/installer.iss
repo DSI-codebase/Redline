@@ -4,7 +4,7 @@
 ; Produces dist_installer\DSI_Redline_Setup_<version>.exe
 
 #define MyAppName "DSI Redline"
-#define MyAppVersion "1.6.1"
+#define MyAppVersion "1.7.0"
 #define MyAppPublisher "DSI Innovations, LLC"
 #define MyAppExeName "DSI Redline.exe"
 ; A private ProgID for our PDF association. Kept distinct from the system PDF

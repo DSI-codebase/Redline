@@ -4,6 +4,37 @@ All notable changes to **DSI Redline** are documented here. Versions are tagged
 `vX.Y.Z`; each tag triggers the Windows build that publishes the installer and a
 portable zip to the matching GitHub release.
 
+## v1.7.0
+
+Design rule checking in this release is PyDRC `v0.2.1` (`09dbb19`), the same
+rules as v1.6.1.
+
+- **Sheet roles can be set by hand.** The design rule check reads each sheet's
+  role (schematic, PLC I/O, panel layout, terminal-block detail, …) to decide
+  which rules apply, and until now a wrong one could not be corrected in the
+  app. **Sheet roles…** on the Audit tab, or Tools ▸ Sheet roles…, lists every
+  page with the role the check uses and what decided it: the title-block
+  keywords, Jev, or you. A role you set is kept with the drawing and is never
+  replaced; **Automatic** hands the page back to detection. Changes apply to
+  the next check.
+- **PLC I/O sheets titled `PLCIO` or `RELAY OUTPUTS` are recognized.** They
+  were read as schematics, so the tag-location rule checked their tags as if
+  they were ladder sheets. On four real DSI drawing sets that was 12 of 56
+  sheets; the title-block keywords now get 55 of the 56 right.
+- **A detected role is detected again each time a drawing opens.** Saving a
+  drawing also saved its detected roles, and on reopening those won over
+  detection, so a drawing saved once kept that day's roles even after the
+  keywords were corrected. Roles you set are kept; every other page is read
+  afresh.
+- **Optional: TypeSafe's Jev can decide sheet roles.** Off by default. With
+  **Use Jev to decide sheet roles** ticked and a TypeSafe key (Settings ▸
+  OCR / AI ▸ Jev (TypeSafe), or `TYPESAFE_API_KEY`), the check first asks
+  before sending each sheet's title-block text to TypeSafe, then uses Jev's
+  answer where its confidence is 0.75 or higher and the keywords elsewhere.
+  Answers are kept with the drawing, so a sheet is sent once. On the four DSI
+  sets Jev's roles matched the corrected keywords on every sheet, which is why
+  it ships off. See the AI Assist page.
+
 ## v1.6.1
 
 Design rule checking in this release is PyDRC `v0.2.1` (`09dbb19`), the same

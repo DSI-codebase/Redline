@@ -29,7 +29,8 @@ from PySide6.QtWidgets import (
 from . import __app_name__, __version__, __copyright__, app_icon
 from .config import AppConfig
 from .dialogs import (
-    FillDialog, TextEditDialog, WaiveDialog, _apply_font, _fill_swatch, _swatch,
+    FillDialog, SheetRolesDialog, TextEditDialog, WaiveDialog, _apply_font,
+    _fill_swatch, _swatch,
 )
 from .settings_dialog import SettingsDialog
 from . import add_to_workspace, lifecycle, menus, printing, toolbar
@@ -182,6 +183,7 @@ class MainWindow(QMainWindow):
         self.component_panel.activated.connect(self._jump_to)
         self.audit_panel.activated.connect(self._jump_to)
         self.audit_panel.runRequested.connect(self.run_audit)
+        self.audit_panel.rolesRequested.connect(self.edit_sheet_roles)
         self.audit_panel.waiveRequested.connect(self._waive_finding)
         self.audit_panel.clearWaiverRequested.connect(self._clear_waiver)
 
@@ -940,6 +942,22 @@ class MainWindow(QMainWindow):
 
         self._import_task = run_with_progress(
             self, "Reading project drawings…", work, done, on_error=failed)
+
+    def edit_sheet_roles(self):
+        """Set or clear each sheet's role; the design rule check reads them."""
+        doc = self.document
+        if doc is None:
+            return
+        dlg = SheetRolesDialog(doc, self.config.jev_sheet_roles, self)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        changes = dlg.changes()
+        for page_no, role in changes.items():
+            doc.set_sheet_role(page_no, role)
+        if changes:
+            self.statusBar().showMessage(
+                f"{len(changes)} sheet role(s) changed. Run the design rule "
+                "check again to apply them.", 8000)
 
     def _waive_finding(self, finding):
         """Record that a finding is acceptable on this project."""
