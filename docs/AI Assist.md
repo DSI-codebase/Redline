@@ -55,4 +55,41 @@ fixed/OEM so nothing is lost.
 If the key is missing or invalid, extraction falls back to [[OCR]] (or the text
 layer) — nothing breaks.
 
+## Jev sheet roles (TypeSafe)
+
+A second, separate option, **off by default**. A [[Design Rule Check]] needs to
+know each sheet's role — schematic, PLC I/O, panel layout, terminal-block
+detail, and so on — and by default a keyword table reads it from the title
+block. With **Use Jev to decide sheet roles** ticked, TypeSafe's Jev model
+decides it instead, from the same title-block text.
+
+1. In [[Settings]] ▸ **OCR / AI** ▸ **Jev (TypeSafe)**, tick **Use Jev to decide
+   sheet roles**.
+2. Paste a TypeSafe key in **TypeSafe key**, or set the `TYPESAFE_API_KEY`
+   environment variable and leave the field blank.
+3. Click **Check TypeSafe key** to verify it. Listing models costs nothing.
+
+When you run a design rule check, DSI Redline counts the sheets Jev has not
+answered yet and asks before sending anything: **Yes** sends their title-block
+text to TypeSafe, **No** runs the check with keyword roles. Each answer is kept
+in the drawing's markup database, so a sheet is sent once; a second check sends
+nothing.
+
+What it does and does not change:
+
+- **A role you set is never replaced**, and that sheet is never sent.
+- **Below the confidence threshold the keyword role stays.** Jev only replaces
+  a keyword answer it is sure of.
+- **Switching it off restores the keyword roles.** Jev's answers stay recorded
+  but are not used.
+- **The model is pinned** (`jev-1.13.0`), not an alias that moves when TypeSafe
+  ships a release. Answers from another model, or from an older wording of the
+  question, are asked again.
+- **No key, no network, or an error** — the check runs with keyword roles.
+
+**What leaves your machine:** the text of each title block, which carries the
+client, site and engineer names printed there. Nothing else: no image, no wire
+numbers from the drawing body. Jev is not trained on requests; zero data
+retention is offered on TypeSafe's enterprise plans only.
+
 #ai

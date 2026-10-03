@@ -805,7 +805,11 @@ class MainWindow(QMainWindow):
         pdf_path = doc.path
         labels = dict(doc.sheet_labels)
         sources = dict(doc.sheet_sources)
-        roles = {i: doc.sheet_role_of(i) for i in range(doc.page_count)}
+        use_jev = self.config.jev_sheet_roles
+        jev_key = self.config.jev_api_key
+        roles = doc.roles_for_audit(use_jev)
+        jev_pages = self._jev_role_pages(doc, jev_key) if use_jev else []
+        jev_answers: dict = {}
         waivers = dict(doc.waivers)
         excluded = frozenset(
             [w.label for w in doc.wires if not getattr(w, "included", True)]
@@ -823,6 +827,12 @@ class MainWindow(QMainWindow):
         overrides = self.config.audit_severity_overrides()
 
         def work(progress, cancel):
+            if jev_pages:
+                from .extraction import sheet_role
+                jev_answers.update(sheet_role.jev_roles_for_path(
+                    pdf_path, jev_pages, api_key=jev_key,
+                    progress=progress, should_cancel=cancel))
+                roles.update(sheet_role.apply_jev_roles(roles, jev_answers))
             return _run(pdf_path, labels, sources, roles,
                         options=AdapterOptions(
                             wire_config=wire_cfg,
@@ -833,7 +843,13 @@ class MainWindow(QMainWindow):
                         acade_model_json=acade_json,
                         project=project, progress=progress, cancel=cancel)
 
+        def keep_jev_answers():
+            # Paid for whether or not the audit finished, so kept either way.
+            if jev_answers and self.document is doc:
+                doc.set_jev_roles(jev_answers)
+
         def done(result):
+            keep_jev_answers()
             if result is None or result.cancelled:
                 return
             self.document.set_findings(result.findings, result.run)
@@ -843,6 +859,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(result.run.summary_line(), 8000)
 
         def failed(message):
+            keep_jev_answers()
             if message == "__cancelled__":
                 return
             QMessageBox.warning(self, "Design rule check failed", message)
@@ -852,6 +869,30 @@ class MainWindow(QMainWindow):
                 self, "Running design rule check…", work, done, on_error=failed)
         except AuditUnavailable as e:               # pragma: no cover - guarded above
             QMessageBox.information(self, "Design rule check", str(e))
+
+    def _jev_role_pages(self, doc, api_key: str) -> list:
+        """Pages to send to Jev for a sheet role, after the person agrees to
+        their title blocks leaving the machine; ``[]`` to use keyword roles."""
+        from .extraction import jev_api
+        pages = doc.pages_needing_jev()
+        if not pages:
+            return []
+        if not jev_api.available(api_key):
+            QMessageBox.information(
+                self, "Sheet roles with Jev",
+                "Jev sheet roles are switched on, but no TypeSafe key is set. "
+                "This check uses keyword roles. Add a key in Settings ▸ OCR / AI, "
+                f"or set {jev_api.ENV_KEY}.")
+            return []
+        resp = QMessageBox.question(
+            self, "Send title blocks to TypeSafe?",
+            f"{len(pages)} sheet title block(s) have no Jev answer yet. Send their "
+            f"text to TypeSafe (Jev, {jev_api.DEFAULT_MODEL}) to decide each "
+            "sheet's role?\n\nTitle blocks carry client, site and engineer "
+            "names. Answers are kept beside the drawing, so a sheet is sent "
+            "once. No runs this check with keyword roles.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+        return pages if resp == QMessageBox.Yes else []
 
     def import_project_drawings(self):
         """Read the project's source drawings and fold them into the audit."""

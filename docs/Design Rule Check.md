@@ -214,7 +214,8 @@ Two pieces of per-sheet information do most of the work, and both are editable:
   layout, a terminal-block detail, and so on. This matters more than it sounds:
   a panel layout labels every device with the schematic sheet it comes from, so
   *every* tag on it is legitimately "off-sheet". Location rules only apply where
-  the comparison means something.
+  the comparison means something. A keyword table reads the role from the
+  title block; optionally, Jev decides it instead ([[AI Assist]]).
 
 ## Settings
 

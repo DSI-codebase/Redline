@@ -93,6 +93,10 @@ DEFAULTS: dict = {
     "ai/tiles": 2,          # NxN tiles per scanned page (1 = whole page)
     "ai/model": "claude-opus-4-8",
     "ai/api_key": "",
+    # TypeSafe Jev decides sheet roles from title-block text when switched on;
+    # off, the keyword table decides, exactly as before (docs/AI Assist.md)
+    "jev/sheet_roles": False,
+    "jev/api_key": "",
     # design rule check
     "audit/packs": json.dumps(["drc-base"]),
     "audit/disabled_rules": json.dumps([]),
@@ -569,3 +573,11 @@ class AppConfig:
     @property
     def ai_tiles(self) -> int:
         return max(1, min(4, int(self.get("ai/tiles"))))
+
+    @property
+    def jev_sheet_roles(self) -> bool:
+        return bool(self.get("jev/sheet_roles"))
+
+    @property
+    def jev_api_key(self) -> str:
+        return str(self.get("jev/api_key") or "")
