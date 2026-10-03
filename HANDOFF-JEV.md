@@ -79,13 +79,49 @@ from a real drawing):
   beside "REFER TO PANEL LAYOUT E-500", was right at confidence 0.25, so the
   threshold handed it back to the keyword answer, `layout`, which is wrong.
 
-**Next, for sheet role, in order:** task 5 on the owner's real 41-sheet set
-(record bodies outside this checkout; price from `usage.input_tokens`); task 6
-(hand-label the 41 roles beside the keyword role, in a keyed file outside the
-repository; replay twice for the noise floor); task 7 (tune `JEV_CRITERIA`,
-bumping `JEV_WORDING` with each change; set `JEV_THRESHOLD` from bands); task 8
-(rerun the 47%/92% measurement with Jev roles, which needs PyDRC; default on
-only if Jev matches or beats keywords); task 9 (CHANGELOG section and the
+**Tasks 5 and 6 on a real set, 2026-10-03.** The owner supplied a 26-sheet
+vector plot, labeled every sheet's role, and confirmed the labels the same day.
+The PDF, the labels and both recordings stay outside this repository; nothing
+below quotes its text. "The 41-sheet set" above was never a named file: the
+number comes from a comment at `app/audit/findings.py:49`, and any labeled real
+set serves.
+
+- **Coverage:** 5 of the 9 roles. 1 index, 2 layout, 1 topology, 3 schematic,
+  19 plc-io. No bom, terminal-detail, legend or unknown sheet, and every sheet
+  uses one title-block template.
+- **Price:** 794-840 input tokens per sheet, 20,865 for the set, $0.0009 a
+  run. 0.23-0.65 s per request, sequential.
+- **Accuracy against the owner's labels:** keywords 23/26; Jev's raw choice
+  25/26; what the app applies (Jev at or above 0.6, else keywords) 25/26.
+
+  | sheet | owner | keywords | Jev, run 1 / run 2 | applied |
+  |---|---|---|---|---|
+  | relay-output module sheet (x2) | plc-io | schematic | plc-io 0.98 / 0.98-0.99 | plc-io |
+  | PLC-slot power distributor | plc-io | schematic | plc-io 0.40 / **schematic** 0.40 | schematic |
+  | operator-station control wiring | schematic | schematic | **index** 0.47 / 0.42 | schematic |
+  | the other 22 | = | = | right, 0.94-1.00 | right |
+
+- **Noise floor**, the same 26 bodies sent twice: 1 choice changed (the power
+  distributor, below 0.5 both times); largest confidence change 0.05.
+- **The threshold held:** every answer at or above 0.6 (24, all 0.94 or more)
+  was right; both wrong or split answers were at or below 0.47. The operator-station
+  miss is the dangerous direction: `index` is a referencing role and
+  `text_region.SHEET_ROLE_REGIONS` marks every token on an index sheet as
+  non-drawing, so applied, it would have silenced the location rules on a real
+  schematic. Its best run fell 0.13 short of the threshold.
+- **No criteria change.** Rewording `schematic` to catch one sheet is tuning to
+  that sheet, and `JEV_WORDING` stays 1.
+- **On this set Jev cannot beat keywords where the audit looks.** All three
+  keyword misses are plc-io read as schematic, and neither is in
+  `REFERENCING_ROLES`, so location rules treat the two alike. Whether a PyDRC
+  rule reads `plc-io` was not checked (PyDRC is not installed here).
+
+**Next, for sheet role, in order:** task 6 again on sets this one cannot
+cover: one with bom, terminal-detail or legend sheets, and one with another
+title-block template; task 7 (set `JEV_THRESHOLD` from bands across those sets,
+bumping `JEV_WORDING` with any criteria change); task 8 (rerun the 47%/92%
+measurement with Jev roles, which needs PyDRC; default on only if Jev matches
+or beats keywords on referencing roles); task 9 (CHANGELOG section and the
 version in its three places).
 
 **Still open:** there is no role editor, so a wrong Jev answer can be undone in
