@@ -60,9 +60,13 @@ REFERENCING_ROLES = frozenset({LAYOUT, TERMINAL_DETAIL, TOPOLOGY, BOM, INDEX, LE
 ROLE_KEYWORDS = (
     (TERMINAL_DETAIL, ("TERMINAL BLOCK", "TERMINAL STRIP", "TERMINAL DETAIL",
                        "TERMINAL PLAN", "TB DETAIL")),
+    # "PLCIO" and "RELAY OUTPUT" measured 2026-10-03 on four real sets (56
+    # sheets): without them 12 PLC sheets read as schematic, 10 titled PLCIO
+    # and 2 titled RELAY OUTPUTS; with them, 55 of 56 roles right, none worse.
     (PLC_IO, ("DIGITAL INPUT", "DIGITAL OUTPUT", "ANALOG INPUT", "ANALOG OUTPUT",
-              "DISCRETE INPUT", "DISCRETE OUTPUT", "PLC I/O", "PLC IO",
-              "I/O MODULE", "IO MODULE", "INPUT MODULE", "OUTPUT MODULE")),
+              "DISCRETE INPUT", "DISCRETE OUTPUT", "PLC I/O", "PLC IO", "PLCIO",
+              "RELAY OUTPUT", "I/O MODULE", "IO MODULE", "INPUT MODULE",
+              "OUTPUT MODULE")),
     (BOM, ("BILL OF MATERIAL", "PARTS LIST", "MATERIAL LIST")),
     (LEGEND, ("SYMBOL", "LEGEND")),
     (INDEX, ("TITLE PAGE", "TITLE SHEET", "COVER SHEET",
@@ -209,10 +213,10 @@ JEV_CRITERIA = {
     UNKNOWN: "The text shows no sheet title that fits any option above.",
 }
 
-# Provisional. Set from confidence bands measured on hand-labeled sheets
-# (HANDOFF-JEV.md task 7); until then, myNameJev's 0.6, where its own measured
-# error rate fell from about 1 in 3 to 1 in 6.
-JEV_THRESHOLD = 0.6
+# Set from confidence bands on four real, owner-labeled sets, 56 sheets asked
+# twice (HANDOFF-JEV.md): 100 answers at 0.75 or above, none wrong; 3 between
+# 0.60 and 0.75, 2 wrong. Changing it needs new bands, not a new opinion.
+JEV_THRESHOLD = 0.75
 
 
 def jev_question() -> dict:

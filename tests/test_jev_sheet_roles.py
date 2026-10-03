@@ -160,6 +160,12 @@ class TestApplies(unittest.TestCase):
         # Inject: ignore the threshold.
         self.assertIsNone(sheet_role.jev_role_applies(_answer(BOM, JEV_THRESHOLD - 0.01)))
 
+    def test_the_measured_wrong_band_does_not_apply(self):
+        # On four real sets, 2 of the 3 answers between 0.60 and 0.75 were
+        # wrong, both 0.64; none of the 100 at 0.75 or above was.
+        self.assertIsNone(sheet_role.jev_role_applies(_answer(PLC_IO, 0.64)))
+        self.assertEqual(sheet_role.jev_role_applies(_answer(PLC_IO, 0.75)), PLC_IO)
+
     def test_unknown_never_applies(self):
         self.assertIsNone(sheet_role.jev_role_applies(_answer(UNKNOWN, 1.0)))
 
@@ -203,7 +209,7 @@ class TestDocumentState(unittest.TestCase):
 
     def test_flag_on_applies_answers_at_or_above_the_threshold(self):
         d = self._open()
-        d.set_jev_roles({0: _answer(BOM, 0.9), 2: _answer(PLC_IO, 0.7)})
+        d.set_jev_roles({0: _answer(BOM, 0.9), 2: _answer(PLC_IO, 0.8)})
         self.assertEqual(d.roles_for_audit(use_jev=True),
                          {0: BOM, 1: LAYOUT, 2: PLC_IO})
 
@@ -256,17 +262,34 @@ class TestDocumentState(unittest.TestCase):
                          1: _answer(LAYOUT, 1.0)})
         self.assertEqual(d.pages_needing_jev(), [0, 2])
 
-    def test_a_sidecar_from_before_jev_opens_unchanged(self):
+    def test_a_saved_role_without_a_source_is_detected_again(self):
+        # What every sidecar from before sheet_role_sources holds: save()
+        # wrote detected roles, and keeping them froze the keyword table of
+        # the day the drawing was first saved. Inject: keep unsourced roles.
         d = self._open()
-        d.sidecar.set_meta("sheet_roles", '{"2": "plc-io"}')
-        for key in ("sheet_role_sources", "sheet_role_jev"):
-            d.sidecar.set_meta(key, "")
-        d.close()
-        self._docs.remove(d)
-        d = self._open()
-        self.assertEqual(d.sheet_role_of(2), PLC_IO)
+        d.sidecar.set_meta("sheet_roles", '{"1": "plc-io", "2": "plc-io"}')
+        d.sidecar.set_meta("sheet_role_sources", '{"1": "user"}')
+        d.sidecar.set_meta("sheet_role_jev", "")
+        d = self._reopen(d)
+        self.assertEqual(d.sheet_role_of(1), PLC_IO)           # a person set it
+        self.assertEqual(d.sheet_role_of(2), SCHEMATIC)        # detected again
         self.assertEqual(d.sheet_role_source(2), "detected")
         self.assertEqual(d.sheet_role_jev, {})
+
+    def test_a_corrected_keyword_table_reaches_a_drawing_saved_before_it(self):
+        self.src = _drawing(os.path.join(self.tmp, "plcio.pdf"),
+                            titles=("PLCIO RACK 2 WIRING DETAIL",))
+        old = sheet_role.ROLE_KEYWORDS
+        sheet_role.ROLE_KEYWORDS = tuple(
+            (r, tuple(k for k in kws if k != "PLCIO")) for r, kws in old)
+        try:
+            d = self._open()
+            self.assertEqual(d.sheet_role_of(0), SCHEMATIC)    # the old table
+            d.save()
+        finally:
+            sheet_role.ROLE_KEYWORDS = old
+        d = self._reopen(d)
+        self.assertEqual(d.sheet_role_of(0), PLC_IO)
 
     def test_a_corrupt_meta_value_is_ignored(self):
         d = self._open()

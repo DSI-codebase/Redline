@@ -46,7 +46,8 @@ back.
 - `app/extraction/sheet_role.py`: one Choice over the nine `ROLES`, `unknown`
   last; state is `title_block` (the band `ROLE_KEYWORDS` reads) plus
   `page_text` on a sparse page, the same two sources; a page with no text is
-  not sent. `JEV_THRESHOLD = 0.6` is **provisional** (myNameJev's). Answers
+  not sent. `JEV_THRESHOLD = 0.6` was **provisional** (myNameJev's); the
+  four-set band table below set it to 0.75. Answers
   carry `model` and `JEV_WORDING`; either changing makes them stale.
 - `app/model/document.py`: `sheet_role_sources` (only `"user"`, from
   `set_sheet_role`) and `sheet_role_jev` (answers), each in its own meta key so
@@ -116,13 +117,56 @@ set serves.
   `REFERENCING_ROLES`, so location rules treat the two alike. Whether a PyDRC
   rule reads `plc-io` was not checked (PyDRC is not installed here).
 
-**Next, for sheet role, in order:** task 6 again on sets this one cannot
-cover: one with bom, terminal-detail or legend sheets, and one with another
-title-block template; task 7 (set `JEV_THRESHOLD` from bands across those sets,
-bumping `JEV_WORDING` with any criteria change); task 8 (rerun the 47%/92%
-measurement with Jev roles, which needs PyDRC; default on only if Jev matches
-or beats keywords on referencing roles); task 9 (CHANGELOG section and the
-version in its three places).
+**Tasks 6-8 on three more real sets, 2026-10-03.** The owner supplied 5-, 11-
+and 14-sheet vector plots and confirmed every label; the 14-sheet set is
+EL2507777, the one `ROLE_KEYWORDS` was written from. Same handling: PDFs,
+labels and recordings outside the repository. All four sets share one
+title-block template, so a second template is still unmeasured.
+
+- **Coverage now 8 of 9 roles** (first real bom, legend and terminal-detail);
+  no `unknown`. 30 more sheets at 770-947 input tokens, $0.0010 a run.
+- **Keywords missed 12 of the 30**, all plc-io read as schematic: 10 titled
+  `PLCIO` (no separator) and, with the 26-sheet set, 2 titled `RELAY OUTPUTS`.
+  Jev at 0.6 got 29/30; its miss was a drive power-and-control schematic read
+  as plc-io at 0.64 in both runs, because the band at `titleblock_y_frac=0.72`
+  also holds drawing text just above the title block (here the drive's analog
+  output terminals). A band at 0.85 or 0.88 moved the error to another sheet
+  rather than removing it, one run each, so the band stays.
+- **Band table**, 56 sheets asked twice, 112 answers against the owner's
+  labels:
+
+  | confidence | answers | wrong | wrong across the referencing line |
+  |---|---|---|---|
+  | 0.90-1.00 | 81 | 0 | 0 |
+  | 0.75-0.90 | 19 | 0 | 0 |
+  | 0.60-0.75 | 3 | 2 | 0 |
+  | below 0.60 | 9 | 3 | 2 |
+  | keywords (one answer per sheet) | 56 | 13 | 0 |
+
+**Decisions, made by the owner 2026-10-03:**
+
+- **`JEV_THRESHOLD` 0.6 -> 0.75**, from the table: none of 100 answers at or
+  above it was wrong. Recorded answers stay valid (the threshold is applied at
+  read time), so `JEV_WORDING` stays 1.
+- **`ROLE_KEYWORDS` gains `PLCIO` and `RELAY OUTPUT`**: keywords alone 43/56 ->
+  55/56, no sheet worse, none across the referencing line.
+- **A saved role is kept only when a person set it.** `save()` wrote detected
+  roles into `sheet_roles`, and a saved role beat detection on reopen, so a
+  drawing saved before the keyword fix kept `schematic` on a `PLCIO` sheet
+  (measured: reopened `schematic`, fresh detection `plc-io`). Every other page
+  is now detected on each open.
+- **Jev stays off by default (task 8).** With both changes, applied roles are
+  55/56 with Jev on and 55/56 with keywords alone; the one miss is the same
+  sheet, a PLC-slot power distributor Jev splits below 0.5. Neither crosses the
+  referencing line on any of the 56 sheets, so on this evidence Jev changes no
+  location-rule finding. It would matter only if a PyDRC rule reads `plc-io`
+  (unchecked; PyDRC is not installed here) or on a template whose titles the
+  table does not know.
+
+**Next, for sheet role:** a set drawn on another firm's title block, where the
+keyword table has never been tuned, is the measurement that could still show
+Jev ahead; then task 8's 47%/92% rerun with PyDRC; task 9 when a release
+carries this.
 
 **Still open:** there is no role editor, so a wrong Jev answer can be undone in
 the app only by switching Jev off. The label split stays "later" per answer 3.
