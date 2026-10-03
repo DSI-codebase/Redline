@@ -64,9 +64,8 @@ class Document:
         # cannot tell a number a human confirmed from one a heuristic guessed.
         self.sheet_sources: dict = {}
         self.sheet_roles: dict = {}    # page_index -> sheet_role name
-        # page_index -> "user" for a role a person set. Detection is the only
-        # other writer, so a page absent here holds a detected role; no build
-        # before this map existed called set_sheet_role from the app.
+        # page_index -> "user" for a role a person set. A page absent here holds
+        # a detected role, and is detected again on every open.
         self.sheet_role_sources: dict = {}
         # page_index -> Jev's recorded answer (sheet_role.jev_document_roles),
         # kept apart from sheet_roles so switching Jev off restores the keyword
@@ -296,7 +295,15 @@ class Document:
     # -- sheet roles (per page) ---------------------------------------------
 
     def _load_sheet_roles(self) -> None:
-        """Saved roles first, then detection for pages we don't know yet."""
+        """Roles a person set, then detection for every other page.
+
+        ``save()`` writes detected roles beside set ones, and a sidecar from
+        before ``sheet_role_sources`` cannot tell them apart -- but no build
+        before it called ``set_sheet_role`` from the app (every revision
+        grepped, 2026-10-03), so a saved role without a ``"user"`` source is a
+        snapshot of detection. Keeping it froze the keyword table of the day the
+        drawing was first saved: a corrected table never reached it.
+        """
         import json
         raw = self.sidecar.get_meta("sheet_roles")
         saved = {}
@@ -305,12 +312,13 @@ class Document:
                 saved = {int(k): str(v) for k, v in json.loads(raw).items()}
             except Exception:
                 saved = {}
-        self.sheet_roles = saved
         # Own meta keys, like sheet_label_sources, so a sidecar written here
         # still opens in a build that predates them.
         self.sheet_role_sources = {
             p: s for p, s in self._int_keyed_meta("sheet_role_sources").items()
             if s == sheet_number.USER and p in saved}
+        self.sheet_roles = {p: r for p, r in saved.items()
+                            if p in self.sheet_role_sources}
         self.sheet_role_jev = {
             p: a for p, a in self._int_keyed_meta("sheet_role_jev").items()
             if isinstance(a, dict)}

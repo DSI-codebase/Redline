@@ -61,6 +61,12 @@ class TestRoleFromText(unittest.TestCase):
         for title, want in cases:
             self.assertEqual(role_from_text(title), want, title)
 
+    def test_plc_sheets_titled_without_a_separator_or_as_relay_outputs(self):
+        # Four real sets, 2026-10-03: 10 PLC sheets titled "PLCIO ..." and 2
+        # titled "... RELAY OUTPUTS" read as schematic without these keywords.
+        for title in ("PLCIO RACK 2 WIRING DETAIL", "SLOT 4 RELAY OUTPUTS"):
+            self.assertEqual(role_from_text(title), PLC_IO, title)
+
     def test_terminal_block_beats_layout(self):
         # Both keywords are present; the more specific one has to win, or every
         # terminal sheet is misfiled as a panel layout.
