@@ -72,8 +72,13 @@ ROLE_KEYWORDS = (
     (INDEX, ("TITLE PAGE", "TITLE SHEET", "COVER SHEET",
              "DRAWING INDEX", "SHEET INDEX", "DRAWING SECTION INDEX")),
     (TOPOLOGY, ("TOPOLOGY", "NETWORK DIAGRAM", "NETWORK ARCHITECTURE")),
+    # No bare "ENCLOSURE": DSI's EL-generation title block prints the label
+    # "ENCLOSURE NUMBER:" on every sheet, so the word voted layout everywhere.
+    # Measured 2026-10-04 on a 29-sheet ACADE 2027 set: all six 300/400 ladders
+    # read as layout and the audit skipped them. Its eight layout titles all
+    # carry LAYOUT, so a layout phrase is required instead.
     (LAYOUT, ("ENCLOSURE LAYOUT", "PANEL LAYOUT", "BACK PANEL", "SUBPANEL",
-              "DOOR LAYOUT", "NAMEPLATE", "LAYOUT", "ENCLOSURE")),
+              "DOOR LAYOUT", "NAMEPLATE", "LAYOUT")),
 )
 
 

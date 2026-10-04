@@ -67,7 +67,7 @@ back.
 **First live answers, synthetic text only** (sent from this session; nothing
 from a real drawing):
 
-- The 13 titles in `tests/test_sheet_role.py:50-76`, as plotted on rotated
+- The 13 titles in `tests/test_sheet_role.py:55-81`, as plotted on rotated
   pages: Jev 13/13, keywords 13/13. These are the titles the keyword table was
   written from, so this separates nothing. 643-653 input tokens and 0.23-0.61 s
   per request; at 653 tokens a 41-sheet set is 26,773 tokens, $0.0011. Real
@@ -297,7 +297,7 @@ versus text (`claude_api.py:253-265`) needs pixels; tags are generation.
   labels). Hand-label a real scanned set from the owner, the vision `is_wire`
   beside each as the baseline. The sidecar's `included` column (`storage.py:427`)
   records an export choice, a different question.
-- **Sheet role:** 13 synthetic titles in `tests/test_sheet_role.py:50-76`.
+- **Sheet role:** 13 synthetic titles in `tests/test_sheet_role.py:55-81`.
   Saved roles are not human labels: `save()` writes detected roles
   (`app/model/document.py:405`) with no source (:66), unlike sheet numbers
   (:62-64). Label a real set's 41 sheets; rerun the 47%/92% measurement.

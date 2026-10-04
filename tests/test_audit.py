@@ -21,6 +21,7 @@ from app.audit.findings import (AuditRun, Coverage, Finding, Waiver,
                                 STATUS_OPEN, STATUS_WAIVED)
 from app.model.document import Document
 from app.model.storage import SidecarDB, sidecar_path
+from tests import _el_sheets as el
 
 HAVE_PYDRC = audit.available()
 needs_pydrc = unittest.skipUnless(HAVE_PYDRC, "PyDRC is not installed")
@@ -129,6 +130,99 @@ class TestDrawingIndex(unittest.TestCase):
 
     def test_no_index_no_rows(self):
         self.assertEqual(parse_drawing_index("just a schematic"), [])
+
+    def test_reads_every_row_of_an_el_generation_index(self):
+        # DSI's EL-generation title page prints four of its five index rows as
+        # ranges. Measured 2026-10-04 on a real one, the parser read 1 row of 5.
+        # The page is synthetic (tests/_el_sheets.py) and read the way the
+        # adapter reads it.
+        doc = fitz.open()
+        try:
+            page = el.new_page(doc)
+            el.title_block(page, "TITLE PAGE", "000", "001")
+            el.index_body(page, el.EL_INDEX_ROWS)
+            text = page.get_text("text")
+        finally:
+            doc.close()
+        rows = parse_drawing_index(text)
+        self.assertEqual(len(rows), 5)
+        self.assertEqual(rows, list(el.EL_INDEX_ROWS))
+
+    def test_a_range_is_read_however_it_is_spaced(self):
+        text = "DRAWING SECTION INDEX\n300 - 303\nA\n400\u2013401\nB\n"
+        self.assertEqual(parse_drawing_index(text),
+                         [("300-303", "A"), ("400-401", "B")])
+
+
+@needs_pydrc
+class TestElGenerationSet(unittest.TestCase):
+    """The synthetic EL-generation set (tests/_el_sheets.py) through the audit,
+    with the roles detection gives it. Measured 2026-10-04 on the real set it
+    is modeled on, those roles made every 300/400 ladder a layout, so the
+    tag-location rule had nothing eligible, and the index reached the model as
+    one row of five."""
+
+    def _make(self, index_rows=el.EL_INDEX_ROWS):
+        from app.extraction.sheet_number import resolve_document
+        from app.extraction.sheet_role import detect_document_roles
+        doc = fitz.open()
+        tags = el.build_set(doc, index_rows)
+        path = os.path.join(self.tmp, "el-set.pdf")
+        doc.save(path)
+        doc.close()
+        doc = fitz.open(path)
+        try:
+            res = resolve_document(doc)
+            labels = {k: v.label for k, v in res.items() if v.resolved}
+            sources = {k: v.strategy for k, v in res.items()}
+            roles = detect_document_roles(doc)
+            model = build_model(doc, labels, sources, roles,
+                                AdapterOptions()).model
+        finally:
+            doc.close()
+        return path, labels, sources, roles, model, tags
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _audit(self, path, labels, sources, roles):
+        from app.audit.runner import run_audit
+        return run_audit(path, labels, sources, roles)
+
+    def test_every_index_row_reaches_the_model(self):
+        model = self._make()[4]
+        self.assertEqual(
+            [(e.section, e.description) for e in model.index_entries],
+            [("000", "TITLE PAGE, SYMBOL LEGEND, BOM, PANEL LAYOUTS"),
+             ("100", "NETWORK TOPOLOGY"),
+             ("300", "120VAC POWER DISTRIBUTION"),
+             ("400", "24VDC POWER DISTRIBUTION"),
+             ("600", "PLC IO MODULES")])
+
+    def test_a_range_row_is_checked_not_waved_through(self):
+        # The rule library checks a digit section and passes over anything
+        # else while still counting it checked, so a range handed through as
+        # printed would hide a missing section behind a clean result.
+        path, labels, sources, roles, _model, _tags = self._make(
+            el.EL_INDEX_ROWS + (("700-701", "MOTOR CONTROL"),))
+        result = self._audit(path, labels, sources, roles)
+        missing = [f.subject_id for f in result.findings
+                   if f.rule_id == "DRC-SHEET-INDEX-001"]
+        self.assertEqual(missing, ["700"])
+        cov = next(c for c in result.run.coverage
+                   if c.rule_id == "DRC-SHEET-INDEX-001")
+        self.assertEqual((cov.eligible, cov.checked), (6, 6))
+
+    def test_the_ladders_tags_are_checked_for_location(self):
+        path, labels, sources, roles, _model, tags = self._make()
+        self.assertEqual(len(tags), 20)
+        result = self._audit(path, labels, sources, roles)
+        cov = next(c for c in result.run.coverage
+                   if c.rule_id == "DRC-TAG-LOC-001")
+        self.assertEqual(cov.eligible, len(tags))
 
 
 @needs_pydrc
