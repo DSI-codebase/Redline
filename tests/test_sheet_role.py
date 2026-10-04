@@ -10,11 +10,16 @@ import unittest
 
 import fitz
 
+from app.extraction.component_parser import ComponentConfig, ComponentParser
+from app.extraction.rung import extract_rungs
 from app.extraction.sheet_role import (
     SheetRoleConfig, detect_role, detect_document_roles, role_from_text,
     SCHEMATIC, PLC_IO, LAYOUT, TERMINAL_DETAIL, TOPOLOGY, BOM, INDEX, LEGEND,
-    REFERENCING_ROLES, ROLE_LABELS, ROLES,
+    REFERENCING_ROLES, ROLE_LABELS, ROLES, _titleblock_text,
 )
+from app.extraction.text_extract import extract_tokens
+from app.extraction.wire_parser import WireConfig, WireParser
+from tests import _el_sheets as el
 
 W, H = 792.0, 1224.0   # portrait, as plotted; rotated 270 for display
 
@@ -135,6 +140,80 @@ class TestDocumentRoles(unittest.TestCase):
             [got[i] for i in range(len(titles))],
             [INDEX, LEGEND, BOM, LAYOUT, PLC_IO, TERMINAL_DETAIL, SCHEMATIC])
         doc.close()
+
+
+class TestElGenerationTitleBlock(unittest.TestCase):
+    """DSI's current title block prints ``ENCLOSURE NUMBER:`` on every sheet.
+
+    Measured 2026-10-04 on a real 29-sheet ACADE 2027 set, the bare keyword
+    ``ENCLOSURE`` read that label as a layout title: all six 300/400 ladders
+    came back ``layout``, 8 of 29 roles were wrong, and the audit skipped the
+    ladders as layouts and reported no real finding. The sheets here are
+    synthetic (``tests/_el_sheets.py``).
+    """
+
+    def _ladder(self):
+        doc = fitz.open()
+        page = el.new_page(doc)
+        el.title_block(page, "120VAC POWER DISTRIBUTION", "300", "301")
+        wires, tags = el.ladder_body(page, "300")
+        return doc, page, wires, tags
+
+    def test_the_fixture_is_a_ladder_under_the_label(self):
+        # The premise, read by Redline's own parsers rather than by the
+        # function under test: the label is in the band role detection reads,
+        # the page is too busy for the whole-page fallback, and the body is a
+        # ladder in DSI's numbering.
+        doc, page, wires, tags = self._ladder()
+        try:
+            config = SheetRoleConfig()
+            self.assertIn("ENCLOSURE NUMBER:", _titleblock_text(page, config))
+            self.assertGreater(len(page.get_text("text").strip()),
+                               config.sparse_page_chars)
+            tokens = extract_tokens(page, 0)
+            self.assertEqual(len(extract_rungs(tokens, "300", page.rect.width)), 80)
+            self.assertEqual(
+                sorted({w.label for w in WireParser(WireConfig()).parse(tokens)}),
+                sorted(wires))
+            self.assertEqual(
+                sorted({c.label for c in ComponentParser(ComponentConfig()).parse(tokens)}),
+                sorted(tags))
+            self.assertIn("300050", wires)
+            self.assertIn("CB-30005", tags)
+        finally:
+            doc.close()
+
+    def test_a_ladder_under_the_enclosure_number_label_is_not_a_layout(self):
+        doc, page, _wires, _tags = self._ladder()
+        try:
+            role = detect_role(page)
+        finally:
+            doc.close()
+        self.assertNotEqual(role, LAYOUT)
+        self.assertEqual(role, SCHEMATIC)
+
+    def test_the_label_alone_implies_no_role(self):
+        self.assertIsNone(role_from_text("ENCLOSURE NUMBER: MCP"))
+
+    def test_layout_titles_under_the_label_are_still_layouts(self):
+        for title in ("RELAY ENCLOSURE LAYOUT", "PLC ENCLOSURE / PANEL LAYOUT"):
+            doc = fitz.open()
+            try:
+                page = el.new_page(doc)
+                el.title_block(page, title, "011", "012")
+                self.assertEqual(detect_role(page), LAYOUT, title)
+            finally:
+                doc.close()
+
+    def test_classifies_an_el_generation_set(self):
+        doc = fitz.open()
+        try:
+            el.build_set(doc)
+            got = detect_document_roles(doc)
+        finally:
+            doc.close()
+        self.assertEqual([(sheet, got[i]) for i, (sheet, *_x) in enumerate(el.EL_SET)],
+                         [(sheet, role) for sheet, _t, _l, role in el.EL_SET])
 
 
 class TestVocabulary(unittest.TestCase):

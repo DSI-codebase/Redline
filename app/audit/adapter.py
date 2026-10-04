@@ -28,11 +28,15 @@ from ..extraction.component_parser import ComponentConfig, ComponentParser
 from ..extraction.text_extract import extract_tokens
 from ..extraction.wire_parser import WireConfig, WireParser
 
-# Rows of the drawing index on the title sheet: a three-digit section followed
-# by its description. The index is a claim about the package's contents, which
-# makes it checkable against the package.
+# Rows of the drawing index on the title sheet: a three-digit section, or a
+# range of them, followed by its description. The index is a claim about the
+# package's contents, which makes it checkable against the package.
+#
+# DSI's EL-generation title page prints most rows as ranges ("000-015",
+# "300-303"). Measured 2026-10-04 on a real 5-row index, a singleton-only
+# pattern read 1 row and dropped the other 4 without a word.
 _INDEX_HEADING_RE = re.compile(r"DRAWING\s+(?:SECTION\s+)?INDEX", re.IGNORECASE)
-_SECTION_RE = re.compile(r"^\d{3}$")
+_SECTION_RE = re.compile(r"^(\d{3})(?:\s*[-\u2013]\s*(\d{3}))?$")
 
 
 @dataclass
@@ -76,19 +80,34 @@ def _provenance(source: str, confidence: float = 1.0, resolved_by: str = ""):
 
 
 def parse_drawing_index(text: str) -> list:
-    """``(section, description)`` rows from a title sheet's drawing index."""
+    """``(section, description)`` rows from a title sheet's drawing index.
+
+    ``section`` is as printed, with a range written ``"300-303"``.
+    """
     m = _INDEX_HEADING_RE.search(text or "")
     if not m:
         return []
     lines = [ln.strip() for ln in text[m.start():].splitlines() if ln.strip()]
     rows, pending = [], None
     for line in lines:
-        if _SECTION_RE.match(line):
-            pending = line
+        section = _SECTION_RE.match(line)
+        if section:
+            pending = "-".join(g for g in section.groups() if g)
         elif pending:
             rows.append((pending, line))
             pending = None
     return rows
+
+
+def _index_section(section: str) -> str:
+    """The section an index row claims, as the rule library reads it.
+
+    PyDRC's ``index_completeness`` checks a digit string and silently passes
+    over anything else, so a range handed through as ``"300-303"`` would count
+    as checked while checking nothing. Its first section is the claim that the
+    range's hundred-block has sheets.
+    """
+    return section.split("-", 1)[0]
 
 
 def build_model(fitz_doc, sheet_labels: dict, sheet_sources: dict,
@@ -282,7 +301,7 @@ def build_model(fitz_doc, sheet_labels: dict, sheet_sources: dict,
                 continue
             for section, description in parse_drawing_index(text):
                 model.index_entries.append(IndexEntry(
-                    section=section, description=description,
+                    section=_index_section(section), description=description,
                     provenance=_provenance(sn.DRAWING_NUMBER)))
 
     if progress is not None:
