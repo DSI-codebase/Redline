@@ -1,35 +1,61 @@
 # House voice
 
-Loaded every turn. Adapted from `pstack/unslop` (MIT), and **the licence travels
+Loaded every turn. Adapted from `pstack/unslop` (MIT), and **the license travels
 with it**: `house-voice.LICENSE` is beside this file in every repository that
 carries it. What was dropped and why is `ATTRIBUTION.md`, which stays in
-**Pathforward** at `kit/dsi-toolbox/rules/` beside the canonical copy — and that
+**Pathforward** at `kit/dsi-toolbox/rules/` beside the canonical copy. That
 split is mechanical rather than editorial. Every `.md` in `.claude/rules/` is
 loaded at launch, so a change record shipped beside the rule would cost context
-on every turn to explain a file nobody is reading at the time; a licence that is
+on every turn to explain a file nobody is reading at the time. A license that is
 not a `.md` costs nothing and is where a reader looks for one.
 
-Apply to prose you write: commit messages, PR bodies, `CLAUDE.md` sections,
-plan documents, comments, and replies. Not to quoted material, not to a
-vendor's own wording, and never at the cost of a fact.
+Apply to prose you write: deliverables, commit messages, PR bodies, `CLAUDE.md`
+sections, plan documents, comments, and replies. Not to quoted material, not to
+a vendor's own wording, and never at the cost of a fact.
 
 ## Say the mechanism, not the feeling
 
 The one rule the rest serve. A sentence that could appear unchanged in another
-project's document says nothing about this one — cut it or replace it with the
+project's document says nothing about this one. Cut it, or replace it with the
 number, the command, or the file and line.
 
-- Not "significantly faster" — `94 s → 0.81 s`.
-- Not "the gate is robust" — "falsified by reinstating the defect; it fires."
-- Not "this improves reliability" — "measured 0 findings across 446 fixtures."
+- Instead of "significantly faster", write `94 s → 0.81 s`.
+- Instead of "the gate is robust", write "falsified by reinstating the defect, and it fires."
+- Instead of "this improves reliability", write "measured 0 findings across 446 fixtures."
 
 If you cannot restate a sentence as a fact, an instruction, or a number, delete it.
+
+## No semicolon and no em dash in a deliverable
+
+The owner's rule, set 2026-10-23. Text that goes on a deliverable carries no
+semicolon (`;`) and no em dash (`—`). DSI's people do not write a sentence with
+either mark, and taking them out of drafts was, in the owner's words, "about the
+only thing I revise any more."
+
+A deliverable is finished work that leaves the session for a reader: a proposal,
+a quote, a scope of work, a bid summary, an RFQ, a report, a manual, a user
+guide, a letter, an email, a slide. A draft of one inside a reply counts. Prose
+that stays in a repository for the people working in it is not a deliverable: a
+`CLAUDE.md`, a commit message, a PR body, a code comment.
+
+Write the sentence again. Do not swap the mark.
+
+- Two clauses joined by a semicolon become two sentences.
+- A dash before an explanation becomes a period, a colon, or "because".
+- A pair of dashes around an aside becomes commas or parentheses, or the aside
+  becomes its own sentence.
+- Items split by semicolons because they hold commas become a list.
+
+An en dash or a spaced hyphen where the em dash stood is the same sentence with
+another mark, and it is not the fix. A hyphen in a compound word or a range
+stays. Code, a command, a part number, a file name, a quotation and a vendor's
+own wording keep their characters.
 
 ## Say which gate passed
 
 "It works", "the suite is green", "CI is green on both runners", "the vendor tool
 imported it" and "I read the code" are five different claims. Name the one you
-have. A desk read is a desk read; do not let it wear a compile gate's clothes.
+have. A desk read is a desk read. Do not let it wear a compile gate's clothes.
 
 ## A count is true at the commit that lands it
 
@@ -57,7 +83,7 @@ how a gate reports success without having run.
 3. **Fancy ways to say "is".** "serves as", "stands as", "boasts", "features".
 4. **"Not just X, but Y."** State the point.
 5. **Vague attribution.** "experts believe", "it is generally accepted". Name
-   the source, the file, or the clause — or delete the sentence.
+   the source, the file, or the clause, or delete the sentence.
 6. **Rule of three by reflex.** Use the number the facts have.
 7. **Superficial -ing tails.** "...ensuring reliability", "...highlighting the
    need". Delete, or expand into the real consequence.
@@ -80,19 +106,13 @@ how a gate reports success without having run.
 
 ## What is NOT a tell here
 
-Measured on this portfolio's own twelve `CLAUDE.md` files (2026-09-07):
-**2,623 em dashes across 17,030 lines — 15.4 per 100, in every one of the
-twelve, from 10.5 to 17.4.** The em dash is the house's own punctuation for the
-turn from a claim to the evidence that refutes it, and a ban on it would rewrite
-the corpus that defines this voice. Upstream's rule 13 is dropped, not relaxed.
-
-Also not tells here, and deliberately so: a long document, a dense paragraph, a
-repeated leading word, a heading that names a defect. This voice is
-precision-first. Do not "let some mess in" to look human.
+A long document, a dense paragraph, a repeated leading word, a heading that
+names a defect. These are deliberate. This voice is precision-first. Do not
+"let some mess in" to look human.
 
 ## American spelling
 
 color, initialize, analyze, canceled, license, behavior, catalog. Never the
-British variant. One exception: a name is a fact — a directory called
-`catalogue`, a vendor's `Colour` attribute, a quoted sentence. Never rewrite an
-identifier to match this rule.
+British variant. One exception: a name is a fact. A directory called
+`catalogue`, a vendor's `Colour` attribute and a quoted sentence keep their
+spelling. Never rewrite an identifier to match this rule.
