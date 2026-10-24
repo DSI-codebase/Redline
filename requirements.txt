@@ -1,4 +1,6 @@
-PySide6>=6.6
+# Below 6.12: on PySide6 6.12.0 a widget destroyed from Python before the
+# QApplication segfaults the interpreter at exit. 6.11.2 does not.
+PySide6>=6.6,<6.12
 PyMuPDF>=1.25
 openpyxl>=3.1
 python-docx>=1.1
