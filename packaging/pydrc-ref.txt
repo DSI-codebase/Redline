@@ -9,12 +9,13 @@
 # THIS FILE PINS ONE DEPENDENCY OF TEN, and the line above used to end
 # "...and rebuilding that tag years later produces the same installer", which
 # is a claim about the whole artifact that one pin cannot support. Measured:
-# `requirements.txt` carries nine unbounded floors (`PySide6>=6.6`,
-# `PyMuPDF>=1.25`, `openpyxl>=3.1`, `python-docx>=1.1`, `pdf2docx>=0.5.8`,
-# `pytesseract>=0.3.10`, `Pillow>=10.0`, `anthropic>=0.40`, `PyYAML>=6.0`) and
-# `packaging/requirements-build.txt` a tenth (`pyinstaller>=6.3`) -- so a
+# `requirements.txt` carries eight unbounded floors (`PyMuPDF>=1.25`,
+# `openpyxl>=3.1`, `python-docx>=1.1`, `pdf2docx>=0.5.8`,
+# `pytesseract>=0.3.10`, `Pillow>=10.0`, `anthropic>=0.40`, `PyYAML>=6.0`),
+# `packaging/requirements-build.txt` a ninth (`pyinstaller>=6.3`), and the
+# GUI toolkit is a range rather than a pin (`PySide6>=6.6,<6.12`) -- so a
 # rebuild of an old tag resolves each of those to whatever is newest on the
-# day, and the PDF engine and the whole GUI toolkit are among them.
+# day that fits, and the PDF engine and the GUI toolkit are among them.
 #
 # What a rebuild DOES reproduce is the rule set, which is the question this
 # file exists to answer and the one a design-rule finding turns on.
