@@ -47,9 +47,12 @@ Write the sentence again. Do not swap the mark.
 - Items split by semicolons because they hold commas become a list.
 
 An en dash or a spaced hyphen where the em dash stood is the same sentence with
-another mark, and it is not the fix. A hyphen in a compound word or a range
-stays. Code, a command, a part number, a file name, a quotation and a vendor's
-own wording keep their characters.
+another mark, and it is not the fix. A hyphen with a space on each side is an
+em dash's stand-in wherever it sits, so it is written again too, and a list
+marker at the start of a line is not one. A hyphen in a compound word stays, and
+a range takes a hyphen or "to", never an en dash. Code, a command, a part
+number, a file name, a fixed name or label, a quotation and a vendor's own
+wording keep their characters.
 
 ## Say which gate passed
 
