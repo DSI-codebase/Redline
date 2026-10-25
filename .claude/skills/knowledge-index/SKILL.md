@@ -22,8 +22,9 @@ somebody already has:
 kb doctor
 ```
 
-which prints the resolved index root, or `$KB_CONFIG` / `kb.config.local.toml`
-if this machine names one.
+which prints the config it loaded and the `index dir` it reads. From a directory
+with no `kb.config.toml` above it, `kb` reads its own checkout's;
+`$KB_CONFIG` names a different one.
 
 ## When to search it
 
