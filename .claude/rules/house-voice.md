@@ -54,6 +54,10 @@ a range takes a hyphen or "to", never an en dash. Code, a command, a part
 number, a file name, a fixed name or label, a quotation and a vendor's own
 wording keep their characters.
 
+## Steps are numbered
+
+An instruction to the reader that takes more than one action is written as numbered steps.
+
 ## Say which gate passed
 
 "It works", "the suite is green", "CI is green on both runners", "the vendor tool
