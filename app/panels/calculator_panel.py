@@ -1,5 +1,9 @@
 """The Calculators tab: PyDRC's calculators, one form each.
 
+A calculator that takes a list (conductors, segments, loads, components) holds
+it in a table: one row each, **Add row** and **Remove row** beneath it, and a
+row left empty is not an entry.
+
 Built from ``app.calculators.specs`` and nothing else: a list of pages on the
 left, the chosen calculator's form on the right, and the result below it,
 shown whole (the tier, the values or the reasons there are none, the
@@ -23,14 +27,15 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFontDatabase
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFormLayout,
                                QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit,
-                               QPushButton, QScrollArea, QSplitter, QTreeWidget,
-                               QTreeWidgetItem, QVBoxLayout, QWidget)
+                               QPushButton, QScrollArea, QSplitter, QTableWidget,
+                               QTableWidgetItem, QTreeWidget, QTreeWidgetItem,
+                               QVBoxLayout, QWidget)
 
 from ..calculators import render, specs, status
 
 
 class CalculatorPanel(QWidget):
-    """Every plain-field PyDRC calculator, as a form and a result."""
+    """Every calculator in ``specs.PAGES``, as a form and a result."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -148,6 +153,8 @@ class CalculatorPanel(QWidget):
         self._set_buttons()
 
     def _make_field(self, f, kept):
+        if f.kind == specs.TABLE:
+            return _TableField(f, kept)
         if f.kind == specs.BOOL:
             w = QCheckBox()
             w.setChecked(bool(kept))
@@ -180,7 +187,9 @@ class CalculatorPanel(QWidget):
         """``{field name: text or bool}`` as the form holds it now."""
         out = {}
         for name, w in self._widgets.items():
-            if isinstance(w, QCheckBox):
+            if isinstance(w, _TableField):
+                out[name] = w.rows()
+            elif isinstance(w, QCheckBox):
                 out[name] = w.isChecked()
             elif isinstance(w, QComboBox):
                 out[name] = w.currentText()
@@ -195,7 +204,9 @@ class CalculatorPanel(QWidget):
     def set_field(self, name, value):
         """Fill one field, as typing it would (tests and future prefill)."""
         w = self._widgets[name]
-        if isinstance(w, QCheckBox):
+        if isinstance(w, _TableField):
+            w.set_rows(value)
+        elif isinstance(w, QCheckBox):
             w.setChecked(bool(value))
         elif isinstance(w, QComboBox):
             i = w.findText(str(value))
@@ -215,7 +226,7 @@ class CalculatorPanel(QWidget):
         self.raw = self.form_values()
         self._remember()
         try:
-            self.result = specs.call(self.calc, self.raw)
+            self.result = specs.run(self.calc, self.raw)
         except specs.Missing as e:
             self.result = None
             self.output.setPlainText(str(e))
@@ -226,12 +237,14 @@ class CalculatorPanel(QWidget):
             self.output.setPlainText(f"The calculator stopped with an error: {e}")
             self._set_buttons()
             return
-        self.output.setPlainText("\n".join(render.result_lines(self.result)))
+        self.output.setPlainText("\n".join(render.sections_lines(self.result)))
         self._set_buttons()
 
     def clear(self):
         for w in self._widgets.values():
-            if isinstance(w, QCheckBox):
+            if isinstance(w, _TableField):
+                w.set_rows([])
+            elif isinstance(w, QCheckBox):
                 w.setChecked(False)
             elif isinstance(w, QComboBox):
                 w.setCurrentIndex(0)
@@ -264,3 +277,85 @@ class CalculatorPanel(QWidget):
         self.btn_calc.setEnabled(has)
         self.btn_clear.setEnabled(has)
         self.btn_copy.setEnabled(self.result is not None)
+
+
+class _TableField(QWidget):
+    """A list input: one row per item, a column per ``Field`` in ``columns``.
+
+    Choice columns are drop-downs of the same lists the plain fields use. A
+    row with nothing in it is not an entry (``specs.table_rows``).
+    """
+
+    def __init__(self, field, kept=None, parent=None):
+        super().__init__(parent)
+        self.field = field
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        self.table = QTableWidget(0, len(field.columns))
+        self.table.setHorizontalHeaderLabels(
+            [f"{c.label} ({c.unit})" if c.unit else c.label for c in field.columns])
+        for i, c in enumerate(field.columns):
+            if c.hint:
+                self.table.horizontalHeaderItem(i).setToolTip(c.hint)
+        self.table.setMinimumHeight(150)
+        lay.addWidget(self.table)
+        bar = QHBoxLayout()
+        self.btn_add = QPushButton("Add row")
+        self.btn_add.clicked.connect(lambda: self.add_row())
+        self.btn_remove = QPushButton("Remove row")
+        self.btn_remove.setToolTip("Remove the selected row, or the last one")
+        self.btn_remove.clicked.connect(self.remove_row)
+        bar.addWidget(self.btn_add)
+        bar.addWidget(self.btn_remove)
+        bar.addStretch(1)
+        lay.addLayout(bar)
+        self.set_rows(kept or [])
+
+    def add_row(self, values=None):
+        values = values or {}
+        r = self.table.rowCount()
+        self.table.insertRow(r)
+        for i, c in enumerate(self.field.columns):
+            text = "" if values.get(c.name) is None else str(values.get(c.name))
+            if c.kind == specs.CHOICE:
+                box = QComboBox()
+                box.setEditable(c.editable)
+                box.addItem("")
+                try:
+                    box.addItems(list(c.options()))
+                except Exception:
+                    box.setEditable(True)
+                k = box.findText(text)
+                if k >= 0:
+                    box.setCurrentIndex(k)
+                elif text:
+                    box.setEditable(True)
+                    box.setEditText(text)
+                self.table.setCellWidget(r, i, box)
+            else:
+                self.table.setItem(r, i, QTableWidgetItem(text))
+
+    def remove_row(self):
+        if not self.table.rowCount():
+            return
+        r = self.table.currentRow()
+        self.table.removeRow(r if r >= 0 else self.table.rowCount() - 1)
+
+    def rows(self) -> list:
+        out = []
+        for r in range(self.table.rowCount()):
+            row = {}
+            for i, c in enumerate(self.field.columns):
+                w = self.table.cellWidget(r, i)
+                if isinstance(w, QComboBox):
+                    row[c.name] = w.currentText()
+                else:
+                    item = self.table.item(r, i)
+                    row[c.name] = item.text() if item is not None else ""
+            out.append(row)
+        return out
+
+    def set_rows(self, rows):
+        self.table.setRowCount(0)
+        for row in rows or [{}]:
+            self.add_row(row)

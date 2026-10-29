@@ -221,7 +221,8 @@ app/
                              PDF Tools, Navigation, Audit, Calculators
   audit/                     Design rule check: drawing to model, run, findings
   calculators/               The Calculators tab: one description per PyDRC
-                             calculator, run and shown as text
+                             calculator, the Panel page's list builders, run
+                             and shown as text
   extraction/                Text extraction, OCR, wire parser/classifier, Claude assist,
                              Jev client (sheet roles)
   export/                    TODO (md/docx) and wire (xlsx/csv) exporters
