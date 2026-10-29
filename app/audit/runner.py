@@ -18,7 +18,23 @@ from typing import Callable, Optional
 from .adapter import AdapterOptions, build_model
 from .findings import (AuditRun, Coverage, Finding, apply_waivers, sort_findings)
 
-DEFAULT_PACK = "drc-base"
+#: What runs when the library does not say. A PyDRC from before 0.9.0 has no
+#: DEFAULT_PACKS, and its drc-base holds every rule it ships.
+FALLBACK_PACKS = ("drc-base",)
+
+
+def default_packs() -> tuple:
+    """The packs PyDRC runs when none are named, asked of PyDRC.
+
+    Not kept here. PyDRC 0.9.0 moved its electrical rules from drc-base into
+    erc-nec-2026, and an app that named drc-base itself went on running the
+    drafting rules alone: no error, and every audit test here still passed.
+    """
+    try:
+        from pydrc.packs import loader
+    except ImportError:
+        return FALLBACK_PACKS
+    return tuple(getattr(loader, "DEFAULT_PACKS", FALLBACK_PACKS))
 
 
 class AuditUnavailable(RuntimeError):
@@ -63,7 +79,7 @@ def available_rules(pack_ids=(), extra_dirs=None) -> list:
     """
     from pydrc.packs import loader
     out = []
-    for pack_id in (pack_ids or (DEFAULT_PACK,)):
+    for pack_id in (pack_ids or default_packs()):
         try:
             pack = loader.load_by_id(pack_id, extra=extra_dirs or user_pack_dirs())
         except Exception:
@@ -99,7 +115,7 @@ def run_audit(pdf_path: str, sheet_labels: dict, sheet_sources: dict,
 
     dirs = list(extra_pack_dirs or user_pack_dirs())
     packs = []
-    for pack_id in (pack_ids or (DEFAULT_PACK,)):
+    for pack_id in (pack_ids or default_packs()):
         packs.append(loader.load_by_id(pack_id, extra=dirs))
 
     doc = fitz.open(pdf_path)
