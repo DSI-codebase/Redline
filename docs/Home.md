@@ -25,6 +25,7 @@ to see related pages.
 - [[Component Labels]] — extract device/component tags (e.g. LT-10010)
 - [[Wire Export]] — produce label files for the printer
 - [[Design Rule Check]] — audit a set against its own conventions
+- [[Calculators]]: voltage drop, wire and conduit sizing, motors, power and estimating
 - [[PDF Tools]] — split, combine, insert, swap, delete, rotate, convert, crop
 
 ## Reference

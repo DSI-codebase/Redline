@@ -46,6 +46,7 @@ from .panels.wire_panel import WirePanel
 from .panels.component_panel import ComponentPanel
 from .panels.tools_panel import ToolsPanel, pdf_path_from_mime
 from .panels.audit_panel import AuditPanel
+from .panels.calculator_panel import CalculatorPanel
 from .panels.nav_panel import NavPanel
 
 
@@ -176,6 +177,7 @@ class MainWindow(QMainWindow):
         self.component_panel = ComponentPanel()
         self.tools_panel = ToolsPanel(self)
         self.audit_panel = AuditPanel()
+        self.calculator_panel = CalculatorPanel()
 
         self.todo_panel.activated.connect(self._jump_to)
         self.todo_panel.authorEditRequested.connect(self._edit_author)
@@ -254,6 +256,8 @@ class MainWindow(QMainWindow):
                                   "ComponentDock")
         tools_dock = self.tabs.add(self.tools_panel, "PDF Tools", "PdfToolsDock")
         audit_dock = self.tabs.add(self.audit_panel, "Audit", "AuditDock")
+        calc_dock = self.tabs.add(self.calculator_panel, "Calculators",
+                                  "CalculatorsDock")
         # Lay them out as one tab group between the Navigation (left) and
         # Comments (right) docks: [nav | main-tabs | comments]. Both horizontal
         # splits must happen *before* the tabify loop — splitDockWidget against
@@ -262,10 +266,11 @@ class MainWindow(QMainWindow):
         # while it's still a lone dock, then tab the other panes onto it.
         self.splitDockWidget(nav_dock, view_dock, Qt.Horizontal)
         self.splitDockWidget(view_dock, self.comment_dock, Qt.Horizontal)
-        for d in (todo_dock, wire_dock, comp_dock, tools_dock, audit_dock):
+        for d in (todo_dock, wire_dock, comp_dock, tools_dock, audit_dock,
+                  calc_dock):
             self.tabifyDockWidget(view_dock, d)
         self.main_docks = [view_dock, todo_dock, wire_dock, comp_dock,
-                           tools_dock, audit_dock]
+                           tools_dock, audit_dock, calc_dock]
         self.tabs.setCurrentWidget(self.view)   # Viewer is the default tab
 
         self._progress("Assembling the toolbar…", 92)
