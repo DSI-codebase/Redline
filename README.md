@@ -114,8 +114,8 @@ without needing access to that repository:
 pip install -r requirements-drc.txt
 ```
 
-Without it the Audit tab reports the rule library as unavailable and the rest
-of the app is unaffected. See [CI.md](CI.md) for the CI side.
+Without it the Audit and Calculators tabs report the rule library as
+unavailable and the rest of the app is unaffected. See [CI.md](CI.md) for the CI side.
 
 ### Tesseract (optional — only for scanned/raster pages)
 
@@ -218,7 +218,10 @@ app/
                              recent-file rules, workspaces (scan, no nesting),
                              copying a drawing's three files (never replacing)
   panels/                    Comment sidebar, TODO, Wire Numbers, Component Labels,
-                             PDF Tools, Navigation
+                             PDF Tools, Navigation, Audit, Calculators
+  audit/                     Design rule check: drawing to model, run, findings
+  calculators/               The Calculators tab: one description per PyDRC
+                             calculator, run and shown as text
   extraction/                Text extraction, OCR, wire parser/classifier, Claude assist,
                              Jev client (sheet roles)
   export/                    TODO (md/docx) and wire (xlsx/csv) exporters
