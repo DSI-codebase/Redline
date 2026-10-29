@@ -24,12 +24,11 @@ ADVISORY = ("Advisory. Confirm against the code book and the product listing: "
 _UNITS = (
     ("_ohm_per_kft", "ohm/kft"), ("_lb_per_kft", "lb/kft"), ("_lb_per_ft", "lb/ft"),
     ("_usd_per_kft", "USD/kft"), ("_usd_per_year", "USD a year"),
-    ("_kwh_per_year", "kWh a year"), ("_lb_per_ft", "lb/ft"),
-    ("_sidewall_lb_per_ft", "lb/ft"), ("_btu_hr", "BTU/hr"), ("_in2", "in2"),
+    ("_kwh_per_year", "kWh a year"), ("_btu_hr", "BTU/hr"), ("_in2", "in2"), ("_ft2", "ft2"),
     ("_cmil", "cmil"), ("_pct", "%"), ("_usd", "USD"), ("_kwh", "kWh"), ("_kvar", "kVAR"),
     ("_kva", "kVA"), ("_kw", "kW"), ("_hp", "hp"), ("_ka", "kA"), ("_hr", "h"),
     ("_ft", "ft"), ("_in", "in"), ("_lb", "lb"), ("_a", "A"), ("_v", "V"), ("_c", "C"),
-    ("_w", "W"),
+    ("_f", "F"), ("_w", "W"),
 )
 
 
@@ -72,7 +71,7 @@ def _value_lines(key, value, indent) -> List[str]:
     return [f"{pad}{label(key)}: {value_text(value)}"]
 
 
-def result_lines(result) -> List[str]:
+def result_lines(result, advisory=True) -> List[str]:
     """The result, one line per item."""
     lines = [TIERS.get(result.tier, result.tier)]
     if result.computed:
@@ -90,9 +89,22 @@ def result_lines(result) -> List[str]:
         lines += [f"  {c.render()}" for c in result.cites]
     if result.tables:
         lines += ["", "TABLES"]
-        lines += [f"  {t.note}" for t in result.tables]
-    lines += ["", ADVISORY]
+        lines += [f"  {note}" for note in dict.fromkeys(t.note for t in result.tables)]
+    if advisory:
+        lines += ["", ADVISORY]
     return lines
+
+
+def sections_lines(sections) -> List[str]:
+    """``[(heading, Result)]`` as text: one section each, the advisory once."""
+    if len(sections) == 1 and not sections[0][0]:
+        return result_lines(sections[0][1])
+    lines = []
+    for heading, result in sections:
+        if lines:
+            lines.append("")
+        lines += [f"== {heading} =="] + result_lines(result, advisory=False)
+    return lines + ["", ADVISORY]
 
 
 def input_lines(calc, raw: dict) -> List[str]:
@@ -101,6 +113,14 @@ def input_lines(calc, raw: dict) -> List[str]:
     out = []
     for f in calc.fields:
         v = raw.get(f.name)
+        if f.kind == "table":
+            rows = [r for r in (v or ()) if any(str(x).strip() for x in r.values() if x is not None)]
+            out.append(f"  {f.label}: " + ("(none)" if not rows else f"{len(rows)} rows"))
+            for i, r in enumerate(rows, 1):
+                cells = [f"{c.label} {str(r.get(c.name)).strip()}" + (f" {c.unit}" if c.unit else "")
+                         for c in f.columns if r.get(c.name) is not None and str(r.get(c.name)).strip()]
+                out.append(f"    {i}. " + ", ".join(cells))
+            continue
         if f.kind == "bool":
             shown = "yes" if v else "no"
         else:
@@ -111,8 +131,11 @@ def input_lines(calc, raw: dict) -> List[str]:
 
 
 def copy_text(calc, raw: dict, result, pydrc_version: str = "") -> str:
+    """``result`` is a Result, or ``[(heading, Result)]`` from a page that runs
+    several."""
     lines = [calc.title + (f" (PyDRC {pydrc_version}, {calc.id})" if pydrc_version else
                            f" ({calc.id})"), "", "INPUTS"]
     lines += input_lines(calc, raw)
-    lines += [""] + result_lines(result)
+    sections = result if isinstance(result, list) else [("", result)]
+    lines += [""] + sections_lines(sections)
     return "\n".join(lines) + "\n"

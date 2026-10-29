@@ -38,9 +38,19 @@ def _public_functions():
 
 
 def _accounted(name):
-    module = name.split(".")[0]
     return (specs.find(name) is not None or name in specs.HELPERS
-            or name in specs.LATER or f"{module}.*" in specs.LATER)
+            or any(name in c.covers for c in specs.all_calculators()))
+
+
+def _single():
+    """The calculators that are one PyDRC function, not a page that runs several."""
+    return [c for c in specs.all_calculators() if c.runner is None]
+
+
+def _all_fields(calc):
+    for f in calc.fields:
+        yield f
+        yield from f.columns
 
 
 VOLTAGE_DROP = {"size": "12", "current_a": "20", "length_ft": "100", "voltage": "240",
@@ -52,8 +62,8 @@ class TestTheDescriptionsMatchTheLibrary(unittest.TestCase):
     def test_every_field_is_a_parameter_and_every_required_parameter_a_field(self):
         """Injected: the field current_a renamed amps in a scratch description
         (red: not a parameter of conductors.voltage_drop)."""
-        calcs = specs.all_calculators()
-        self.assertGreaterEqual(len(calcs), 30)
+        calcs = _single()
+        self.assertGreaterEqual(len(calcs), 36)
         for calc in calcs:
             fn = calc.function()
             self.assertIsNotNone(fn, calc.id)
@@ -70,28 +80,29 @@ class TestTheDescriptionsMatchTheLibrary(unittest.TestCase):
 
     def test_every_public_calculator_is_on_a_page_or_named_with_its_reason(self):
         """Both directions: what PyDRC has is accounted for, and what the lists
-        name exists. Injected: conductors.metal_weight's description removed
-        (red: unaccounted); a HELPERS entry misspelled (red: names nothing)."""
+        name exists. Every public function of the eight modules is on a page,
+        run by a page (``covers``) or a helper. Injected: conductors.metal_weight's
+        description removed (red: unaccounted); a HELPERS entry misspelled (red:
+        names nothing); heat.temperature_rise dropped from its page's covers (red)."""
         found = _public_functions()
         self.assertGreaterEqual(len(found), 50)
         unaccounted = sorted(n for n in found if not _accounted(n))
         self.assertEqual(unaccounted, [], "a PyDRC calculator with no page and no reason")
-        for name in list(specs.HELPERS) + [n for n in specs.LATER if not n.endswith(".*")]:
+        covered = [n for c in specs.all_calculators() for n in c.covers]
+        for name in list(specs.HELPERS) + covered:
             self.assertIn(name, found, f"{name} names nothing in PyDRC")
-        for calc in specs.all_calculators():
+        for calc in _single():
             self.assertIn(calc.id, found)
-        for wildcard in (n for n in specs.LATER if n.endswith(".*")):
-            module = wildcard[:-2]
-            self.assertTrue(any(n.startswith(module + ".") for n in found), wildcard)
+        self.assertGreaterEqual(len(covered), 18)
 
     def test_every_list_of_choices_comes_from_the_library_and_is_not_empty(self):
         checked = 0
         for calc in specs.all_calculators():
-            for f in calc.fields:
+            for f in _all_fields(calc):
                 if f.kind == specs.CHOICE:
                     self.assertTrue(f.options(), f"{calc.id}.{f.name}")
                     checked += 1
-        self.assertGreaterEqual(checked, 40)
+        self.assertGreaterEqual(checked, 55)
         from pydrc.calc import conductors
         self.assertEqual(specs.find("conductors.voltage_drop").fields[0].options(),
                          conductors.sizes())
@@ -134,6 +145,11 @@ class TestRunning(unittest.TestCase):
         required input answers it with reasons, and none raises."""
         refused = 0
         for calc in specs.all_calculators():
+            if calc.runner is not None:
+                sections = specs.run(calc, {})
+                self.assertTrue(sections and not any(r.computed for _h, r in sections), calc.id)
+                refused += 1
+                continue
             params = inspect.signature(calc.function()).parameters
             required = any(p.default is p.empty and p.kind not in (p.VAR_KEYWORD, p.VAR_POSITIONAL)
                            for p in params.values())
@@ -142,7 +158,7 @@ class TestRunning(unittest.TestCase):
                 self.assertFalse(r.computed, calc.id)
                 self.assertTrue(r.reasons, calc.id)
                 refused += 1
-        self.assertGreaterEqual(refused, 30)
+        self.assertGreaterEqual(refused, 35)
 
     def test_copy_holds_the_inputs_blanks_included_and_the_whole_result(self):
         calc = specs.find("conductors.voltage_drop")
@@ -168,6 +184,147 @@ class TestRunning(unittest.TestCase):
         self.assertIn("has no conductors.no_such_calculator", str(cm.exception))
 
 
+#: A 10 hp motor at 480 V on a 30 A breaker, fed through a breaker.
+SCHEDULE = {"supply_voltage": "480", "supply_phases": "3",
+            "supply_ocpd_device": "inverse_time_breaker",
+            "loads": [{"tag": "M1", "kind": "motor_table", "connection": "3PH", "voltage": "480",
+                       "hp": "10", "motor_type": "squirrel_cage",
+                       "branch_device": "inverse_time_breaker", "branch_rating_a": "30"},
+                      {}]}
+#: A 10 kA contactor on a branch and a 65 kA feeder breaker, against 22 kA.
+SCCR = {"system_voltage_v": "480", "available_fault_ka": "22",
+        "components": [{"tag": "K1", "kind": "contactor", "circuit": "M1", "sccr_ka": "10",
+                        "voltage_v": "480", "rating_source": "label"},
+                       {"tag": "CB1", "kind": "molded_case_circuit_breaker", "circuit": "feeder",
+                        "sccr_ka": "65", "voltage_v": "480", "rating_source": "label"}]}
+#: 500 W in a sealed indoor 48 x 36 x 12 in enclosure, 40 C outside, 35 C wanted inside.
+HEAT = {"components": [{"tag": "VFD1", "quantity": "1", "watts_each": "500",
+                        "source": "datasheet", "verified": "yes"}],
+        "margin_pct": "0", "height_in": "48", "width_in": "36", "depth_in": "12",
+        "sealed": "yes", "indoor": "yes", "insulated": "no", "unit": "C",
+        "outside_max": "40", "inside_max": "35", "rated_btu_hr": "2500"}
+
+
+def _sections(calc_id, raw):
+    return dict(specs.run(specs.find(calc_id), raw))
+
+
+@needs_pydrc
+class TestTheListPages(unittest.TestCase):
+    """A table's cells are text, and a row left empty is not an entry. Every
+    expected figure here was worked by hand, not read back from PyDRC."""
+
+    def test_a_table_is_passed_to_the_library_as_its_own_rows(self):
+        """The form's text cells, with an empty row added by mistake, give what
+        a direct call with numbers gives. Injected: table_rows keeping empty
+        rows (red: conduit fill refused conductor 2, the empty row, as having
+        no quantity)."""
+        from pydrc.calc import raceway
+        fill = specs.call(specs.find("raceway.conduit_fill"), {
+            "raceway": "emt", "nipple": False,
+            "conductor_list": [{"qty": "3", "wire_type": "THHN", "size": "4/0", "od_in": "",
+                                "label": ""}, {"qty": "", "wire_type": "", "size": ""}]})
+        self.assertTrue(fill.computed, fill.reasons)
+        self.assertEqual(dict(fill.values),
+                         dict(raceway.conduit_fill("emt", [{"qty": 3, "wire_type": "THHN",
+                                                            "size": "4/0"}]).values))
+        self.assertEqual(fill["minimum_trade_size"], "2")
+        segments = [{"type": "straight", "length_ft": 200, "incline_deg": 0},
+                    {"type": "bend", "angle_deg": 90, "radius_ft": 3},
+                    {"type": "straight", "length_ft": 100, "incline_deg": 0}]
+        pull = specs.call(specs.find("raceway.cable_pull"), {
+            "raceway_id_in": "4.026", "cable_count": "3", "cable_od_in": "1.2",
+            "cable_weight_lb_per_ft": "1.5", "friction": "0.35",
+            "segments": [{k: str(v) for k, v in seg.items()} for seg in segments] + [{}]})
+        self.assertTrue(pull.computed, pull.reasons)
+        self.assertEqual(dict(pull.values),
+                         dict(raceway.cable_pull(4.026, 3, 1.2, 1.5, segments, 0.35).values))
+
+    def test_the_load_schedule_by_hand(self):
+        """Table 430.250 gives 14 A for 10 hp in the 460 V column, and the
+        supply conductor carries 125% of the largest motor: 17.5 A."""
+        s = _sections("panel.load_schedule", SCHEDULE)
+        self.assertEqual(s["Panel full-load current"]["flc_a"], 14.0)
+        self.assertEqual(s["Supply conductor ampacity, NEC"]["ampacity_a"], 17.5)
+        self.assertEqual(s["Supply conductor ampacity, UL 508A"]["ampacity_a"], 17.5)
+        self.assertEqual(s["Load M1"]["current_a"], 14)
+        self.assertIn("Branch M1", s)
+        self.assertEqual(len(s), 8, list(s))
+
+    def test_the_panel_sccr_by_hand(self):
+        """The panel takes its lowest circuit, M1 at 10 kA, which is 12 kA short
+        of the 22 kA available. Each power circuit has its own section."""
+        s = _sections("sccr.panel_rating", SCCR)
+        self.assertEqual(s["Panel SCCR"]["sccr_ka"], 10.0)
+        self.assertEqual(s["Panel SCCR"]["limiting_component"], "K1")
+        self.assertEqual(s["Against the target"]["verdict"], "falls_short")
+        self.assertEqual(s["Against the target"]["short_circuits"][0]["shortfall_ka"], 12.0)
+        self.assertEqual(s["Circuit M1"]["sccr_ka"], 10.0)
+        self.assertEqual(s["Circuit feeder"]["sccr_ka"], 65.0)
+
+    def test_the_enclosure_heat_by_hand(self):
+        """2(48x36 + 48x12 + 36x12)/144 = 38 ft2. 500 W x 3.413 = 1706.5 BTU/hr,
+        and the walls add 1.25 x 38 x 9 F = 427.5: 2134 BTU/hr, under the 2500
+        rated."""
+        s = _sections("heat.enclosure_heat", HEAT)
+        self.assertEqual(s["Surface area"]["area_ft2"], 38.0)
+        self.assertEqual(s["Cooling required"]["required_btu_hr"], 2134.0)
+        self.assertTrue(s["Against the selected cooling"].computed)
+        self.assertNotIn("Heat load, the rated parts alone", s)
+
+    def test_a_part_with_no_watts_makes_the_load_a_floor_and_says_so(self):
+        raw = dict(HEAT, components=HEAT["components"] + [{"tag": "PS1"}])
+        s = _sections("heat.enclosure_heat", raw)
+        self.assertFalse(s["Heat load"].computed)
+        self.assertIn("PS1: missing watts", s["Heat load"].reasons)
+        self.assertEqual(s["Heat load, the rated parts alone"]["total_w"], 500.0)
+        self.assertIn("Cooling required, at least", s)
+        self.assertFalse(s["Against the selected cooling"].computed)
+
+    def test_a_cell_that_is_not_a_number_is_named_by_its_row(self):
+        """Injected: _Build.number returning None for text it cannot read
+        without a problem (red: the schedule ran with the volts missing)."""
+        rows = [dict(SCHEDULE["loads"][0], voltage="four-eighty")]
+        sections = specs.run(specs.find("panel.load_schedule"), dict(SCHEDULE, loads=rows))
+        self.assertEqual(len(sections), 1)
+        self.assertFalse(sections[0][1].computed)
+        self.assertIn("load 1, volts: 'four-eighty' is not a number", sections[0][1].reasons)
+
+    def test_a_yes_or_no_left_blank_is_asked_for_unless_the_library_states_a_default(self):
+        """The enclosure's three answers have no default. A load running with
+        the others and a supply device not 100% rated are PyDRC's stated
+        defaults. Injected: yes_no(default=False) for sealed (red: no problem)."""
+        sections = specs.run(specs.find("heat.enclosure_heat"),
+                             dict(HEAT, sealed="", insulated="maybe"))
+        reasons = sections[0][1].reasons
+        self.assertEqual(len(sections), 1)
+        self.assertIn("missing whether the enclosure is sealed (yes or no)", reasons)
+        self.assertIn("whether it is insulated: 'maybe' is neither yes nor no", reasons)
+        blank = _sections("panel.load_schedule", SCHEDULE)
+        said = _sections("panel.load_schedule",
+                         dict(SCHEDULE, hundred_percent_rated="no",
+                              loads=[dict(SCHEDULE["loads"][0], simultaneous="yes")]))
+        self.assertEqual({h: dict(r.values) for h, r in blank.items()},
+                         {h: dict(r.values) for h, r in said.items()})
+
+    def test_a_list_with_no_rows_or_a_row_with_no_circuit_is_refused(self):
+        r = specs.run(specs.find("panel.load_schedule"), dict(SCHEDULE, loads=[{}]))[0][1]
+        self.assertIn("no loads: add a row for each load the supply feeds", r.reasons)
+        rows = [dict(SCCR["components"][0], circuit="")]
+        r = specs.run(specs.find("sccr.panel_rating"), dict(SCCR, components=rows))[0][1]
+        self.assertIn("missing component 1's circuit: feeder, or its branch circuit", r.reasons)
+
+    def test_copy_holds_each_row_and_every_section_with_the_advisory_once(self):
+        calc = specs.find("sccr.panel_rating")
+        text = render.copy_text(calc, SCCR, specs.run(calc, SCCR), "0.14.0")
+        self.assertIn("  Power circuit components: 2 rows\n", text)
+        self.assertIn("    1. Tag K1, Kind contactor, Circuit M1, Marked SCCR 10 kA, At 480 V, "
+                      "Source label\n", text)
+        self.assertIn("== Panel SCCR ==\n", text)
+        self.assertIn("== Circuit feeder ==\n", text)
+        self.assertEqual(text.count(render.ADVISORY), 1)
+
+
 class TestWithoutTheLibrary(unittest.TestCase):
     def test_status_reports_unavailable_with_the_install_instructions(self):
         from app import calculators
@@ -187,17 +344,48 @@ class TestWithoutTheLibrary(unittest.TestCase):
         self.assertIn("pip install -r requirements-drc.txt", message)
 
     def test_the_manual_names_every_page(self):
-        manual = open(os.path.join(os.path.dirname(__file__), os.pardir, "docs",
-                                   "Calculators.md"), encoding="utf-8").read()
+        with open(os.path.join(os.path.dirname(__file__), os.pardir, "docs",
+                               "Calculators.md"), encoding="utf-8") as fh:
+            manual = fh.read()
         for page in specs.PAGES:
             self.assertIn(f"**{page.title}**", manual, page.title)
         words = {5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine"}
         self.assertIn(f"grouped on {words[len(specs.PAGES)]} pages", manual)
 
+    def test_what_the_tab_shows_carries_no_semicolon_or_dash(self):
+        """The house's rule for text a reader is handed: every title, summary,
+        label, unit and hint, and the result's fixed lines. Injected: one hint
+        back to "three cables; blank lets the method choose" (red)."""
+        shown = list(render.TIERS.values()) + [render.ADVISORY]
+        for calc in specs.all_calculators():
+            shown += [calc.title, calc.summary]
+            for f in _all_fields(calc):
+                shown += [f.label, f.unit, f.hint]
+        self.assertGreaterEqual(len(shown), 400)
+        for text in shown:
+            for mark in (";", "\u2014", "\u2013", " - "):
+                self.assertNotIn(mark, text)
+
+    def test_each_module_imports_first_in_a_fresh_interpreter(self):
+        """``lists`` imports ``specs``, and ``specs`` runs ``lists``' builders,
+        so the order the two load in is a cycle waiting to happen. Every test
+        here imports ``specs`` first. Injected: specs reading a builder from
+        lists while it loads (red: lists first, partially initialized)."""
+        import subprocess
+        import sys
+        root = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)
+        mods = ("app.calculators", "app.calculators.specs", "app.calculators.lists",
+                "app.calculators.render")
+        for mod in mods:
+            r = subprocess.run([sys.executable, "-c", f"import {mod}"], cwd=root,
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, f"import {mod} alone: {r.stderr[-400:]}")
+
     def test_the_descriptions_load_without_the_library(self):
-        self.assertGreaterEqual(len(specs.all_calculators()), 30)
+        self.assertGreaterEqual(len(specs.all_calculators()), 39)
         self.assertEqual([p.title for p in specs.PAGES],
-                         ["Conductors", "Voltage drop", "Raceway", "Motors", "Power", "Estimating"])
+                         ["Conductors", "Voltage drop", "Raceway", "Motors", "Panel", "Power",
+                          "Estimating"])
 
 
 @unittest.skipUnless(QT_OK, QT_REASON)
@@ -263,6 +451,44 @@ class TestThePanel(unittest.TestCase):
         self.assertFalse(p.split.isEnabled())
         self.assertIn("The calculators are unavailable", p.status_label.text())
         self.assertIn("PyDRC is not installed here.", p.status_label.text())
+
+    def test_a_list_page_takes_rows_and_shows_every_section(self):
+        """Add row gives an empty row, which is not an entry; Remove row takes
+        the last when none is selected."""
+        from app.panels.calculator_panel import _TableField
+        p = self._panel()
+        p.show_calculator(specs.find("heat.enclosure_heat"))
+        table = p._widgets["components"]
+        self.assertIsInstance(table, _TableField)
+        self.assertEqual(table.table.rowCount(), 1)
+        for k, v in HEAT.items():
+            p.set_field(k, v)
+        table.btn_add.click()
+        self.assertEqual(table.table.rowCount(), 2)
+        p.calculate()
+        text = p.output.toPlainText()
+        self.assertIn("== Cooling required ==", text)
+        self.assertIn("  required (BTU/hr): 2134", text)
+        self.assertIn("  area (ft2): 38", text)
+        self.assertEqual(text.count(render.ADVISORY), 1)
+        table.btn_remove.click()
+        self.assertEqual(table.rows()[0]["watts_each"], "500")
+        self.assertEqual(table.table.rowCount(), 1)
+
+    def test_rows_survive_a_page_change_and_clear_leaves_one_empty_row(self):
+        """Injected: _TableField.rows() reading only the text cells (red: the
+        choice column's yes was lost)."""
+        p = self._panel()
+        heat, vd = specs.find("heat.enclosure_heat"), specs.find("conductors.voltage_drop")
+        p.show_calculator(heat)
+        p.set_field("components", HEAT["components"])
+        p.show_calculator(vd)
+        p.show_calculator(heat)
+        rows = specs.table_rows(p.form_values()["components"])
+        self.assertEqual(rows, HEAT["components"])
+        p.clear()
+        self.assertEqual(p._widgets["components"].table.rowCount(), 1)
+        self.assertEqual(specs.table_rows(p.form_values()["components"]), [])
 
     def test_the_tab_sits_with_the_main_panes(self):
         from app.main_window import MainWindow, _UI_STATE_VERSION

@@ -5,7 +5,17 @@ what kind of field holds it. The form is built from these and nothing else, so
 adding a calculator is adding a description. ``tests/test_calculators.py``
 holds every description to the function's own signature, and holds the list of
 descriptions to the library: a public calculator PyDRC adds is either described
-here or named in ``LATER`` or ``HELPERS`` with the reason, or the test fails.
+here, covered by a page that runs several (``covers``), or named in ``HELPERS``
+with the reason, or the test fails.
+
+Most calculators take plain fields. A few take a list (conductors in a
+raceway, a pull's segments, a panel's loads or components), held in a TABLE
+field whose columns are described the same way. Three calculators run several
+PyDRC functions on one form: the panel load schedule, the panel SCCR and the
+enclosure's heat. They are described here with the rest, and their builders,
+which turn the rows into PyDRC's own input types, are
+``app/calculators/lists.py``. That module imports this one, so this one
+imports it only when such a page runs (``_runner``).
 
 Choices that PyDRC lists (conductor sizes, raceways, motor types) are asked of
 PyDRC when the form is built, never copied here.
@@ -18,7 +28,9 @@ import inspect
 from dataclasses import dataclass, field
 from typing import Callable, Optional, Sequence, Tuple, Union
 
-NUMBER, CHOICE, BOOL = "number", "choice", "bool"
+NUMBER, CHOICE, BOOL, TABLE = "number", "choice", "bool", "table"
+#: A yes-or-no answer that may be left unanswered, unlike BOOL's checkbox.
+YES_NO = ("yes", "no")
 
 MATERIALS = ("copper", "aluminum")
 SYSTEMS = ("dc", "1ph", "3ph")
@@ -71,6 +83,18 @@ def _lead_insulations():
                  .data["insulation_thermal_resistivity_k_m_per_w"])
 
 
+def _panel_choices(name):
+    def choices():
+        from pydrc.calc import panel
+        return tuple(getattr(panel, name))
+    return choices
+
+
+def _sccr_kinds():
+    from pydrc.calc import sccr
+    return tuple(sccr.kinds())
+
+
 def _lssi(key):
     def choices():
         from pydrc.calc import estimating
@@ -80,13 +104,14 @@ def _lssi(key):
 
 @dataclass(frozen=True)
 class Field:
-    name: str                 # the function's parameter
+    name: str                 # the function's parameter, or a TABLE column's key
     label: str
     kind: str = NUMBER
     unit: str = ""
     choices: Union[Sequence[str], Callable[[], Sequence[str]], None] = None
     editable: bool = False    # a choice list that also takes typed text
     hint: str = ""
+    columns: Tuple["Field", ...] = ()   # a TABLE's columns, each a Field
 
     def options(self) -> Tuple[str, ...]:
         c = self.choices() if callable(self.choices) else (self.choices or ())
@@ -99,6 +124,10 @@ class Calculator:
     title: str
     fields: Tuple[Field, ...]
     summary: str = ""
+    #: A page that runs several PyDRC functions: runner(raw) -> [(heading, Result)].
+    runner: Optional[Callable] = None
+    #: The PyDRC functions such a page runs, "module.function" each.
+    covers: Tuple[str, ...] = ()
 
     @property
     def module(self) -> str:
@@ -123,24 +152,66 @@ class Page:
     calculators: Tuple[Calculator, ...] = field(default_factory=tuple)
 
 
-def F(name, label, kind=NUMBER, unit="", choices=None, editable=False, hint=""):
-    return Field(name, label, kind, unit, choices, editable, hint)
+def F(name, label, kind=NUMBER, unit="", choices=None, editable=False, hint="", columns=()):
+    return Field(name, label, kind, unit, choices, editable, hint, tuple(columns))
 
 
-def C(id, title, *fields, summary=""):
-    return Calculator(id, title, tuple(fields), summary)
+def C(id, title, *fields, summary="", runner=None, covers=()):
+    return Calculator(id, title, tuple(fields), summary, runner, tuple(covers))
 
 
 SIZE = F("size", "Conductor size", CHOICE, choices=_sizes, editable=True, hint="AWG or kcmil")
 MATERIAL = F("material", "Material", CHOICE, choices=MATERIALS)
 SYSTEM = F("system", "System", CHOICE, choices=SYSTEMS)
 CONDUIT = F("installation", "Conduit", CHOICE, choices=CONDUITS,
-            hint="Chapter 9 Table 9's columns; leave blank for DC")
-PF = F("power_factor", "Power factor", hint="0 to 1; leave blank for DC")
+            hint="Chapter 9 Table 9's columns. Leave blank for DC")
+PF = F("power_factor", "Power factor", hint="0 to 1, blank for DC")
 COLUMN = F("column_c", "Temperature column", CHOICE, "C", COLUMNS)
 SETS = F("parallel_sets", "Parallel sets", hint="blank for one set")
 TEMP = F("conductor_temp_c", "Conductor temperature", unit="C",
          hint="blank for the tables' 75 C")
+
+
+
+def _runner(name):
+    """The builder ``lists.<name>``, imported when its page runs: ``lists``
+    imports this module, so importing it while this one loads is a cycle."""
+    def run_page(raw):
+        from . import lists
+        return getattr(lists, name)(raw)
+    run_page.__name__ = name
+    return run_page
+
+
+#: The Panel page's lists. A blank yes or no takes PyDRC's stated default
+#: where its type has one, and each column's hint says which.
+LOAD_COLUMNS = (
+    F("tag", "Tag", "text"), F("kind", "Kind", CHOICE, choices=_panel_choices("LOAD_KINDS")),
+    F("connection", "Connection", CHOICE, choices=_panel_choices("CONNECTIONS")),
+    F("voltage", "Volts", unit="V"), F("hp", "hp"), F("current_a", "Amps", unit="A"),
+    F("kva", "kVA"), F("kw", "kW"), F("power_factor", "PF"),
+    F("simultaneous", "Runs with the others", CHOICE, choices=YES_NO,
+      hint="blank: yes, the larger totals"),
+    F("motor_type", "Motor type", CHOICE, choices=_motor_types),
+    F("branch_device", "Branch device", CHOICE, choices=_panel_choices("BRANCH_DEVICES")),
+    F("branch_rating_a", "Branch rating", unit="A"),
+)
+
+COMPONENT_COLUMNS = (
+    F("tag", "Tag", "text"), F("kind", "Kind", CHOICE, choices=_sccr_kinds),
+    F("circuit", "Circuit", "text", hint="feeder, or the branch circuit's name"),
+    F("sccr_ka", "Marked SCCR", unit="kA"), F("voltage_v", "At", unit="V"),
+    F("rating_source", "Source", "text"), F("sb41_row", "SB4.1 row"),
+    F("control_circuit", "Control circuit", CHOICE, choices=YES_NO, hint="blank: no"),
+)
+
+HEAT_COLUMNS = (
+    F("tag", "Tag", "text"), F("quantity", "Qty"), F("watts_each", "Watts each", unit="W"),
+    F("manufacturer", "Manufacturer", "text"), F("catalog", "Catalog", "text"),
+    F("source", "Source of the watts", "text"),
+    F("verified", "Checked against a datasheet", CHOICE, choices=YES_NO, hint="blank: no"),
+)
+
 
 PAGES: Tuple[Page, ...] = (
     Page("Conductors", (
@@ -239,9 +310,37 @@ PAGES: Tuple[Page, ...] = (
           F("cable_count", "Cables"), F("raceway_id_in", "Raceway internal diameter", unit="in"),
           F("cable_od_in", "Cable diameter", unit="in"),
           F("configuration", "Configuration", CHOICE, choices=("triangular", "cradled"),
-            hint="three cables; blank lets the method choose")),
+            hint="three cables. Blank lets the method choose")),
         C("raceway.cable_weight_estimate", "Cable weight estimate",
           F("wire_type", "Wire type", CHOICE, choices=WIRE_TYPES, editable=True), SIZE, MATERIAL),
+        C("raceway.conduit_fill", "Conduit fill (Chapter 9)",
+          F("raceway", "Raceway", CHOICE, choices=_raceways),
+          F("conductor_list", "Conductors", TABLE, columns=(
+              F("qty", "Qty"), F("wire_type", "Wire type", CHOICE, choices=WIRE_TYPES, editable=True),
+              F("size", "Size", CHOICE, choices=_sizes, editable=True),
+              F("od_in", "Or diameter", unit="in"), F("label", "Label", "text"))),
+          F("trade_size", "Trade size to evaluate", CHOICE, choices=_trade_sizes,
+            hint="blank for the smallest that holds them"),
+          F("nipple", "A nipple of 24 in or less", BOOL),
+          summary="Each row is a wire type and size, or a cable by its diameter."),
+        C("raceway.cable_pull", "Cable pulling tension",
+          F("raceway_id_in", "Raceway internal diameter", unit="in"),
+          F("cable_count", "Cables"), F("cable_od_in", "Cable diameter", unit="in"),
+          F("cable_weight_lb_per_ft", "Weight per cable", unit="lb/ft"),
+          F("segments", "Segments, from the pulling end", TABLE, columns=(
+              F("type", "Type", CHOICE, choices=("straight", "bend")),
+              F("length_ft", "Length", unit="ft"), F("incline_deg", "Incline", unit="deg"),
+              F("angle_deg", "Bend angle", unit="deg"), F("radius_ft", "Bend radius", unit="ft"))),
+          F("friction", "Coefficient of friction", hint="the lubricant's and the jacket's"),
+          F("configuration", "Configuration", CHOICE, choices=("triangular", "cradled"),
+            hint="three cables. Blank lets the method choose"),
+          F("conductor_cmil", "Conductor area", unit="cmil", hint="with material, for the tension limit"),
+          F("material", "Conductor material", CHOICE, choices=MATERIALS),
+          F("max_sidewall_lb_per_ft", "Sidewall pressure limit", unit="lb/ft", hint="optional"),
+          F("device_limit_lb", "Pulling device limit", unit="lb", hint="optional"),
+          F("min_clearance_in", "Minimum clearance", unit="in", hint="optional"),
+          summary="Straight segments take a length and an incline (uphill positive). "
+                  "Bends take an angle and a radius."),
     )),
     Page("Motors", (
         C("motors.full_load_current", "Motor full-load current (Tables 430.248, 430.250)",
@@ -256,15 +355,58 @@ PAGES: Tuple[Page, ...] = (
           F("termination_c", "Termination rating", CHOICE, "C", COLUMNS),
           F("ambient_c", "Ambient", unit="C"),
           F("branch_ocpd_a", "Branch device, from the drive maker", unit="A",
-            hint="optional; sizes the grounding conductor")),
+            hint="optional, sizes the grounding conductor")),
         C("motors.vfd_cable_guide", "Drive cable guide", F("voltage", "Voltage", unit="V")),
+    )),
+    Page("Panel", (
+        C("panel.load_schedule", "Panel load schedule",
+          F("supply_voltage", "Supply voltage", unit="V"),
+          F("supply_phases", "Supply phases", CHOICE, choices=("1", "3")),
+          F("supply_ocpd_device", "Supply overcurrent device", CHOICE,
+            choices=_panel_choices("SUPPLY_DEVICES")),
+          F("hundred_percent_rated", "Listed for 100% operation", CHOICE, choices=YES_NO,
+            hint="blank: no"),
+          F("load_side_ampacity_a", "Load-side ampacity, UL 508A 32.3.1(b)", unit="A",
+            hint="optional"),
+          F("loads", "Loads", TABLE, columns=LOAD_COLUMNS),
+          summary="The full-load current, the supply conductor, and the largest and smallest "
+                  "supply device, under the NEC and UL 508A, with each load and branch.",
+          runner=_runner("load_schedule"),
+          covers=("panel.schedule", "panel.full_load_current", "panel.supply_conductor_ampacity",
+                  "panel.max_supply_ocpd", "panel.min_supply_ocpd", "panel.load_current",
+                  "panel.branch_check")),
+        C("sccr.panel_rating", "Panel SCCR",
+          F("system_voltage_v", "System voltage", unit="V"),
+          F("available_fault_ka", "Available fault current", unit="kA", hint="optional"),
+          F("required_sccr_ka", "Required SCCR", unit="kA", hint="optional"),
+          F("components", "Power circuit components", TABLE, columns=COMPONENT_COLUMNS),
+          summary="UL 508A's basic method: each circuit takes its lowest-rated component, "
+                  "and the panel its lowest circuit.",
+          runner=_runner("panel_rating"),
+          covers=("sccr.panel_sccr", "sccr.panel_sccr_ceiling", "sccr.compare", "sccr.circuit_sccr",
+                  "sccr.component_rating")),
+        C("heat.enclosure_heat", "Enclosure heat and cooling",
+          F("components", "Parts that give off heat", TABLE, columns=HEAT_COLUMNS),
+          F("margin_pct", "Safety margin", unit="%", hint="0 for none"),
+          F("height_in", "Height", unit="in"), F("width_in", "Width", unit="in"),
+          F("depth_in", "Depth", unit="in"),
+          F("sealed", "Sealed", CHOICE, choices=YES_NO), F("indoor", "Indoors", CHOICE, choices=YES_NO),
+          F("insulated", "Insulated", CHOICE, choices=YES_NO),
+          F("unit", "Temperature unit", CHOICE, choices=("C", "F")),
+          F("outside_max", "Highest outside"), F("inside_max", "Highest wanted inside"),
+          F("rated_btu_hr", "Selected cooling, rated", unit="BTU/hr", hint="optional"),
+          summary="Hoffman's method: watts plus the walls' share, for a sealed indoor "
+                  "enclosure.",
+          runner=_runner("enclosure_heat"),
+          covers=("heat.heat_load", "heat.heat_load_floor", "heat.surface_area",
+                  "heat.required_cooling", "heat.temperature_rise", "heat.cooling_check")),
     )),
     Page("Power", (
         C("power.convert", "Power conversion",
           SYSTEM, F("voltage", "Voltage", unit="V"),
           F("known", "Known quantity", CHOICE, choices=("amps", "kw", "kva", "hp")),
-          F("value", "Value"), F("power_factor", "Power factor", hint="0 to 1; blank for DC"),
-          F("efficiency", "Efficiency", hint="0 to 1; needed for horsepower")),
+          F("value", "Value"), F("power_factor", "Power factor", hint="0 to 1, blank for DC"),
+          F("efficiency", "Efficiency", hint="0 to 1, needed for horsepower")),
     )),
     Page("Estimating", (
         C("estimating.mcap_savings", "MCAP labor savings",
@@ -297,21 +439,14 @@ PAGES: Tuple[Page, ...] = (
     )),
 )
 
-#: Public PyDRC functions with no page yet, and why. The list-input pages come
-#: next (the PyDRC plan's P8 step 7, second part); a function that appears in
-#: PyDRC and in none of PAGES, LATER or HELPERS fails tests/test_calculators.py.
-LATER = {
-    "raceway.conduit_fill": "a list of conductors",
-    "raceway.cable_pull": "a list of segments",
-    "panel.*": "a list of loads",
-    "sccr.*": "a list of components",
-    "heat.*": "a list of components and an enclosure",
-}
 #: Public PyDRC functions that are not calculators: they list or spell things.
+#: A function that appears in PyDRC and on no page, in no page's ``covers`` and
+#: not here fails tests/test_calculators.py.
 HELPERS = {
     "conductors.sizes", "conductors.normalize_size", "conductors.size_label",
     "conductors.standard_ratings", "raceway.raceways", "raceway.trade_sizes",
     "motors.horsepower", "motors.motor_types", "estimating.defaults",
+    "sccr.kinds", "sccr.sb41_supplied",
 }
 
 
@@ -350,6 +485,9 @@ def call(calc: Calculator, raw: dict):
         if f.kind == BOOL:
             kwargs[f.name] = bool(value)
             continue
+        if f.kind == TABLE:
+            kwargs[f.name] = table_rows(value)
+            continue
         text = "" if value is None else str(value).strip()
         if text:
             kwargs[f.name] = text
@@ -359,3 +497,24 @@ def call(calc: Calculator, raw: dict):
                 continue
             kwargs[f.name] = None
     return fn(**kwargs)
+
+
+def table_rows(value) -> list:
+    """A TABLE field's rows as dicts of the cells that hold something; a row
+    with nothing in it is left out, so an empty row added by mistake is not a
+    blank entry."""
+    rows = []
+    for row in value or ():
+        cells = {k: str(v).strip() for k, v in (row or {}).items()
+                 if v is not None and str(v).strip()}
+        if cells:
+            rows.append(cells)
+    return rows
+
+
+def run(calc: Calculator, raw: dict) -> list:
+    """``[(heading, Result)]``: one section for a single function, several for a
+    page that runs more than one."""
+    if calc.runner is not None:
+        return calc.runner(raw)
+    return [("", call(calc, raw))]
