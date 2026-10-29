@@ -98,7 +98,8 @@ DEFAULTS: dict = {
     "jev/sheet_roles": False,
     "jev/api_key": "",
     # design rule check
-    "audit/packs": json.dumps(["drc-base"]),
+    # Empty means the packs PyDRC runs by default (audit.runner.default_packs)
+    "audit/packs": json.dumps([]),
     "audit/disabled_rules": json.dumps([]),
     "audit/severity_overrides": json.dumps({}),
     "audit/draw_on_sheet": True,
@@ -524,8 +525,9 @@ class AppConfig:
         return value if isinstance(value, type(fallback)) else fallback
 
     def audit_packs(self) -> list:
-        packs = self._json_setting("audit/packs", ["drc-base"])
-        return [str(p) for p in packs if str(p).strip()] or ["drc-base"]
+        """The packs named in settings; empty runs the library's default."""
+        packs = self._json_setting("audit/packs", [])
+        return [str(p) for p in packs if str(p).strip()]
 
     def set_audit_packs(self, packs: list) -> None:
         self.set("audit/packs", json.dumps([str(p) for p in packs]))

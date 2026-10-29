@@ -7,6 +7,7 @@ has the library must still open for someone who does not.
 """
 
 import os
+import re
 import shutil
 import tempfile
 import unittest
@@ -22,6 +23,7 @@ from app.audit.findings import (AuditRun, Coverage, Finding, Waiver,
 from app.model.document import Document
 from app.model.storage import SidecarDB, sidecar_path
 from tests import _el_sheets as el
+from tests._qt import QT_OK, REASON as QT_REASON
 
 HAVE_PYDRC = audit.available()
 needs_pydrc = unittest.skipUnless(HAVE_PYDRC, "PyDRC is not installed")
@@ -337,11 +339,83 @@ class TestRunner(unittest.TestCase):
     def test_cancellation(self):
         self.assertTrue(self._run(cancel=lambda: True).cancelled)
 
+    def test_the_run_records_the_default_packs(self):
+        from app.audit.runner import default_packs
+        packs = [p.partition("@")[0] for p in self._run().run.packs]
+        self.assertEqual(tuple(packs), default_packs())
+
     def test_keys_are_stable_across_runs(self):
         # Waivers are keyed on this; if it moved, every waiver would evaporate
         # on the next audit.
         self.assertEqual({f.key for f in self._run().findings},
                          {f.key for f in self._run().findings})
+
+
+class TestDefaultPacks(unittest.TestCase):
+    """Which packs run when the settings name none.
+
+    PyDRC 0.9.0 moved its electrical rules from drc-base into erc-nec-2026.
+    This app named drc-base itself, so against that library it ran the
+    drafting rules alone, with no error, and every other audit test here
+    passed. These are the tests that notice."""
+
+    @needs_pydrc
+    def test_the_library_decides(self):
+        from pydrc.packs import loader
+        from app.audit.runner import FALLBACK_PACKS, default_packs
+        self.assertEqual(default_packs(),
+                         tuple(getattr(loader, "DEFAULT_PACKS", FALLBACK_PACKS)))
+
+    @needs_pydrc
+    def test_the_rules_offered_by_default_include_the_electrical_ones(self):
+        from app.audit.runner import available_rules
+        ids = {rule[0] for rule in available_rules()}
+        self.assertTrue({i for i in ids if i.startswith("DRC-")}, ids)
+        self.assertTrue({i for i in ids if i.startswith("ERC-")},
+                        "an audit with no packs named runs no electrical rule")
+
+    @needs_pydrc
+    def test_a_library_from_before_the_split_runs_drc_base(self):
+        from pydrc.packs import loader
+        from app.audit.runner import default_packs
+        saved = loader.__dict__.pop("DEFAULT_PACKS", None)
+        try:
+            self.assertEqual(default_packs(), ("drc-base",))
+        finally:
+            if saved is not None:
+                loader.DEFAULT_PACKS = saved
+
+    @needs_pydrc
+    def test_the_manual_names_the_packs_that_run(self):
+        from app.audit.runner import default_packs
+        here = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(here, "..", "docs", "Design Rule Check.md"),
+                  encoding="utf-8") as fh:
+            manual = " ".join(fh.read().split())
+        m = re.search(r"The rules come from (\w+) packs in the rule library: "
+                      r"(.*?)\. The library has", manual)
+        self.assertIsNotNone(m, "the manual no longer says which packs run")
+        named = re.findall(r"`([\w-]+)`", m.group(2))
+        self.assertEqual(tuple(named), default_packs())
+        self.assertEqual(m.group(1), {1: "one", 2: "two", 3: "three"}[len(named)])
+
+    @unittest.skipUnless(QT_OK, QT_REASON)
+    def test_the_stored_setting_defaults_to_the_library(self):
+        """Nothing in the app writes this key, so its default is every
+        install's answer. It said drc-base."""
+        from app.config import AppConfig
+        cfg = AppConfig()
+        saved = cfg.s.value("audit/packs")
+        cfg.s.remove("audit/packs")
+        try:
+            self.assertEqual(cfg.audit_packs(), [])
+            cfg.set_audit_packs(["erc-ul508a"])
+            self.assertEqual(cfg.audit_packs(), ["erc-ul508a"])
+        finally:
+            if saved is None:
+                cfg.s.remove("audit/packs")
+            else:
+                cfg.s.setValue("audit/packs", saved)
 
 
 class TestUnavailable(unittest.TestCase):

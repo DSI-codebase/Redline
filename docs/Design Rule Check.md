@@ -237,13 +237,19 @@ keywords**, **Jev** with its confidence, or **You**.
 off and a severity you can override. Changes apply to the findings already on
 screen — no need to run the check again to see the effect.
 
+The rules come from two packs in the rule library: `drc-base`, the drafting
+rules, and `erc-nec-2026`, the electrical rules a drawing set can answer. The
+library has two more, `erc-ul508a` and `erc-heat`, which read a quote's project
+assumptions and parts list rather than a drawing, so the app does not run them.
+
 ## Which rules produced a report
 
-Every exported report names the rule pack and its version — *Rule packs:
-drc-base@1.32.0* — at the foot of the HTML, beside the coverage line in
-Markdown, and as a row in CSV. The version moves with every rule change, so
-two reports that disagree about a finding can be told apart: if one says
-`1.29.0` and the other `1.32.0`, the rules changed between them.
+Every exported report names the rule packs and their versions, for example
+*Rule packs: drc-base@1.37.0, erc-nec-2026@1.0.0*, at the foot of the HTML,
+beside the coverage line in Markdown, and as a row in CSV. A pack's version
+moves with every change to its rules, so two reports that disagree about a
+finding can be told apart: if one says `drc-base@1.29.0` and the other
+`drc-base@1.32.0`, the rules changed between them.
 
 Worth checking after you update the rule library, because a `pip` install of
 a git-pinned package will happily report success without fetching anything
