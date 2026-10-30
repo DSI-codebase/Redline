@@ -61,6 +61,13 @@ Qt gets the same treatment, with one difference: the workflows install it, so a
 Qt skip means a broken runner rather than a choice. `--strict`, which both
 workflows pass, turns those skips into a failed run.
 
+A reason that names both, such as `needs PySide6 and PyDRC`, counts against
+whichever the runner measures missing, and against both when both are. The
+runner imports PyDRC and ezdxf, and asks `tests/_qt.py` about Qt. Whenever Qt
+loads, such a skip counts against the rule library, so a run whose Qt works
+cannot fail `--strict` on it. No banner says a library is absent when it
+imports.
+
 ### Giving CI access to it
 
 Both workflows install the library when a `PYDRC_TOKEN` secret exists, and skip

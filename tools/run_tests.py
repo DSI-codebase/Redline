@@ -48,21 +48,29 @@ DRC_REASON = re.compile(r"pydrc", re.I)
 QT_REASON = re.compile(r"pyside", re.I)
 
 
-def classify(reasons) -> tuple:
+def classify(reasons, qt_missing=False, rule_library_missing=False) -> tuple:
     """``(drc_skipped, qt_skipped)`` from a {reason: count} mapping.
 
-    A reason naming both -- "needs PySide6 and PyDRC" -- is attributed to the
-    rule library, not to Qt. It cannot say which was actually missing, but the
-    rule library is the one allowed to be absent, and a genuinely missing Qt
-    announces itself in dozens of unambiguous "PySide6 not available" skips
-    rather than in one compound reason. Counting it as Qt failed a run whose
-    Qt was fine.
+    A reason naming both -- "needs PySide6 and PyDRC" -- cannot say which was
+    missing, so the two measurements decide: it counts against Qt when only Qt
+    failed to load here, against both when both are absent, and otherwise
+    against the rule library. Counting it as Qt whatever was measured failed a
+    run whose Qt was fine. Counting it as the rule library whatever was
+    measured told a run with PyDRC 0.19.0 installed and Qt missing that "13
+    tests were SKIPPED because the design rule library is absent" (measured
+    2026-10-30), and under ``--require-drc`` failed it for that.
     """
     drc = qt = 0
     for reason, n in reasons.items():
-        if DRC_REASON.search(reason):
+        names_drc = bool(DRC_REASON.search(reason))
+        names_qt = bool(QT_REASON.search(reason))
+        if names_drc and names_qt and qt_missing:
+            qt += n
+            if rule_library_missing:
+                drc += n
+        elif names_drc:
             drc += n
-        elif QT_REASON.search(reason):
+        elif names_qt:
             qt += n
     return drc, qt
 
@@ -104,6 +112,49 @@ def missing_optional() -> list:
         except Exception:
             absent.append((mod, described))
     return absent
+
+
+def qt_missing() -> bool:
+    """Whether Qt fails to load in this interpreter.
+
+    Asked of ``tests/_qt.py``, the probe every Qt test skips on, so the runner
+    and the skips cannot disagree about it. It imports QtCore, QtGui and
+    QtWidgets, because the failure CI.md documents is ``import PySide6.QtGui``
+    raising ``libEGL.so.1: cannot open shared object file``, which a check of
+    the package alone need not see.
+    """
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    from tests._qt import QT_OK
+    return not QT_OK
+
+
+def gaps(reasons, absent, qt_absent) -> list:
+    """``(count, why, hint)`` for each banner: one per cause, each built from
+    what was measured missing here rather than from the reason's wording."""
+    drc_skipped, qt_skipped = classify(reasons, qt_missing=qt_absent,
+                                       rule_library_missing=bool(absent))
+    out = []
+    if drc_skipped:
+        # Name what is MEASURED absent, not the category the reason string
+        # was filed under. `"needs ezdxf and pydrc"` is one string for two
+        # libraries and `classify` must pick one; in CI it picked the one that
+        # was installed, and every run pointed at CI.md about a token that had
+        # been configured all along. When nothing is measured absent the
+        # banner says that, never "the design rule library is absent".
+        if absent:
+            why = " and ".join(d for _, d in absent) + " could not be imported"
+            hint = "See CI.md to give the workflow access to it."
+        else:
+            why = ("their skip check failed, although "
+                   + " and ".join(_OPTIONAL) + " both import here")
+            hint = "Run the module alone with -v to see which check skipped."
+        out.append((drc_skipped, why, hint))
+    if qt_skipped:
+        out.append((qt_skipped, "Qt (PySide6) could not be loaded",
+                    "On Linux this usually means the Qt system libraries are "
+                    "missing; see the Tests workflow."))
+    return out
 
 
 def drc_status() -> tuple:
@@ -158,27 +209,11 @@ def main(argv) -> int:
 
     # Loud on purpose. "No failures" must never be read as "everything was
     # checked" -- the same rule the audit itself follows about coverage.
-    drc_skipped, qt_skipped = classify(reasons)
     absent = missing_optional()
-
-    gaps = []
-    if drc_skipped:
-        # Name what is MEASURED absent, not the category the reason string
-        # was filed under. `"needs ezdxf and pydrc"` is one string for two
-        # libraries and `classify` must pick one; in CI it picked the one that
-        # was installed, and every run pointed at CI.md about a token that had
-        # been configured all along.
-        why = (
-            " and ".join(d for _, d in absent) + " could not be imported"
-            if absent else "the design rule library is absent"
-        )
-        gaps.append((drc_skipped, why,
-                     "See CI.md to give the workflow access to it."))
-    if qt_skipped:
-        gaps.append((qt_skipped, "Qt (PySide6) could not be loaded",
-                     "On Linux this usually means the Qt system libraries are "
-                     "missing; see the Tests workflow."))
-    for count, why, hint in gaps:
+    qt_absent = qt_missing()
+    drc_skipped, qt_skipped = classify(reasons, qt_missing=qt_absent,
+                                       rule_library_missing=bool(absent))
+    for count, why, hint in gaps(reasons, absent, qt_absent):
         print()
         print("!" * 72)
         print(f"!! {count} tests were SKIPPED because {why}.")
