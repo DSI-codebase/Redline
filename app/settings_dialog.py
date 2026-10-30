@@ -335,7 +335,7 @@ class SettingsDialog(QDialog):
                 "Install the rule library to choose which rules run."))
             return gb
 
-        from .audit.runner import available_packs, default_packs
+        from .audit.runner import available_packs, default_packs, unloadable_packs
         self._drc_defaults = tuple(default_packs())
         chosen = set(self.config.audit_packs() or self._drc_defaults)
         v.addWidget(QLabel("Rule packs the check runs:"))
@@ -347,6 +347,17 @@ class SettingsDialog(QDialog):
             box.toggled.connect(self._refill_rules)
             v.addWidget(box)
             self.drc_packs.append((pack_id, box))
+        # A pack that will not load has no box and its rules have no rows, so
+        # it is named here with the loader's reason: the same text a check
+        # that runs it stops with.
+        self.drc_pack_failed = QLabel("\n\n".join(
+            f"{pack_id} will not load, so it is not listed here and a check "
+            f"that runs it stops. The rule library says: {message}"
+            for pack_id, message in unloadable_packs(
+                chosen | set(self._drc_defaults))))
+        self.drc_pack_failed.setTextFormat(Qt.PlainText)
+        self.drc_pack_failed.setWordWrap(True)
+        v.addWidget(self.drc_pack_failed)
         self.drc_pack_note = QLabel("")
         self.drc_pack_note.setWordWrap(True)
         v.addWidget(self.drc_pack_note)

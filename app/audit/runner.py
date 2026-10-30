@@ -91,40 +91,62 @@ def _reconcile(plot, source, notices: list) -> Optional[dict]:
         return None
 
 
+def _load_each(pack_ids, dirs) -> tuple:
+    """``(packs, failed)``: each named pack that loads, in order, and
+    ``(pack_id, message)`` for each that does not.
+
+    The message is the loader's own text, which is what a check that runs the
+    pack stops with. Both listings below used to drop a failure with a bare
+    ``continue``, so a user pack PyDRC 0.19.0 refuses for its ``enabled`` key
+    dropped out of Settings, rules and all, without a word, while the check
+    reported the reason in "Design rule check failed".
+    """
+    from pydrc.packs import loader
+    packs, failed = [], []
+    for pack_id in pack_ids:
+        try:
+            packs.append(loader.load_by_id(pack_id, extra=dirs))
+        except Exception as e:
+            failed.append((pack_id, str(e)))
+    return packs, failed
+
+
 def available_packs(extra_dirs=None) -> list:
     """``(pack_id, title, ref, description)`` for every pack the library finds.
 
     Used by Settings to offer the packs a check can run, the built-in ones and
-    any under ``PYDRC_PACK_PATH``. A pack that will not load is left out here
-    and named by the check that tries it.
+    any under ``PYDRC_PACK_PATH``. A pack that will not load is left out here;
+    ``unloadable_packs`` names it and says why.
     """
     from pydrc.packs import loader
     dirs = extra_dirs or user_pack_dirs()
-    out = []
-    for pack_id in sorted(loader.discover(dirs)):
-        try:
-            pack = loader.load_by_id(pack_id, extra=dirs)
-        except Exception:
-            continue
-        out.append((pack.id, pack.title, pack.ref, " ".join(pack.description.split())))
-    return out
+    packs, _failed = _load_each(sorted(loader.discover(dirs)), dirs)
+    return [(p.id, p.title, p.ref, " ".join(p.description.split()))
+            for p in packs]
+
+
+def unloadable_packs(pack_ids=(), extra_dirs=None) -> list:
+    """``(pack_id, message)`` for every pack that will not load.
+
+    Covers each pack the library finds and each one in ``pack_ids``, the packs
+    a check is set to run, which can name one the library no longer finds.
+    """
+    from pydrc.packs import loader
+    dirs = extra_dirs or user_pack_dirs()
+    named = sorted(set(loader.discover(dirs)) | set(pack_ids))
+    return _load_each(named, dirs)[1]
 
 
 def available_rules(pack_ids=(), extra_dirs=None) -> list:
     """``(rule_id, title, severity, pack)`` for every rule that could run.
 
-    Used by Settings to list rules without running anything.
+    Used by Settings to list rules without running anything. A pack that will
+    not load gives no rows; ``unloadable_packs`` is what names it.
     """
-    from pydrc.packs import loader
-    out = []
-    for pack_id in (pack_ids or default_packs()):
-        try:
-            pack = loader.load_by_id(pack_id, extra=extra_dirs or user_pack_dirs())
-        except Exception:
-            continue
-        for rule in pack.rules:
-            out.append((rule.id, rule.title, rule.severity, pack.ref))
-    return out
+    packs, _failed = _load_each(pack_ids or default_packs(),
+                                extra_dirs or user_pack_dirs())
+    return [(rule.id, rule.title, rule.severity, pack.ref)
+            for pack in packs for rule in pack.rules]
 
 
 def run_audit(pdf_path: str, sheet_labels: dict, sheet_sources: dict,
