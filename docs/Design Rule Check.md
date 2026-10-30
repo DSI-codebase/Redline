@@ -314,11 +314,17 @@ rules of the packs ticked.
 - Ticking exactly the default packs keeps the app on the library's own
   default, which follows the library when a rule moves between packs.
 - With no pack ticked, the check runs the default packs, and the tab says so.
-- A pack that will not load has no box, and its rules are not in the list.
-  The tab names it under the packs with the rule library's reason, which is
-  the error a check that runs it stops with. A pack written for an older
-  library can fail this way: from PyDRC 0.19.0 a rule cannot carry
-  `enabled:`, and the reason says where to switch the rule off instead.
+- A pack that will not load is listed as *(will not load)*, and its rules
+  are not in the list. The tab names it under the packs with the rule
+  library's reason, which is the error a check that runs it stops with. Its
+  box stays ticked if the check was set to run it, so OK keeps that choice
+  and the check goes on reporting the error. Untick it to stop running it.
+  A pack written for an older library can fail this way: from PyDRC 0.19.0 a
+  rule cannot carry `enabled:`, and the reason says where to switch the rule
+  off instead.
+- A file in a pack folder that the library cannot read as a pack at all
+  (for example not valid YAML or JSON, empty, or with no pack id) is
+  named there by its path, with the reason. The other packs still load.
 
 ## Which rules produced a report
 

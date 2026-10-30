@@ -89,8 +89,10 @@ rather than showing an empty list ([[Design Rule Check]]).
 - **Rule packs**: one box per pack the library finds, ticked for the packs
   the check runs. The rule table below lists the rules of the packs ticked.
   With none ticked, the check runs the library's default packs
-  ([[Design Rule Check]]). A pack that will not load has no box. The tab
-  names it under the packs, with the rule library's reason.
+  ([[Design Rule Check]]). A pack that will not load is listed as
+  *(will not load)*, with the rule library's reason under the packs. Untick
+  it to stop the check running it. A file in a pack folder that is not a
+  pack the library can read is named there too.
 - **The rule table** — one row per rule, with **Run** to turn it off and a
   **Severity** override. Editing here re-evaluates the findings already on
   screen rather than forcing a re-run.
