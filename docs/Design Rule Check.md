@@ -121,8 +121,30 @@ and only half updated.
 ## Waiving a finding
 
 Every real panel has justified exceptions. Right-click a finding ▸ **Waive…**,
-give a reason and your name, and it stays on the list struck through, so the
-decision stays visible to the next reviewer.
+give a reason, your name and your role, and it stays on the list struck through,
+so the decision stays visible to the next reviewer.
+
+### Who may waive a finding
+
+Some rules name the roles whose waiver closes their finding, and the dialog
+shows them, for example *This rule takes a waiver from: Engineer*. The
+electrical rule packs name them: an engineer for the load schedule and the
+branch circuits, the UL rep for the panel SCCR, and an estimator, an engineer
+or the UL rep for enclosure cooling. The drawing rules name no roles and take
+anyone's waiver.
+
+1. Choose your role in the dialog: **Estimator**, **Engineer** or **UL rep**.
+   The role you choose is offered again for the next waiver.
+2. A waiver from a role the rule does not take is still recorded, and the
+   finding stays open as **Open, waiver not accepted**, with the reason. The
+   dialog says so in red before you save.
+3. For a rule that names roles, the waiver also needs your name.
+
+A waiver given before waivers had a role names none. On a rule that names
+roles, its finding reopens and says why. Waive it again with your role.
+
+Every export names who waived each finding, in what role and on what day, and
+why a waiver did not close its finding.
 
 Waivers are stored per project and **survive re-running the check**. They are
 keyed to the finding itself rather than to where it sits, so re-extracting the

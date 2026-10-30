@@ -104,6 +104,7 @@ DEFAULTS: dict = {
     "audit/severity_overrides": json.dumps({}),
     "audit/draw_on_sheet": True,
     "audit/oda_path": "",
+    "audit/waiver_role": "",
     # Recent files: most-recent-first PDF paths, one per drawing. Still a plain
     # list of paths, so a build from before open times were kept reads it.
     "recent/files": json.dumps([]),
@@ -555,6 +556,13 @@ class AppConfig:
     def author(self) -> str:
         """Who to attribute a waiver to — the name marks are already signed with."""
         return self.your_name
+
+    def waiver_role(self) -> str:
+        """The role the last waiver was given in, offered for the next one."""
+        return str(self.get("audit/waiver_role", "") or "")
+
+    def set_waiver_role(self, role: str) -> None:
+        self.set("audit/waiver_role", str(role or ""))
 
     @property
     def ocr_enabled(self) -> bool:

@@ -968,13 +968,14 @@ class MainWindow(QMainWindow):
         """Record that a finding is acceptable on this project."""
         if self.document is None or finding is None:
             return
-        dlg = WaiveDialog(finding, self.config.author(), self)
+        dlg = WaiveDialog(finding, self.config.author(), self, role=self.config.waiver_role())
         if dlg.exec() != QDialog.Accepted:
             return
-        reason, author = dlg.values()
+        reason, author, role = dlg.values()
         if not reason.strip():
             return
-        self.document.waive_finding(finding.key, reason, author)
+        self.config.set_waiver_role(role)
+        self.document.waive_finding(finding.key, reason, author, role)
         self.audit_panel.refresh()
         self._refresh_finding_marks()
 

@@ -62,6 +62,37 @@ class _Base(unittest.TestCase):
             return fh.read()
 
 
+class TestAWaiverNamesItsRole(_Base):
+    """Every report says who waived a finding, in what role, and when a waiver
+    did not close it, why."""
+
+    def _doc(self, role):
+        doc = _doc(waived=True)
+        doc.findings[0].approvers = ["engineer"]
+        doc.waivers["k1"] = Waiver(key="k1", reason="Accepted by client", author="LWH",
+                                   role=role, created="2026-10-30T09:15:00")
+        from app.audit.findings import apply_waivers
+        apply_waivers(doc.findings, doc.waivers)
+        return doc
+
+    def test_markdown_html_and_csv(self):
+        """Injected: the markdown dropping the not-accepted line (red)."""
+        doc = self._doc("estimator")
+        line = "Waived by LWH (Estimator) on 2026-10-30: Accepted by client"
+        why = "Not accepted: estimator may not approve this rule, which takes: engineer"
+        md = self._read(export_markdown(doc, self._path("r.md")))
+        self.assertIn(f"  - {line}\n  - {why}\n", md)
+        html = self._read(export_html(doc, self._path("r.html")))
+        self.assertIn(line, html)
+        self.assertIn(why, html)
+        csv_text = self._read(export_csv(doc, self._path("r.csv")))
+        self.assertIn("Open, waiver not accepted", csv_text)
+        doc = self._doc("engineer")
+        md = self._read(export_markdown(doc, self._path("r2.md")))
+        self.assertIn("Waived by LWH (Engineer) on 2026-10-30: Accepted by client", md)
+        self.assertNotIn("Not accepted", md)
+
+
 class TestMarkdown(_Base):
     def test_contains_findings_clauses_and_evidence(self):
         text = self._read(export_markdown(_doc(), self._path("r.md")))

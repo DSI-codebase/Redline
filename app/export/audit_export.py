@@ -15,7 +15,8 @@ import csv
 import html as _html
 import os
 
-from ..audit.findings import DEFINITE, POTENTIAL, INFO, SEVERITY_LABELS
+from ..audit.findings import (DEFINITE, POTENTIAL, INFO, SEVERITY_LABELS, status_text,
+                              waiver_text)
 
 # Deliberate wording: this is a review, not a determination of compliance.
 #
@@ -135,8 +136,9 @@ def export_markdown(document, path: str, disabled=()) -> str:
                            + ", ".join(f"{k}={v}" for k, v in f.evidence.items()))
             waiver = document.waiver_for(f.key) if hasattr(document, "waiver_for") else None
             if waiver is not None:
-                who = f" — {waiver.author}" if waiver.author else ""
-                out.append(f"  - Waived: {waiver.reason}{who}")
+                out.append(f"  - {waiver_text(waiver)}")
+                if f.waiver_problem:
+                    out.append(f"  - Not accepted: {f.waiver_problem}")
         out.append("")
 
     if not findings:
@@ -192,7 +194,7 @@ def export_csv(document, path: str, disabled=()) -> str:
                                                          else [])),
                 f.page + 1 if f.has_location else "",
                 f.subject_id, f.message, f.clause,
-                "Waived" if f.waived else "Open",
+                status_text(f),
                 "; ".join(f"{k}={v}" for k, v in (f.evidence or {}).items()),
             ])
         run = _run(document)
@@ -289,6 +291,11 @@ def export_html(document, path: str, title: str = "", disabled=()) -> str:
             if f.evidence:
                 out.append("<div class='ev'>" + "  ·  ".join(
                     f"{esc(k)}={esc(v)}" for k, v in f.evidence.items()) + "</div>")
+            waiver = document.waiver_for(f.key) if hasattr(document, "waiver_for") else None
+            if waiver is not None:
+                out.append(f"<div class='ev'>{esc(waiver_text(waiver))}</div>")
+                if f.waiver_problem:
+                    out.append(f"<div class='ev'>Not accepted: {esc(f.waiver_problem)}</div>")
             out.append("</div>")
 
     if not shown:

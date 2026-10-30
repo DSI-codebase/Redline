@@ -299,7 +299,27 @@ class TestWaiveDialog(unittest.TestCase):
         self.assertFalse(dlg._ok.isEnabled())
         dlg.reason.setText("Accepted by client")
         self.assertTrue(dlg._ok.isEnabled())
-        self.assertEqual(dlg.values(), ("Accepted by client", "LWH"))
+        self.assertEqual(dlg.values(), ("Accepted by client", "LWH", ""))
+
+    def test_the_dialog_says_before_saving_whether_the_role_closes_it(self):
+        """The rule's own check, shown live. Injected: problem_text ignoring
+        the finding's approvers (red: the estimator was not warned)."""
+        from app.dialogs import WaiveDialog
+        f = _findings()[0]
+        f.approvers = ["engineer"]
+        dlg = WaiveDialog(f, "LWH", role="estimator")
+        from PySide6.QtWidgets import QLabel
+        texts = " ".join(w.text() for w in dlg.findChildren(QLabel))
+        self.assertIn("This rule takes a waiver from: Engineer", texts)
+        dlg.reason.setText("Accepted by client")
+        self.assertEqual(dlg.values(), ("Accepted by client", "LWH", "estimator"))
+        self.assertIn("estimator may not approve this rule", dlg.problem.text())
+        dlg.role.setCurrentIndex(dlg.role.findData("engineer"))
+        self.assertEqual(dlg.problem.text(), "")
+        dlg.author.setText("")
+        self.assertIn("missing its name", dlg.problem.text())
+        f.approvers = []
+        self.assertEqual(WaiveDialog(f, "LWH").problem.text(), "")
 
     def test_shows_what_is_being_waived(self):
         from app.dialogs import WaiveDialog
