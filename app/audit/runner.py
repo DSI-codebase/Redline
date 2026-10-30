@@ -72,6 +72,25 @@ def user_pack_dirs() -> list:
     return [p for p in raw.split(os.pathsep) if p and os.path.isdir(p)]
 
 
+def _reconcile(plot, source, notices: list) -> Optional[dict]:
+    """PyDRC's reconciliation of the two models, as a dict, or None.
+
+    None when the library predates ``pydrc.adapters.reconcile`` (0.18.0). A
+    reconciliation that fails is a notice on the run, never a failed check:
+    the findings do not depend on it.
+    """
+    try:
+        from pydrc.adapters.reconcile import reconcile
+    except ImportError:
+        return None
+    try:
+        return reconcile(plot, source).to_dict()
+    except Exception as e:
+        notices.append("The plot could not be compared with the imported "
+                       f"drawings, so no reconciliation is shown. ({_one_line(e)})")
+        return None
+
+
 def available_packs(extra_dirs=None) -> list:
     """``(pack_id, title, ref, description)`` for every pack the library finds.
 
@@ -161,6 +180,7 @@ def run_audit(pdf_path: str, sheet_labels: dict, sheet_sources: dict,
         # separate stored blob was corrupt, with the reason recorded in
         # `errors`, which nothing displayed.
         notices = []
+        reconciliation = None
         if acade_model_json:
             from pydrc.model import loads as load_model
             try:
@@ -173,6 +193,9 @@ def run_audit(pdf_path: str, sheet_labels: dict, sheet_sources: dict,
                     "source was skipped. Re-import the drawings and run it "
                     f"again. ({_one_line(e)})")
             if acade is not None:
+                # Before the merge, which changes both models in place: after
+                # it, every source entity is in the plot's model too.
+                reconciliation = _reconcile(built.model, acade, notices)
                 try:
                     from pydrc.adapters.acade_dxf import merge_models
                     merge_models(built.model, acade)
@@ -218,5 +241,6 @@ def run_audit(pdf_path: str, sheet_labels: dict, sheet_sources: dict,
         errors=notices + list((payload.get("run") or {}).get("errors") or []),
         unnumbered_pages=sorted(s.page_index + 1 for s in built.model.sheets
                                 if not s.number and s.page_index is not None),
+        reconciliation=reconciliation,
     )
     return AuditResult(findings=findings, run=run)

@@ -418,6 +418,10 @@ class AuditRun:
     #: rules ran on. A rule that needs a number skips such a page, and the
     #: counts alone did not say which pages they were (PyDRC plan, P2 exit).
     unnumbered_pages: list = field(default_factory=list)
+    #: PyDRC's ``reconcile`` of the plot-derived model against the imported
+    #: source drawings, as its ``to_dict``, taken before the two are merged.
+    #: None when nothing was imported, or the library has no reconcile.
+    reconciliation: Optional[dict] = None
 
     @property
     def complete(self) -> bool:
@@ -496,6 +500,34 @@ class AuditRun:
         return (f"Pages {listed} have no sheet number. A rule that needs one "
                 "did not check them.")
 
+    def reconciliation_line(self) -> str:
+        """How much of the imported drawings the plot found, or ""."""
+        r = self.reconciliation
+        if not isinstance(r, dict):
+            return ""
+        if not r.get("compared"):
+            shared = len(r.get("common_sheets") or [])
+            return ("The plot and the imported drawings have nothing in common to "
+                    f"compare: they share {shared} sheet number"
+                    f"{'' if shared == 1 else 's'}.")
+        parts, disagree = [], 0
+        for k in r.get("kinds") or []:
+            disagree += int(k.get("mismatched") or 0)
+            if not k.get("source"):
+                continue
+            both = int(k.get("matched") or 0) + int(k.get("mismatched") or 0) \
+                + int(k.get("not_comparable") or 0)
+            parts.append(f"{both} of {k['source']} "
+                         f"{str(k.get('kind', '')).replace('_', ' ')}")
+        if not parts:
+            return ""
+        listed = parts[0] if len(parts) == 1 else \
+            ", ".join(parts[:-1]) + " and " + parts[-1]
+        tail = (" None of them disagree." if not disagree else
+                f" {disagree} of them disagree{'s' if disagree == 1 else ''} "
+                "with the source.")
+        return f"Against the imported drawings, the plot found {listed}.{tail}"
+
     def _reason_totals(self) -> dict:
         totals: dict = {}
         for cov in self.coverage:
@@ -510,6 +542,7 @@ class AuditRun:
             "skipped": self.skipped, "errors": list(self.errors),
             "coverage": [c.to_dict() for c in self.coverage],
             "unnumbered_pages": list(self.unnumbered_pages),
+            "reconciliation": self.reconciliation,
         })
 
     @classmethod
@@ -530,6 +563,8 @@ class AuditRun:
             coverage=[Coverage.from_dict(c) for c in (d.get("coverage") or [])],
             unnumbered_pages=[int(p) for p in (d.get("unnumbered_pages") or [])
                               if isinstance(p, int) and not isinstance(p, bool)],
+            reconciliation=(d.get("reconciliation")
+                            if isinstance(d.get("reconciliation"), dict) else None),
         )
 
 

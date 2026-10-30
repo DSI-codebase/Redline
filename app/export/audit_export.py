@@ -104,6 +104,41 @@ def _problems(run) -> list:
     return list(run.errors[1:] if run.blocked else run.errors)
 
 
+#: The reconciliation table's columns, with the key each reads.
+_RECON_COLUMNS = (("Kind", "kind"), ("In both", "both"), ("Matched", "matched"),
+                  ("Mismatched", "mismatched"), ("Not comparable", "not_comparable"),
+                  ("Only the plot", "plot_only"), ("Only the source", "source_only"),
+                  ("Recall", "recall"), ("Precision", "precision"))
+
+
+def _recon_rows(run) -> list:
+    """``(cells, mismatch lines)`` per kind of the run's reconciliation, or
+    []. Shares are written as percentages, and a share with nothing under it
+    as a dash rather than as 0%."""
+    r = getattr(run, "reconciliation", None) if run is not None else None
+    if not isinstance(r, dict) or not r.get("compared"):
+        return []
+    out = []
+    for k in r.get("kinds") or []:
+        both = sum(int(k.get(n) or 0) for n in ("matched", "mismatched", "not_comparable"))
+        cells = []
+        for _label, key in _RECON_COLUMNS:
+            if key == "kind":
+                cells.append(str(k.get("kind", "")).replace("_", " "))
+            elif key == "both":
+                cells.append(str(both))
+            elif key in ("recall", "precision"):
+                share = k.get(key)
+                cells.append("-" if share is None else f"{float(share):.1%}")
+            else:
+                cells.append(str(int(k.get(key) or 0)))
+        notes = [f"{m.get('key')}: {m.get('field')} is {m.get('plot')!r} on the plot "
+                 f"and {m.get('source')!r} in the source"
+                 for m in k.get("mismatches") or []]
+        out.append((cells, notes))
+    return out
+
+
 def export_markdown(document, path: str, disabled=()) -> str:
     findings = _rows(document, disabled)
     run = _run(document)
@@ -120,6 +155,20 @@ def export_markdown(document, path: str, disabled=()) -> str:
         packs = _packs_line(run)
         if packs:
             out += [packs, ""]
+        if run.reconciliation_line():
+            out += ["## The plot against the imported drawings", "",
+                    run.reconciliation_line(), ""]
+            rows = _recon_rows(run)
+            if rows:
+                out.append("| " + " | ".join(c for c, _k in _RECON_COLUMNS) + " |")
+                out.append("|" + "---|" * len(_RECON_COLUMNS))
+                for cells, _notes in rows:
+                    out.append("| " + " | ".join(cells) + " |")
+                out.append("")
+                for cells, notes in rows:
+                    out += [f"- {cells[0]}, {n}" for n in notes]
+                if any(notes for _c, notes in rows):
+                    out.append("")
 
     for severity in _ORDER:
         group = [f for f in findings if f.severity == severity]
@@ -209,6 +258,16 @@ def export_csv(document, path: str, disabled=()) -> str:
                 w.writerow(["Problem", problem])
             if run.packs:
                 w.writerow(["Rule packs", ", ".join(run.packs)])
+            if run.reconciliation_line():
+                w.writerow(["Reconciliation", run.reconciliation_line()])
+                rows = _recon_rows(run)
+                if rows:
+                    w.writerow(["Reconciliation"] + [c for c, _k in _RECON_COLUMNS])
+                    for cells, notes in rows:
+                        w.writerow(["Reconciliation"] + cells)
+                    for cells, notes in rows:
+                        for n in notes:
+                            w.writerow(["Disagreement", cells[0], n])
             for cov in run.coverage:
                 if not cov.ran:
                     w.writerow(["", f"{cov.rule_id}: nothing to check against"])
@@ -272,6 +331,21 @@ def export_html(document, path: str, title: str = "", disabled=()) -> str:
             out.append(f"<p>{esc(run.unnumbered_line())}</p>")
         for problem in _problems(run):
             out.append(f"<div class='note'><strong>{esc(problem)}</strong></div>")
+        if run.reconciliation_line():
+            out.append("<h2>The plot against the imported drawings</h2>")
+            out.append(f"<p>{esc(run.reconciliation_line())}</p>")
+            rows = _recon_rows(run)
+            if rows:
+                out.append("<table><tr>" + "".join(
+                    f"<th>{esc(c)}</th>" for c, _k in _RECON_COLUMNS) + "</tr>")
+                for cells, _notes in rows:
+                    out.append("<tr>" + "".join(f"<td>{esc(c)}</td>" for c in cells)
+                               + "</tr>")
+                out.append("</table>")
+                notes = [f"{cells[0]}, {n}" for cells, ns in rows for n in ns]
+                if notes:
+                    out.append("<ul>" + "".join(f"<li>{esc(n)}</li>" for n in notes)
+                               + "</ul>")
 
     shown = False
     for severity in _ORDER:
