@@ -11,12 +11,16 @@ the boxes ticked and dropped it from the choice: the check then ran without it
 and said nothing. And a file in a pack directory that the library cannot read
 as a pack at all was invisible, or, for three kinds of file, made
 ``loader.discover`` raise, which emptied the tab and stopped every check.
+
+PyDRC 0.21.0's ``discover`` says which files it stepped over, and the runner
+asks it. Its own walk stays for an older PyDRC.
 """
 
 import os
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 
 from app import audit
 from tests._qt import QT_OK
@@ -165,12 +169,13 @@ class TestTheRunnerNamesAPackThatWillNotLoad(_UserPack):
 
 @unittest.skipUnless(HAVE_PYDRC, "PyDRC is not installed")
 class TestPacksAreFoundWhereTheLibraryFindsThem(_PackDirs):
-    """The runner finds packs itself, so it is held to ``loader.discover``."""
+    """Before PyDRC 0.21.0 the runner finds packs itself, in ``_walk_packs``,
+    so the walk is held to ``loader.discover``."""
 
     def test_the_map_is_discovers_on_a_tree_discover_can_read(self):
-        """Injected: the search order reversed in ``_find_packs`` (red)."""
+        """Injected: the search order reversed in ``_walk_packs`` (red)."""
         from pydrc.packs import loader
-        from app.audit.runner import _find_packs, user_pack_dirs
+        from app.audit.runner import _find_packs, _walk_packs, user_pack_dirs
         self.write("user-ok.yaml", GOOD_TEXT.replace(PACK_ID, "user-ok"))
         # A user pack with a built-in's id, and the same id in two user
         # directories: a later one wins in both.
@@ -186,6 +191,7 @@ class TestPacksAreFoundWhereTheLibraryFindsThem(_PackDirs):
         self.assertEqual(expected["user-ok"], os.path.join(later, "user-ok-later.yaml"))
         self.assertEqual(expected["erc-heat"], os.path.join(self.dir, "heat.yaml"))
         self.assertEqual(_find_packs(user_pack_dirs())[0], expected)
+        self.assertEqual(_walk_packs(loader, user_pack_dirs())[0], expected)
 
 
 @unittest.skipUnless(HAVE_PYDRC, "PyDRC is not installed")
@@ -223,8 +229,8 @@ class TestAFileThatIsNotAPackIsNamed(_PackDirs):
         self.assertEqual(len(named), len(NOT_PACKS), named)
 
     def test_the_packs_beside_them_still_load_and_the_check_runs(self):
-        """Injected: ``except loader.PackError`` in ``_find_packs``, as
-        ``discover`` has (red: an empty file raises)."""
+        """Injected: ``except loader.PackError`` in ``_walk_packs``, as
+        ``discover`` has (red against PyDRC 0.19.1: an empty file raises)."""
         from app.audit.runner import (available_packs, default_packs,
                                       run_audit, unloadable_packs)
         self.assertGreaterEqual(len(available_packs()), 4)
@@ -232,6 +238,104 @@ class TestAFileThatIsNotAPackIsNamed(_PackDirs):
         result = run_audit(_blank_pdf(os.path.join(self.dir, "blank.pdf")),
                            {}, {}, {})
         self.assertEqual(len(result.run.packs), len(default_packs()))
+
+
+@unittest.skipUnless(HAVE_PYDRC, "PyDRC is not installed")
+class TestTheFilesAreNamedFromTheLibrarysReport(_PackDirs):
+    """From PyDRC 0.21.0, ``loader.discover(dirs, skipped=[])`` reports each
+    file it stepped over with ``lint``'s reason, and ``_find_packs`` takes
+    that report rather than walking the directories again. ``_walk_packs``
+    stays for a PyDRC before 0.21.0, and for a ``discover`` that raises.
+
+    Each branch is also driven by a stand-in ``discover``, so all three run
+    whichever PyDRC is installed, and nothing here skips for its version.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.paths = {name: self.write(name, data)
+                      for name, (data, _why) in NOT_PACKS.items()}
+        self.write("user-ok.yaml", GOOD_TEXT.replace(PACK_ID, "user-ok"))
+
+    def assertEachNamed(self, named: dict):
+        for name, (_data, why) in NOT_PACKS.items():
+            self.assertIn(self.paths[name], named, name)
+            self.assertIn(why, named[self.paths[name]], name)
+        self.assertEqual(len(named), len(NOT_PACKS), named)
+
+    def test_the_installed_library_is_asked_when_it_can_say(self):
+        """Injected: ``_find_packs`` walking on every PyDRC (red against
+        0.21.0: the walk ran)."""
+        import inspect
+        from pydrc.packs import loader
+        from app.audit import runner
+        reports = "skipped" in inspect.signature(loader.discover).parameters
+        with mock.patch.object(runner, "_walk_packs",
+                               wraps=runner._walk_packs) as walk:
+            named = dict(runner.unreadable_pack_files())
+        self.assertEqual(walk.called, not reports,
+                         f"discover reports what it skipped: {reports}")
+        self.assertEachNamed(named)
+
+    def test_the_walk_finds_and_names_what_the_library_does(self):
+        """The walk held to the library's own report. Before PyDRC 0.21.0
+        ``_find_packs`` IS the walk, so this compares it with itself there,
+        and the test above is the one that says which ran."""
+        from pydrc.packs import loader
+        from app.audit import runner
+        dirs = runner.user_pack_dirs()
+        found, unreadable = runner._find_packs(dirs)
+        self.assertIn("user-ok", found)
+        self.assertGreaterEqual(len(unreadable), len(NOT_PACKS))
+        self.assertEqual(runner._walk_packs(loader, dirs), (found, unreadable))
+
+    def test_a_report_is_taken_as_the_library_gives_it(self):
+        """Injected: the report dropped and the directories walked (red)."""
+        from pydrc.packs import loader
+        from app.audit import runner
+        late, early = os.path.join("packs", "z.yaml"), os.path.join("packs", "a.yaml")
+
+        def discover(extra=None, skipped=None):
+            skipped += [(late, "z: why"), (early, "a: why")]
+            return {"p": os.path.join("packs", "p.yaml")}
+
+        with mock.patch.object(loader, "discover", discover), \
+                mock.patch.object(runner, "_walk_packs",
+                                  side_effect=AssertionError("walked")):
+            self.assertEqual(runner._find_packs(runner.user_pack_dirs()),
+                             ({"p": os.path.join("packs", "p.yaml")},
+                              [(early, "a: why"), (late, "z: why")]))
+
+    def test_a_library_without_the_report_is_walked(self):
+        """As a PyDRC before 0.21.0 is: its ``discover`` takes no
+        ``skipped``. Injected: ``except loader.PackError`` around
+        ``discover`` (red: TypeError)."""
+        from pydrc.packs import loader
+        from app.audit import runner
+
+        def discover(extra=None):
+            raise AssertionError("only skipped= reaches here, and it cannot")
+
+        with mock.patch.object(loader, "discover", discover):
+            found, unreadable = runner._find_packs(runner.user_pack_dirs())
+        self.assertIn("user-ok", found)
+        self.assertEachNamed(dict(unreadable))
+
+    def test_a_discover_that_raises_is_walked_and_the_packs_still_load(self):
+        """Injected: no ``except`` around ``discover`` (red: TypeError), and
+        an empty answer in place of the walk (red)."""
+        from pydrc.packs import loader
+        from app.audit import runner
+
+        def discover(extra=None, skipped=None):
+            raise TypeError("unhashable type: 'list'")
+
+        with mock.patch.object(loader, "discover", discover):
+            named = dict(runner.unreadable_pack_files())
+            packs = runner.available_packs()
+        self.assertEachNamed(named)
+        self.assertIn("user-ok", [p[0] for p in packs])
+        self.assertGreaterEqual(len(packs), 5)
 
 
 @unittest.skipUnless(QT_OK and HAVE_PYDRC, "needs PySide6 and PyDRC")
@@ -295,8 +399,8 @@ class TestSettingsNamesAPackThatWillNotLoad(_Settings, _UserPack):
 @unittest.skipUnless(QT_OK and HAVE_PYDRC, "needs PySide6 and PyDRC")
 class TestSettingsNamesAFileThatIsNotAPack(_Settings, _PackDirs):
     def test_the_tab_builds_and_names_each_file(self):
-        """Injected: ``except loader.PackError`` in ``_find_packs`` (red:
-        the dialog raised building the tab)."""
+        """Injected: ``except loader.PackError`` in ``_walk_packs`` (red
+        against PyDRC 0.19.1: the dialog raised building the tab)."""
         paths = [self.write(name, data) for name, (data, _why) in NOT_PACKS.items()]
         dlg = self._dialog()
         self.assertGreaterEqual(len(dlg.drc_packs), 4)
