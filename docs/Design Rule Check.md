@@ -253,6 +253,26 @@ keywords**, **Jev** with its confidence, or **You**.
 - A file opened view-only (no markup database) shows the roles but cannot save
   a change.
 
+### Project assumptions
+
+**Project assumptions…** on the Audit tab, or **Tools ▸ Project assumptions…**,
+states two facts about this drawing that the drawing itself does not carry:
+
+- **Temperature inside the enclosure**, in degrees C. The conductor ampacity
+  correction reads it (NEC 310.15(B)).
+- **Termination rating**: 60, 75 or 90 C. No rule reads it yet. It is kept so
+  that one can.
+
+Leave a field blank when nobody knows the value. A blank is not stated, and a
+rule that needs the value lists every item it could not check and names what
+was missing. Nothing is filled in for you.
+
+- The values apply to this drawing only, and they are kept in its markup
+  database.
+- They take effect the next time the check runs.
+- Every finding that used a value names it.
+- A file opened view-only (no markup database) cannot keep them.
+
 ## Settings
 
 **[[Settings]] ▸ Design rules** lists every rule, with a checkbox to turn one

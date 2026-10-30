@@ -114,8 +114,14 @@ def build_model(fitz_doc, sheet_labels: dict, sheet_sources: dict,
                 sheet_roles: dict, options: Optional[AdapterOptions] = None,
                 project: Optional[dict] = None,
                 progress: Optional[Callable] = None,
-                cancel: Optional[Callable] = None):
+                cancel: Optional[Callable] = None,
+                assumptions: Optional[dict] = None):
     """Build a :class:`ModelBuild` from an open PyMuPDF document.
+
+    ``assumptions`` is what a person stated for this drawing
+    (``Document.project_assumptions``), written into the model's
+    ``ProjectAssumptions`` so the rule that reads one cites it. Nothing else
+    is set there: a drawing states none of the rest.
 
     ``progress(done, total)`` and ``cancel()`` follow the convention in
     :mod:`app.tools.runner`.  Returns ``None`` when cancelled.
@@ -139,6 +145,9 @@ def build_model(fitz_doc, sheet_labels: dict, sheet_sources: dict,
         revision=str(meta.get("revision", "")),
         provenance=_provenance(sn.DRAWING_NUMBER),
     )
+    for name, value in (assumptions or {}).items():
+        if hasattr(model.assumptions, name):
+            setattr(model.assumptions, name, value)
 
     # -- sheets --------------------------------------------------------------
     # Per-page tokens are needed for the rung gutter, the connectors and the

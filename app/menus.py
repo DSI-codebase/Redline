@@ -153,6 +153,11 @@ def build(win):
     win.act_sheet_roles.setToolTip(
         "Set which sheets are schematics, PLC I/O, layouts and so on; the "
         "check uses the role to decide which rules apply")
+    win.act_project_assumptions = m_tools.addAction(
+        "Project assumptions…", win.edit_project_assumptions)
+    win.act_project_assumptions.setToolTip(
+        "State the temperature inside the enclosure and the termination "
+        "rating the electrical rules read, for this drawing")
     win.act_import_drawings = m_tools.addAction(
         "Import project drawings…", win.import_project_drawings)
     win.act_import_drawings.setToolTip(

@@ -23,6 +23,41 @@ from .storage import (
 )
 
 
+
+#: What a person states for a drawing's electrical rules (owner, 2026-10-30):
+#: the temperature inside the enclosure, which PyDRC's ampacity correction
+#: reads, and the termination rating. Each under the name PyDRC's
+#: ``ProjectAssumptions`` gives it.
+ASSUMPTION_FIELDS = ("internal_max_c", "termination_c")
+TERMINATION_RATINGS = (60, 75, 90)
+
+
+def parse_project_assumptions(raw) -> dict:
+    """The stated assumptions in a sidecar's JSON, keeping only valid values.
+
+    A damaged or hand-edited value is dropped rather than raised: the drawing
+    still opens, and the rule that needed the value reports it missing.
+    """
+    import json
+    import math
+    try:
+        data = json.loads(raw) if raw else {}
+    except (TypeError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    out = {}
+    value = data.get("internal_max_c")
+    if isinstance(value, (int, float)) and not isinstance(value, bool) \
+            and math.isfinite(value):
+        out["internal_max_c"] = float(value)
+    value = data.get("termination_c")
+    if isinstance(value, int) and not isinstance(value, bool) \
+            and value in TERMINATION_RATINGS:
+        out["termination_c"] = value
+    return out
+
+
 class Document:
     """A single open PDF plus its markup state."""
 
@@ -58,6 +93,9 @@ class Document:
         self.audit_run = None          # AuditRun summary, or None
         self.acade_model_json = ""     # imported source-drawing model, if any
         self.acade_wire_format = ""    # its wire numbering format ("%S%N")
+        # What a person stated for this drawing's electrical rules, under the
+        # names PyDRC's ProjectAssumptions gives them. Blank is absent.
+        self.project_assumptions: dict = {}
         self.sheet_labels: dict = {}   # page_index -> sheet number (str, e.g. "000")
         # page_index -> how that number was resolved (a sheet_number strategy
         # name, or "user"). An audit cannot report coverage honestly if it
@@ -140,6 +178,8 @@ class Document:
         self._load_audit_run()
         self.acade_model_json = self.sidecar.get_meta("acade_model") or ""
         self.acade_wire_format = self.sidecar.get_meta("acade_wire_format") or ""
+        self.project_assumptions = parse_project_assumptions(
+            self.sidecar.get_meta("project_assumptions"))
 
         # 4) per-page sheet numbers and roles: load saved edits, then
         #    best-effort auto-detection for pages we don't know yet
@@ -214,6 +254,20 @@ class Document:
         self.acade_wire_format = wire_format or ""
         self.sidecar.set_meta("acade_model", self.acade_model_json)
         self.sidecar.set_meta("acade_wire_format", self.acade_wire_format)
+
+    # -- project assumptions -------------------------------------------------
+
+    def set_project_assumptions(self, values: dict) -> None:
+        """Store what the project states and persist it.
+
+        Only the fields in ``ASSUMPTION_FIELDS`` are kept, each only when it
+        is a value that field takes: a blank, or anything else, is not stated,
+        and the rule that needs it says so rather than assuming one.
+        """
+        import json
+        self.project_assumptions = parse_project_assumptions(json.dumps(values or {}))
+        self.sidecar.set_meta("project_assumptions",
+                              json.dumps(self.project_assumptions, sort_keys=True))
 
     # -- sheet numbers (per page) -------------------------------------------
 
