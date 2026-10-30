@@ -259,6 +259,93 @@ def decided_by_text(decided_by: str, confidence=None) -> str:
     return "Title-block keywords"
 
 
+class ProjectAssumptionsDialog(QDialog):
+    """What the project states for the electrical rules, for this drawing.
+
+    A drawing does not say what temperature its panel runs at or what its
+    terminations are rated, and a rule that needs one reports the conductor
+    as not checked until it is stated, never assumed. The owner's decision of
+    2026-10-30 puts the statement here, per drawing, saved beside it. Nothing
+    is written until OK; :meth:`values` is what the caller passes to
+    ``Document.set_project_assumptions``.
+    """
+
+    NOT_STATED = "Not stated"
+
+    def __init__(self, values: dict, parent=None):
+        from .model.document import TERMINATION_RATINGS
+        super().__init__(parent)
+        self.setWindowTitle("Project assumptions")
+        lay = QVBoxLayout(self)
+        note = QLabel(
+            "These apply to this drawing only. A blank is not stated: a rule "
+            "that needs it reports what it could not check. Every finding that "
+            "used a value names it. Run the check again to apply a change.")
+        note.setWordWrap(True)
+        lay.addWidget(note)
+
+        form = QFormLayout()
+        self.internal = QLineEdit()
+        self.internal.setPlaceholderText(self.NOT_STATED)
+        value = (values or {}).get("internal_max_c")
+        if value is not None:
+            self.internal.setText(f"{float(value):g}")
+        self.internal.setToolTip(
+            "The highest air temperature inside the enclosure, in degrees C. "
+            "The conductor ampacity correction (NEC 310.15(B)) reads it.")
+        form.addRow("Temperature inside the enclosure (C)", self.internal)
+
+        self.termination = QComboBox()
+        self.termination.addItem(self.NOT_STATED, None)
+        for rating in TERMINATION_RATINGS:
+            self.termination.addItem(f"{rating} C", rating)
+        index = self.termination.findData((values or {}).get("termination_c"))
+        self.termination.setCurrentIndex(max(index, 0))
+        form.addRow("Termination rating", self.termination)
+        lay.addLayout(form)
+
+        self.error = QLabel("")
+        self.error.setStyleSheet("color: #b00020;")
+        self.error.setWordWrap(True)
+        lay.addWidget(self.error)
+
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.buttons.accepted.connect(self._accept)
+        self.buttons.rejected.connect(self.reject)
+        lay.addWidget(self.buttons)
+
+    def problem(self) -> str:
+        """Why OK would save something that is not a temperature, or ""."""
+        import math
+        text = self.internal.text().strip()
+        if not text:
+            return ""
+        try:
+            value = float(text)
+        except ValueError:
+            return f"\"{text}\" is not a temperature. Enter a number of degrees C, or leave it blank."
+        if not math.isfinite(value):
+            return "Enter a number of degrees C, or leave it blank."
+        return ""
+
+    def _accept(self):
+        why = self.problem()
+        self.error.setText(why)
+        if not why:
+            self.accept()
+
+    def values(self) -> dict:
+        """The stated values, blanks left out."""
+        out = {}
+        text = self.internal.text().strip()
+        if text and not self.problem():
+            out["internal_max_c"] = float(text)
+        rating = self.termination.currentData()
+        if rating is not None:
+            out["termination_c"] = int(rating)
+        return out
+
+
 class SheetRolesDialog(QDialog):
     """Set a sheet's role, or hand it back to automatic detection.
 

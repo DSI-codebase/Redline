@@ -29,7 +29,8 @@ from PySide6.QtWidgets import (
 from . import __app_name__, __version__, __copyright__, app_icon
 from .config import AppConfig
 from .dialogs import (
-    FillDialog, SheetRolesDialog, TextEditDialog, WaiveDialog, _apply_font,
+    FillDialog, ProjectAssumptionsDialog, SheetRolesDialog, TextEditDialog,
+    WaiveDialog, _apply_font,
     _fill_swatch, _swatch,
 )
 from .settings_dialog import SettingsDialog
@@ -186,6 +187,7 @@ class MainWindow(QMainWindow):
         self.audit_panel.activated.connect(self._jump_to)
         self.audit_panel.runRequested.connect(self.run_audit)
         self.audit_panel.rolesRequested.connect(self.edit_sheet_roles)
+        self.audit_panel.assumptionsRequested.connect(self.edit_project_assumptions)
         self.audit_panel.waiveRequested.connect(self._waive_finding)
         self.audit_panel.clearWaiverRequested.connect(self._clear_waiver)
 
@@ -829,6 +831,7 @@ class MainWindow(QMainWindow):
             wire_cfg.unpadded_rung = True
         project = {"number": "", "title": os.path.splitext(
             os.path.basename(doc.path))[0]}
+        assumptions = dict(doc.project_assumptions)
         packs = self.config.audit_packs()
         disabled = self.config.audit_disabled_rules()
         overrides = self.config.audit_severity_overrides()
@@ -848,7 +851,8 @@ class MainWindow(QMainWindow):
                         pack_ids=packs, disabled_rules=disabled,
                         severity_overrides=overrides, waivers=waivers,
                         acade_model_json=acade_json,
-                        project=project, progress=progress, cancel=cancel)
+                        project=project, assumptions=assumptions,
+                        progress=progress, cancel=cancel)
 
         def keep_jev_answers():
             # Paid for whether or not the audit finished, so kept either way.
@@ -963,6 +967,21 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(
                 f"{len(changes)} sheet role(s) changed. Run the design rule "
                 "check again to apply them.", 8000)
+
+    def edit_project_assumptions(self):
+        """State this drawing's temperature and termination rating."""
+        doc = self.document
+        if doc is None:
+            return
+        dlg = ProjectAssumptionsDialog(doc.project_assumptions, self)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        values = dlg.values()
+        if values != doc.project_assumptions:
+            doc.set_project_assumptions(values)
+            self.statusBar().showMessage(
+                "Project assumptions saved. Run the design rule check again to "
+                "apply them.", 8000)
 
     def _waive_finding(self, finding):
         """Record that a finding is acceptable on this project."""

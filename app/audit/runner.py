@@ -97,6 +97,7 @@ def run_audit(pdf_path: str, sheet_labels: dict, sheet_sources: dict,
               waivers: Optional[dict] = None,
               acade_model_json: str = "",
               project: Optional[dict] = None,
+              assumptions: Optional[dict] = None,
               progress: Optional[Callable] = None,
               cancel: Optional[Callable] = None) -> AuditResult:
     """Audit a drawing and return findings plus what could not be checked.
@@ -122,7 +123,8 @@ def run_audit(pdf_path: str, sheet_labels: dict, sheet_sources: dict,
     try:
         built = build_model(doc, sheet_labels, sheet_sources, sheet_roles,
                             options or AdapterOptions(), project,
-                            progress=progress, cancel=cancel)
+                            progress=progress, cancel=cancel,
+                            assumptions=assumptions)
         if built is None:
             return AuditResult(cancelled=True)
 
