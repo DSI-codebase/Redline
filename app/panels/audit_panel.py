@@ -26,7 +26,8 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox,
                                QWidget, QMenu, QApplication)
 
 from ..audit.findings import (DEFINITE, POTENTIAL, INFO, SEVERITY_LABELS,
-                              STATUS_WAIVED, sort_findings)
+                              STATUS_WAIVED, sort_findings, status_text,
+                              waiver_text)
 
 GROUP_SEVERITY = "severity"
 GROUP_RULE = "rule"
@@ -294,7 +295,7 @@ class AuditPanel(QWidget):
             f.severity_label, f.rule_id, f.sheet_label,
             str((place or f).page + 1) if (place or f).has_location else "",
             f.message, f.clause,
-            "Waived" if f.waived else "Open",
+            status_text(f),
         ])
         it.setData(0, Qt.UserRole, f)
         # Where THIS row points. Only set when the row is filed under one sheet
@@ -317,8 +318,9 @@ class AuditPanel(QWidget):
         waiver = (self.document.waiver_for(f.key)
                   if self.document is not None else None)
         if waiver is not None:
-            who = f" — {waiver.author}" if waiver.author else ""
-            bits.append(f"Waived: {waiver.reason}{who}")
+            bits.append(waiver_text(waiver))
+            if f.waiver_problem:
+                bits.append(f"Not accepted: {f.waiver_problem}")
         return "\n".join(bits)
 
     def _apply_waived_style(self, it: QTreeWidgetItem):

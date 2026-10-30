@@ -31,6 +31,11 @@ SEVERITY_LABELS = {
 STATUS_OPEN = "open"
 STATUS_WAIVED = "waived"
 
+# The roles a waiver can be given in, as the rule library names them
+# (pydrc.engine.approvals.ROLES), and how this application shows them.
+ROLES = ("estimator", "engineer", "ul_rep")
+ROLE_LABELS = {"estimator": "Estimator", "engineer": "Engineer", "ul_rep": "UL rep"}
+
 _ORDER = {DEFINITE: 0, POTENTIAL: 1, INFO: 2}
 
 
@@ -142,6 +147,13 @@ class Finding:
     provenance: dict = field(default_factory=dict)
     pack: str = ""
     pack_version: str = ""
+    # The roles whose waiver closes this finding, as its rule names them. Empty
+    # takes a waiver from anyone, which is what every waiver used to be.
+    approvers: list = field(default_factory=list)
+    # Why the waiver on this finding does not close it, or "". Worked out by
+    # apply_waivers on every load and never stored: the waiver and the rule
+    # decide it, and a stored copy could only disagree with them.
+    waiver_problem: str = ""
 
     def __post_init__(self):
         # A finding built by hand, or loaded from a sidecar written before
@@ -203,13 +215,14 @@ class Finding:
             "places": [p.to_dict() for p in self.places],
             "evidence": self.evidence, "provenance": self.provenance,
             "pack": self.pack, "pack_version": self.pack_version,
+            "approvers": list(self.approvers),
         }
 
     @classmethod
     def from_dict(cls, d: dict) -> "Finding":
         d = dict(d or {})
         known = set(cls.__dataclass_fields__)
-        out = {k: v for k, v in d.items() if k in known}
+        out = {k: v for k, v in d.items() if k in known and k != "waiver_problem"}
         # A sidecar written before findings could cover more than one place has
         # no `places` at all, and __post_init__ synthesises the one it has.
         out["places"] = [Place.from_dict(p) for p in (d.get("places") or [])]
@@ -298,6 +311,7 @@ class Finding:
             provenance=dict(raw.get("provenance") or {}),
             pack=str(pack.get("id", "")),
             pack_version=str(pack.get("version", "")),
+            approvers=[str(r) for r in (raw.get("approvers") or [])],
         )
 
 
@@ -317,11 +331,18 @@ class Waiver:
     author: str = ""
     created: str = field(default_factory=now_iso)
     subject_id: str = ""
+    # One of ROLES, or "" for a waiver recorded before waivers had a role.
+    role: str = ""
+
+    @property
+    def date(self) -> str:
+        """The day it was given, YYYY-MM-DD."""
+        return (self.created or "")[:10]
 
     def to_dict(self) -> dict:
         return {"key": self.key, "rule_id": self.rule_id, "reason": self.reason,
                 "author": self.author, "created": self.created,
-                "subject_id": self.subject_id}
+                "subject_id": self.subject_id, "role": self.role}
 
     @classmethod
     def from_dict(cls, d: dict) -> "Waiver":
@@ -506,14 +527,59 @@ def sort_findings(findings) -> list:
     return sorted(findings, key=lambda f: f.sort_key)
 
 
+def waiver_text(waiver) -> str:
+    """One waiver as the panel and the reports print it: who, in what role,
+    on what day, and why."""
+    who = waiver.author or "someone unnamed"
+    role = ROLE_LABELS.get(waiver.role, waiver.role) or "no role"
+    when = f" on {waiver.date}" if waiver.date else ""
+    return f"Waived by {who} ({role}){when}: {waiver.reason}"
+
+
+def status_text(f) -> str:
+    """The Status a list or a report shows for a finding."""
+    if f.waived:
+        return "Waived"
+    return "Open, waiver not accepted" if f.waiver_problem else "Open"
+
+
+def judge(approvers, waiver) -> str:
+    """Why ``waiver`` does not close a finding whose rule takes ``approvers``,
+    or "" when it does.
+
+    The rule library's own ``pydrc.engine.approvals.judge``, word for word, so
+    a waiver given here closes exactly what an approval at quote time closes.
+    It is copied rather than imported because a sidecar must open where the
+    rule library is not installed, and tests/test_audit.py holds the two to
+    the same answer on every combination of roles and missing fields.
+    """
+    if not approvers:
+        return ""
+    takes = ", ".join(approvers)
+    if not waiver.role:
+        return f"it names no role, and this rule takes an approval from: {takes}"
+    if waiver.role not in approvers:
+        return f"{waiver.role} may not approve this rule, which takes: {takes}"
+    missing = [k for k, v in (("name", waiver.author), ("date", waiver.date),
+                              ("reason", waiver.reason)) if not (v or "").strip()]
+    if missing:
+        return f"it is missing its {', '.join(missing)}"
+    return ""
+
+
 def apply_waivers(findings, waivers: dict) -> list:
     """Mark findings the user has already decided about.
 
     Waived findings are marked, never dropped: a reviewer needs to see that a
-    decision was made, not just its consequence.
+    decision was made, not just its consequence. A waiver the finding's rule
+    does not accept, from a role it does not take or missing what it needs,
+    leaves the finding open with the reason in ``waiver_problem``.
     """
     for f in findings:
-        f.status = STATUS_WAIVED if f.key in waivers else STATUS_OPEN
+        waiver = waivers.get(f.key)
+        f.waiver_problem = judge(f.approvers, waiver) if waiver is not None else ""
+        f.status = (STATUS_WAIVED if waiver is not None and not f.waiver_problem
+                    else STATUS_OPEN)
     return findings
 
 

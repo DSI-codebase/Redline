@@ -159,8 +159,10 @@ class WaiveDialog(QDialog):
     that makes it worth running.
     """
 
-    def __init__(self, finding, author: str = "", parent=None):
+    def __init__(self, finding, author: str = "", parent=None, role: str = ""):
         super().__init__(parent)
+        from .audit.findings import ROLES, ROLE_LABELS
+        self._finding = finding
         self.setWindowTitle("Waive finding")
         self.setMinimumWidth(460)
         lay = QVBoxLayout(self)
@@ -187,9 +189,30 @@ class WaiveDialog(QDialog):
         self.reason = QLineEdit()
         self.reason.setPlaceholderText("Why is this acceptable here?")
         self.author = QLineEdit(author)
+        # The role decides whether the waiver closes the finding: a rule names
+        # the roles it takes, and a waiver from another stays on record with
+        # the finding left open, as an approval at quote time does.
+        self.role = QComboBox()
+        self.role.addItem("(choose)", "")
+        for r in ROLES:
+            self.role.addItem(ROLE_LABELS[r], r)
+        at = self.role.findData(role) if role in ROLES else 0
+        self.role.setCurrentIndex(max(at, 0))
         form.addRow("Reason", self.reason)
         form.addRow("Waived by", self.author)
+        form.addRow("Role", self.role)
         lay.addLayout(form)
+
+        approvers = list(getattr(finding, "approvers", None) or [])
+        takes = QLabel("This rule takes a waiver from: "
+                       + ", ".join(ROLE_LABELS.get(r, r) for r in approvers)
+                       if approvers else "This rule takes a waiver from anyone.")
+        takes.setWordWrap(True)
+        lay.addWidget(takes)
+        self.problem = QLabel("")
+        self.problem.setWordWrap(True)
+        self.problem.setStyleSheet("color: #b00020;")
+        lay.addWidget(self.problem)
 
         note = QLabel("The finding stays on the list, struck through, so the "
                       "decision stays visible.")
@@ -202,12 +225,29 @@ class WaiveDialog(QDialog):
         self._ok.setEnabled(False)
         self.reason.textChanged.connect(
             lambda t: self._ok.setEnabled(bool(t.strip())))
+        for signal in (self.reason.textChanged, self.author.textChanged):
+            signal.connect(self._check)
+        self.role.currentIndexChanged.connect(self._check)
         bb.accepted.connect(self.accept)
         bb.rejected.connect(self.reject)
         lay.addWidget(bb)
+        self._check()
+
+    def problem_text(self) -> str:
+        """What keeps this waiver from closing the finding, or "": the rule's
+        own check (``findings.judge``), before the waiver is recorded."""
+        from .audit.findings import Waiver, judge
+        reason, author, role = self.values()
+        why = judge(list(getattr(self._finding, "approvers", None) or []),
+                    Waiver(reason=reason or "(reason)", author=author, role=role))
+        return (f"Recorded, but the finding stays open: {why}." if why else "")
+
+    def _check(self, *_):
+        self.problem.setText(self.problem_text())
 
     def values(self) -> tuple:
-        return self.reason.text().strip(), self.author.text().strip()
+        return (self.reason.text().strip(), self.author.text().strip(),
+                str(self.role.currentData() or ""))
 
 
 def decided_by_text(decided_by: str, confidence=None) -> str:

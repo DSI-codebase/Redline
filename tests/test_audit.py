@@ -89,6 +89,77 @@ class TestFindingTypes(unittest.TestCase):
         self.assertEqual(findings[0].status, STATUS_OPEN)
 
 
+class TestAWaiverIsJudgedByItsRole(unittest.TestCase):
+    """A rule names the roles whose waiver closes its finding (PyDRC's
+    approvals, P8 risk 10). A waiver from another role, or missing its name,
+    stays on record and leaves the finding open with the reason."""
+
+    def _apply(self, approvers, **waiver):
+        f = Finding(key="k", rule_id="ERC-SCCR-001", approvers=list(approvers))
+        apply_waivers([f], {"k": Waiver(key="k", **waiver)})
+        return f
+
+    def test_a_rule_that_names_no_roles_takes_any_waiver(self):
+        f = self._apply((), reason="ok")
+        self.assertEqual((f.status, f.waiver_problem), (STATUS_WAIVED, ""))
+
+    def test_the_role_decides_whether_the_waiver_closes_the_finding(self):
+        """Injected: apply_waivers ignoring the role (red: the estimator's
+        waiver closed a UL rep's finding)."""
+        f = self._apply(("ul_rep",), reason="ok", author="Ann", role="estimator")
+        self.assertEqual(f.status, STATUS_OPEN)
+        self.assertEqual(f.waiver_problem,
+                         "estimator may not approve this rule, which takes: ul_rep")
+        f = self._apply(("ul_rep",), reason="ok", author="Pat", role="ul_rep")
+        self.assertEqual((f.status, f.waiver_problem), (STATUS_WAIVED, ""))
+
+    def test_a_waiver_from_before_roles_reopens_a_finding_whose_rule_names_them(self):
+        f = self._apply(("engineer",), reason="Accepted by client", author="LWH")
+        self.assertEqual(f.status, STATUS_OPEN)
+        self.assertEqual(f.waiver_problem,
+                         "it names no role, and this rule takes an approval from: engineer")
+
+    def test_a_waiver_missing_its_name_does_not_close_it(self):
+        f = self._apply(("engineer",), reason="ok", role="engineer")
+        self.assertEqual((f.status, f.waiver_problem),
+                         (STATUS_OPEN, "it is missing its name"))
+
+    def test_the_approvers_come_from_the_library_and_round_trip(self):
+        raw = {"fingerprint": "k", "rule_id": "ERC-PANEL-OCPD-MAX-001",
+               "approvers": ["engineer"]}
+        f = Finding.from_pydrc(raw)
+        self.assertEqual(f.approvers, ["engineer"])
+        f.waiver_problem = "transient"
+        back = Finding.from_dict(f.to_dict())
+        self.assertEqual((back.approvers, back.waiver_problem), (["engineer"], ""))
+        self.assertEqual(Finding.from_dict({"key": "old"}).approvers, [])
+        w = Waiver(key="k", reason="ok", role="ul_rep")
+        self.assertEqual(Waiver.from_dict(w.to_dict()).role, "ul_rep")
+        self.assertEqual(Waiver.from_dict({"key": "k", "reason": "ok"}).role, "")
+
+    @needs_pydrc
+    def test_the_check_is_the_rule_librarys_own_on_every_combination(self):
+        """findings.judge is a copy of pydrc.engine.approvals.judge, so a
+        sidecar opens without the library. Held to it here on every role, every
+        set of approvers and every missing field. Injected: the copy accepting
+        a waiver with no reason (red)."""
+        from itertools import product
+        from pydrc.engine import approvals
+        from app.audit.findings import ROLES, judge
+        self.assertEqual(tuple(ROLES), tuple(approvals.ROLES))
+        compared = 0
+        for approvers, role, author, reason, created in product(
+                ((), ("engineer",), ("ul_rep",), ("estimator", "engineer", "ul_rep")),
+                ("",) + ROLES, ("", "LWH"), ("", "ok"), ("", "2026-10-30T09:15:00")):
+            ours = judge(list(approvers), Waiver(key="k", role=role, author=author,
+                                                 reason=reason, created=created))
+            theirs = approvals.judge(approvers, approvals.Approval(
+                fingerprint="k", name=author, role=role, date=created[:10], reason=reason))
+            self.assertEqual(ours, theirs, (approvers, role, author, reason, created))
+            compared += 1
+        self.assertEqual(compared, 128)        # 4 approver sets x 4 roles x 2 x 2 x 2
+
+
 class TestAuditRunSummary(unittest.TestCase):
     def test_names_what_was_not_checked(self):
         run = AuditRun(eligible=507, checked=452, skipped=55, coverage=[
@@ -505,6 +576,27 @@ class TestPersistence(unittest.TestCase):
         again = self._open()
         self.assertIsNone(again.waiver_for("k1"))
         self.assertEqual(again.findings[0].status, STATUS_OPEN)
+        again.close()
+
+    def test_a_waiver_from_the_wrong_role_is_kept_and_leaves_the_finding_open(self):
+        """Through the document and the sidecar, so a reopened project says
+        the same. Injected: waive_finding marking the finding waived whatever
+        the role (red)."""
+        doc = self._open()
+        doc.set_findings([Finding(key="k1", rule_id="ERC-SCCR-001",
+                                  approvers=["ul_rep"])], AuditRun())
+        doc.waive_finding("k1", "Customer's transformer limits it", "Ann", "estimator")
+        self.assertEqual(doc.findings[0].status, STATUS_OPEN)
+        self.assertIn("estimator may not approve", doc.findings[0].waiver_problem)
+        doc.close()
+
+        again = self._open()
+        self.assertEqual(again.waiver_for("k1").role, "estimator")
+        self.assertEqual(again.findings[0].status, STATUS_OPEN)
+        self.assertIn("estimator may not approve", again.findings[0].waiver_problem)
+        again.waive_finding("k1", "Customer's transformer limits it", "Pat", "ul_rep")
+        self.assertEqual((again.findings[0].status, again.findings[0].waiver_problem),
+                         (STATUS_WAIVED, ""))
         again.close()
 
     def test_waiving_an_unknown_key_is_harmless(self):

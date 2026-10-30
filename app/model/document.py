@@ -166,13 +166,16 @@ class Document:
         self.sidecar.save_findings(self.findings)
         self.sidecar.set_meta("audit_run", run.to_json() if run is not None else "")
 
-    def waive_finding(self, key: str, reason: str, author: str = "") -> None:
+    def waive_finding(self, key: str, reason: str, author: str = "",
+                      role: str = "") -> None:
         """Record that a finding is acceptable here, and persist it.
 
         Waivers are stored apart from findings so that re-running the audit --
-        which replaces every finding -- never discards a human decision.
+        which replaces every finding -- never discards a human decision. The
+        waiver is recorded whatever the role, and closes the finding only when
+        its rule takes that role (``apply_waivers``).
         """
-        from ..audit.findings import Waiver, STATUS_WAIVED
+        from ..audit.findings import Waiver, apply_waivers
         key = str(key or "")
         if not key:
             return
@@ -180,11 +183,11 @@ class Document:
         for f in self.findings:
             if f.key == key:
                 rule_id, subject = f.rule_id, f.subject_id
-                f.status = STATUS_WAIVED
         waiver = Waiver(key=key, rule_id=rule_id, subject_id=subject,
-                        reason=reason, author=author)
+                        reason=reason, author=author, role=role)
         self.waivers[key] = waiver
         self.sidecar.save_waiver(waiver)
+        apply_waivers([f for f in self.findings if f.key == key], self.waivers)
 
     def clear_waiver(self, key: str) -> None:
         """Withdraw a waiver, returning the finding to open."""
@@ -195,6 +198,7 @@ class Document:
         for f in self.findings:
             if f.key == key:
                 f.status = STATUS_OPEN
+                f.waiver_problem = ""
 
     def waiver_for(self, key: str):
         return self.waivers.get(str(key or ""))
