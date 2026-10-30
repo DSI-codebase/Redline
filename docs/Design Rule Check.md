@@ -97,6 +97,27 @@ drawn as plain text where an intelligent symbol belongs — each becomes a
 finding a drafter can act on, which is how the source data gets better over
 time.
 
+### The plot against the imported drawings
+
+Every check that has imported drawings also compares what it read from the
+plot with what the drawings hold, before the two are combined. The line under
+the coverage sentence says how much of each kind the plot found, for example
+*"Against the imported drawings, the plot found 14 of 14 sheets and 47 of 52
+devices."* Each exported report carries a table with one row per kind:
+
+- **Matched**, **Mismatched** and **Not comparable** count what both hold. Not
+  comparable means neither side states the value that would be compared, such
+  as a conductor's size on a plot.
+- **Only the plot** and **Only the source** count what one side has and the
+  other lacks.
+- **Recall** is the share of the drawings' items the plot found. **Precision**
+  is the share of the plot's items the drawings hold.
+
+Only the sheets both carry are compared, so a partial import does not read as
+the plot missing things. When the two share no sheet number, the line says so
+rather than showing nothing. The table measures how well the plot was read. It
+is not a finding about the drawings.
+
 > [!warning] When the stored import can't be read
 > The imported drawings are kept in the markup database. If that copy is
 > damaged and won't load, the check still runs — on the PDF alone — and says

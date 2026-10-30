@@ -352,6 +352,8 @@ class AuditPanel(QWidget):
             text = f"{run.summary_line()}  {note}"
             if run.unnumbered_line():
                 text += "\n" + run.unnumbered_line()
+            if run.reconciliation_line():
+                text += "\n" + run.reconciliation_line()
             # A run that recorded a problem says so here, beside the coverage
             # sentence. These used to be kept in `errors` and displayed
             # nowhere -- so a check that ran on the PDF alone because the
