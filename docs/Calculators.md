@@ -58,6 +58,25 @@ SCCR, for example, shows **Panel SCCR**, **Against the target** and one
 **Circuit** heading per power circuit. **Copy** takes every heading, with each
 table row listed under the inputs.
 
+### Ratings read from the part ratings file
+
+On the panel SCCR and enclosure heat calculators, a row that names its
+**Manufacturer** and **Catalog** number and leaves its rating blank (**Marked
+SCCR**, or **Watts each**) takes the rating from the design rule library's part
+ratings file, the same file a design rule check reads.
+
+1. The match is for that exact part. Rockwell, AB and Allen-Bradley are one
+   manufacturer, and a catalog number matches whatever its case or spacing.
+   A part from another manufacturer with the same number never matches.
+2. A rating you type is never replaced.
+3. A rating nobody has signed says so in the arithmetic. An unsigned SCCR can
+   show that the panel falls short and never that it meets the target. Unsigned
+   watts are listed as not yet confirmed against a datasheet.
+4. The results end with a **Part ratings read** heading: the file read, by its
+   digest, the rows it filled, and the rows it did not have.
+
+A row with no manufacturer or no catalog number is not looked up.
+
 ## Reading a result
 
 The first line says what kind of answer it is:
@@ -79,8 +98,10 @@ clauses they rest on, and one line for every table the calculation read.
 
 ## When a field is empty
 
-**An empty field is never filled in for you.** If the calculator needs it, the
-result says so in place of an answer, for example *missing power factor*.
+**An empty field is never filled in for you**, with one exception: a part's
+rating on the Panel page, read from the part ratings file as described above.
+If the calculator needs a field, the result says so in place of an answer, for
+example *missing power factor*.
 
 A few inputs have a stated default in the library: copper as the material, one
 set of conductors in parallel, a breaker as the device. Left empty, those take
