@@ -48,23 +48,39 @@ DRC_REASON = re.compile(r"pydrc", re.I)
 QT_REASON = re.compile(r"pyside", re.I)
 
 
-def classify(reasons) -> tuple:
-    """``(drc_skipped, qt_skipped)`` from a {reason: count} mapping.
+def classify(reasons, *, qt_ok: bool, drc_ok: bool) -> tuple:
+    """``(drc_skipped, qt_skipped, unmeasured)`` from a {reason: count} mapping.
 
-    A reason naming both -- "needs PySide6 and PyDRC" -- is attributed to the
-    rule library, not to Qt. It cannot say which was actually missing, but the
-    rule library is the one allowed to be absent, and a genuinely missing Qt
-    announces itself in dozens of unambiguous "PySide6 not available" skips
-    rather than in one compound reason. Counting it as Qt failed a run whose
-    Qt was fine.
+    A reason naming one of the two is charged to it: the process that skipped
+    measured it. A reason naming both -- "needs PySide6 and PyDRC" -- says
+    only that one of them was missing, so it is charged to whichever this
+    interpreter cannot load, asked of the probes the tests themselves use
+    (`qt_available`, `drc_status`). A fixed side was wrong both ways. Charged
+    to Qt, it failed a run whose Qt was fine and whose token was absent.
+    Charged to the rule library, it told a Linux machine with PyDRC 0.19.0
+    installed and ``libEGL.so.1`` missing that "the design rule library is
+    absent" (2026-10-30), under a first line that named PyDRC 0.19.0.
+
+    Both missing: those tests needed both, so they count under both banners,
+    which can then sum to more than the skip count. Both loading: the runner
+    cannot say why the test skipped, and those come back in ``unmeasured``,
+    {reason: count}, rather than under a banner that would be a guess.
     """
     drc = qt = 0
+    unmeasured = {}
     for reason, n in reasons.items():
-        if DRC_REASON.search(reason):
+        names_drc = bool(DRC_REASON.search(reason))
+        names_qt = bool(QT_REASON.search(reason))
+        if names_drc and names_qt:
+            drc += 0 if drc_ok else n
+            qt += 0 if qt_ok else n
+            if drc_ok and qt_ok:
+                unmeasured[reason] = n
+        elif names_drc:
             drc += n
-        elif QT_REASON.search(reason):
+        elif names_qt:
             qt += n
-    return drc, qt
+    return drc, qt, unmeasured
 
 
 def modules(argv) -> list:
@@ -116,6 +132,21 @@ def drc_status() -> tuple:
         return False, f"could not be queried: {e}"
 
 
+def qt_available() -> bool:
+    """Whether Qt loads here, asked of `tests/_qt.py`, the probe the tests use.
+
+    Imported, never instantiated: no QApplication is made in this process, so
+    the GUI resources that per-module isolation exists to bound stay in the
+    children.
+    """
+    try:
+        sys.path.insert(0, HERE)
+        from tests._qt import QT_OK
+        return QT_OK
+    except Exception:                             # pragma: no cover - defensive
+        return False
+
+
 def main(argv) -> int:
     verbose = "-v" in argv
     strict = "--strict" in argv
@@ -124,7 +155,9 @@ def main(argv) -> int:
     names = modules(argv)
 
     ok, message = drc_status()
+    qt_ok = qt_available()
     print(f"Design rule library: {message}")
+    print(f"Qt (PySide6): {'loads' if qt_ok else 'could not be loaded'}")
     print()
 
     failed, ran = [], 0
@@ -158,7 +191,8 @@ def main(argv) -> int:
 
     # Loud on purpose. "No failures" must never be read as "everything was
     # checked" -- the same rule the audit itself follows about coverage.
-    drc_skipped, qt_skipped = classify(reasons)
+    drc_skipped, qt_skipped, unmeasured = classify(reasons, qt_ok=qt_ok,
+                                                   drc_ok=ok)
     absent = missing_optional()
 
     gaps = []
@@ -178,6 +212,11 @@ def main(argv) -> int:
         gaps.append((qt_skipped, "Qt (PySide6) could not be loaded",
                      "On Linux this usually means the Qt system libraries are "
                      "missing; see the Tests workflow."))
+    for reason, n in unmeasured.items():
+        gaps.append((n, f'of "{reason}", yet Qt and the design rule library '
+                        f'both load in this runner',
+                     "The test's own probe disagrees with this runner's "
+                     "(tests/_qt.py, app.audit); the cause was not measured."))
     for count, why, hint in gaps:
         print()
         print("!" * 72)
@@ -201,6 +240,14 @@ def main(argv) -> int:
     if strict and qt_skipped:
         print(f"\n--strict: failing because {qt_skipped} tests were skipped "
               f"for a missing Qt, which CI is supposed to provide.")
+        return 1
+    # Before compound reasons were measured these counted as rule-library
+    # skips and failed --require-drc. Not knowing the cause must not turn
+    # that green.
+    if (strict or require_drc) and unmeasured:
+        flag = "--require-drc" if require_drc else "--strict"
+        print(f"\n{flag}: failing because {sum(unmeasured.values())} tests "
+              f"were skipped for a cause this runner could not measure.")
         return 1
     if failed:
         print(f"\nFAILED MODULES: {', '.join(failed)}")

@@ -61,6 +61,12 @@ Qt gets the same treatment, with one difference: the workflows install it, so a
 Qt skip means a broken runner rather than a choice. `--strict`, which both
 workflows pass, turns those skips into a failed run.
 
+A reason naming both, `needs PySide6 and PyDRC`, cannot say which was missing,
+so the runner asks the probes the tests use (`tests/_qt.py`, `app.audit`) and
+charges the skip to whichever does not load in that interpreter. When both
+load, its banner says so instead of naming a cause, and `--strict` or
+`--require-drc` fails the run.
+
 ### Giving CI access to it
 
 Both workflows install the library when a `PYDRC_TOKEN` secret exists, and skip
