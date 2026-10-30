@@ -72,6 +72,25 @@ def user_pack_dirs() -> list:
     return [p for p in raw.split(os.pathsep) if p and os.path.isdir(p)]
 
 
+def available_packs(extra_dirs=None) -> list:
+    """``(pack_id, title, ref, description)`` for every pack the library finds.
+
+    Used by Settings to offer the packs a check can run, the built-in ones and
+    any under ``PYDRC_PACK_PATH``. A pack that will not load is left out here
+    and named by the check that tries it.
+    """
+    from pydrc.packs import loader
+    dirs = extra_dirs or user_pack_dirs()
+    out = []
+    for pack_id in sorted(loader.discover(dirs)):
+        try:
+            pack = loader.load_by_id(pack_id, extra=dirs)
+        except Exception:
+            continue
+        out.append((pack.id, pack.title, pack.ref, " ".join(pack.description.split())))
+    return out
+
+
 def available_rules(pack_ids=(), extra_dirs=None) -> list:
     """``(rule_id, title, severity, pack)`` for every rule that could run.
 
@@ -197,5 +216,7 @@ def run_audit(pdf_path: str, sheet_labels: dict, sheet_sources: dict,
         skipped=int(summary.get("skipped", 0)),
         coverage=[Coverage.from_dict(c) for c in cov_rows],
         errors=notices + list((payload.get("run") or {}).get("errors") or []),
+        unnumbered_pages=sorted(s.page_index + 1 for s in built.model.sheets
+                                if not s.number and s.page_index is not None),
     )
     return AuditResult(findings=findings, run=run)

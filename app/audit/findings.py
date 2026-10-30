@@ -399,6 +399,10 @@ class Coverage:
         return cls(**{k: v for k, v in d.items() if k in known})
 
 
+#: How many unnumbered pages the sentence names before it says how many more.
+UNNUMBERED_NAMED = 12
+
+
 @dataclass
 class AuditRun:
     """Summary of one audit, stored in the sidecar's meta table."""
@@ -410,6 +414,10 @@ class AuditRun:
     skipped: int = 0
     coverage: list = field(default_factory=list)
     errors: list = field(default_factory=list)
+    #: 1-based pages the model gave no sheet number, read from the model the
+    #: rules ran on. A rule that needs a number skips such a page, and the
+    #: counts alone did not say which pages they were (PyDRC plan, P2 exit).
+    unnumbered_pages: list = field(default_factory=list)
 
     @property
     def complete(self) -> bool:
@@ -469,6 +477,25 @@ class AuditRun:
         return (f"{self.checked} of {self.eligible} checked — "
                 f"{self.skipped} not checked{tail}.")
 
+    def unnumbered_line(self) -> str:
+        """The sentence naming the pages with no sheet number, or ""."""
+        pages = sorted(int(p) for p in self.unnumbered_pages or ())
+        if not pages:
+            return ""
+        shown = [str(p) for p in pages[:UNNUMBERED_NAMED]]
+        more = len(pages) - len(shown)
+        if more:
+            listed = ", ".join(shown) + f" and {more} more"
+        elif len(shown) == 1:
+            listed = shown[0]
+        else:
+            listed = ", ".join(shown[:-1]) + " and " + shown[-1]
+        if len(pages) == 1:
+            return (f"Page {listed} has no sheet number. A rule that needs one "
+                    "did not check it.")
+        return (f"Pages {listed} have no sheet number. A rule that needs one "
+                "did not check them.")
+
     def _reason_totals(self) -> dict:
         totals: dict = {}
         for cov in self.coverage:
@@ -482,6 +509,7 @@ class AuditRun:
             "eligible": self.eligible, "checked": self.checked,
             "skipped": self.skipped, "errors": list(self.errors),
             "coverage": [c.to_dict() for c in self.coverage],
+            "unnumbered_pages": list(self.unnumbered_pages),
         })
 
     @classmethod
@@ -500,6 +528,8 @@ class AuditRun:
             skipped=int(d.get("skipped", 0)),
             errors=list(d.get("errors") or []),
             coverage=[Coverage.from_dict(c) for c in (d.get("coverage") or [])],
+            unnumbered_pages=[int(p) for p in (d.get("unnumbered_pages") or [])
+                              if isinstance(p, int) and not isinstance(p, bool)],
         )
 
 

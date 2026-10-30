@@ -299,8 +299,6 @@ class SettingsDialog(QDialog):
         rather than forcing a re-run.
         """
         from .audit import available as audit_available, status as audit_status
-        from .audit.runner import available_rules
-        from .audit.findings import SEVERITIES, SEVERITY_LABELS
 
         gb = QGroupBox("Design rule check")
         v = QVBoxLayout(gb)
@@ -337,9 +335,23 @@ class SettingsDialog(QDialog):
                 "Install the rule library to choose which rules run."))
             return gb
 
-        disabled = set(self.config.audit_disabled_rules())
-        overrides = self.config.audit_severity_overrides()
+        from .audit.runner import available_packs, default_packs
+        self._drc_defaults = tuple(default_packs())
+        chosen = set(self.config.audit_packs() or self._drc_defaults)
+        v.addWidget(QLabel("Rule packs the check runs:"))
+        self.drc_packs = []
+        for pack_id, title, ref, description in available_packs():
+            box = QCheckBox(f"{ref} — {title}" if title else ref)
+            box.setChecked(pack_id in chosen)
+            box.setToolTip(description)
+            box.toggled.connect(self._refill_rules)
+            v.addWidget(box)
+            self.drc_packs.append((pack_id, box))
+        self.drc_pack_note = QLabel("")
+        self.drc_pack_note.setWordWrap(True)
+        v.addWidget(self.drc_pack_note)
 
+        self._drc_state = {}
         table = QTableWidget(0, 3)
         table.setHorizontalHeaderLabels(["Run", "Rule", "Severity"])
         table.verticalHeader().setVisible(False)
@@ -347,26 +359,8 @@ class SettingsDialog(QDialog):
         table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         table.setColumnWidth(0, 44)
         table.setColumnWidth(1, 420)
-
-        for rule_id, title, default_sev, _pack in available_rules(
-                self.config.audit_packs()):
-            row = table.rowCount()
-            table.insertRow(row)
-            chk = QTableWidgetItem()
-            chk.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
-            chk.setCheckState(Qt.Unchecked if rule_id in disabled else Qt.Checked)
-            table.setItem(row, 0, chk)
-            label = QTableWidgetItem(f"{rule_id} — {title}")
-            label.setToolTip(title)
-            table.setItem(row, 1, label)
-            combo = QComboBox()
-            for sev in SEVERITIES:
-                combo.addItem(SEVERITY_LABELS[sev], sev)
-            current = overrides.get(rule_id, default_sev)
-            idx = combo.findData(current)
-            combo.setCurrentIndex(idx if idx >= 0 else combo.findData(default_sev))
-            table.setCellWidget(row, 2, combo)
-            self.drc_rows.append((rule_id, default_sev, chk, combo))
+        self.drc_table = table
+        self._refill_rules()
 
         table.setMinimumHeight(220)
         v.addWidget(table)
@@ -375,18 +369,78 @@ class SettingsDialog(QDialog):
             "the governing standard, not a determination of compliance."))
         return gb
 
+    def _chosen_packs(self) -> list:
+        """The packs ticked, in the order Settings lists them."""
+        return [pack_id for pack_id, box in getattr(self, "drc_packs", [])
+                if box.isChecked()]
+
+    def _refill_rules(self, *_):
+        """List the rules of the packs ticked, keeping each rule's choices.
+
+        A rule already shown keeps what was chosen for it here; a rule newly
+        shown starts from what Settings saved.
+        """
+        from .audit.runner import available_rules
+        from .audit.findings import SEVERITIES, SEVERITY_LABELS
+        for rule_id, default_sev, chk, combo in self.drc_rows:
+            self._drc_state[rule_id] = (chk.checkState() == Qt.Checked,
+                                        combo.currentData())
+        chosen = self._chosen_packs()
+        if self.drc_packs and not chosen:
+            self.drc_pack_note.setText(
+                "No pack is ticked, so the check runs the library's default "
+                "packs: " + ", ".join(self._drc_defaults) + ".")
+        else:
+            self.drc_pack_note.setText("")
+        disabled = set(self.config.audit_disabled_rules())
+        overrides = self.config.audit_severity_overrides()
+        table = self.drc_table
+        table.setRowCount(0)
+        self.drc_rows = []
+        for rule_id, title, default_sev, _pack in available_rules(
+                chosen or self._drc_defaults):
+            on, sev = self._drc_state.get(
+                rule_id, (rule_id not in disabled, overrides.get(rule_id, default_sev)))
+            row = table.rowCount()
+            table.insertRow(row)
+            chk = QTableWidgetItem()
+            chk.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+            chk.setCheckState(Qt.Checked if on else Qt.Unchecked)
+            table.setItem(row, 0, chk)
+            label = QTableWidgetItem(f"{rule_id} — {title}")
+            label.setToolTip(title)
+            table.setItem(row, 1, label)
+            combo = QComboBox()
+            for s in SEVERITIES:
+                combo.addItem(SEVERITY_LABELS[s], s)
+            idx = combo.findData(sev)
+            combo.setCurrentIndex(idx if idx >= 0 else combo.findData(default_sev))
+            table.setCellWidget(row, 2, combo)
+            self.drc_rows.append((rule_id, default_sev, chk, combo))
+
     def _apply_audit(self, c):
         c.set("audit/draw_on_sheet", self.drc_draw.isChecked())
         c.set("audit/oda_path", self.drc_oda.text().strip())
         if not self.drc_rows:
             return
-        disabled, overrides = [], {}
+        # The library's default is saved as no choice at all, so the app goes
+        # on following PyDRC's DEFAULT_PACKS when the library moves a rule
+        # (runner.default_packs). A pack ticked or unticked is a choice.
+        chosen = self._chosen_packs()
+        same = sorted(chosen) == sorted(self._drc_defaults)
+        c.set_audit_packs([] if same or not chosen else chosen)
+        # A rule this list does not show keeps what was saved for it, so
+        # unticking a pack does not forget the rules switched off inside it.
+        shown = {row[0] for row in self.drc_rows}
+        disabled = [r for r in c.audit_disabled_rules() if r not in shown]
+        overrides = {r: s for r, s in c.audit_severity_overrides().items()
+                     if r not in shown}
         for rule_id, default_sev, chk, combo in self.drc_rows:
             if chk.checkState() != Qt.Checked:
                 disabled.append(rule_id)
-            chosen = combo.currentData()
-            if chosen and chosen != default_sev:
-                overrides[rule_id] = chosen
+            sev = combo.currentData()
+            if sev and sev != default_sev:
+                overrides[rule_id] = sev
         c.set_audit_disabled_rules(disabled)
         c.set_audit_severity_overrides(overrides)
 
