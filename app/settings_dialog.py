@@ -335,26 +335,32 @@ class SettingsDialog(QDialog):
                 "Install the rule library to choose which rules run."))
             return gb
 
-        from .audit.runner import available_packs, default_packs, unloadable_packs
+        from .audit.runner import (available_packs, default_packs,
+                                   unloadable_packs, unreadable_pack_files)
         self._drc_defaults = tuple(default_packs())
         chosen = set(self.config.audit_packs() or self._drc_defaults)
+        # A pack that will not load gets a box too, ticked when the check is
+        # set to run it. Without one, OK saved the boxes ticked and dropped the
+        # pack from the choice unseen, and the check went on without it.
+        # Unticking it is how that choice is dropped on purpose.
+        self._drc_failed = dict(unloadable_packs(chosen | set(self._drc_defaults)))
+        self._drc_unreadable = unreadable_pack_files()
+        offered = [(pack_id, f"{ref} — {title}" if title else ref, description)
+                   for pack_id, title, ref, description in available_packs()]
+        offered += [(pack_id, f"{pack_id} (will not load)", message)
+                    for pack_id, message in self._drc_failed.items()]
         v.addWidget(QLabel("Rule packs the check runs:"))
         self.drc_packs = []
-        for pack_id, title, ref, description in available_packs():
-            box = QCheckBox(f"{ref} — {title}" if title else ref)
+        for pack_id, label, tip in sorted(offered):
+            box = QCheckBox(label)
             box.setChecked(pack_id in chosen)
-            box.setToolTip(description)
+            box.setToolTip(tip)
             box.toggled.connect(self._refill_rules)
             v.addWidget(box)
             self.drc_packs.append((pack_id, box))
-        # A pack that will not load has no box and its rules have no rows, so
-        # it is named here with the loader's reason: the same text a check
-        # that runs it stops with.
-        self.drc_pack_failed = QLabel("\n\n".join(
-            f"{pack_id} will not load, so it is not listed here and a check "
-            f"that runs it stops. The rule library says: {message}"
-            for pack_id, message in unloadable_packs(
-                chosen | set(self._drc_defaults))))
+        # Each pack that will not load and each file that is not a pack, with
+        # the loader's reason: the same text a check that runs it stops with.
+        self.drc_pack_failed = QLabel("")
         self.drc_pack_failed.setTextFormat(Qt.PlainText)
         self.drc_pack_failed.setWordWrap(True)
         v.addWidget(self.drc_pack_failed)
@@ -385,6 +391,26 @@ class SettingsDialog(QDialog):
         return [pack_id for pack_id, box in getattr(self, "drc_packs", [])
                 if box.isChecked()]
 
+    def _failure_note(self, running: set) -> str:
+        """What will not load, for the label under the pack boxes. A pack the
+        check runs says the check stops, which it does until the pack is
+        fixed or its box is unticked."""
+        notes = []
+        for pack_id, message in sorted(self._drc_failed.items()):
+            if pack_id in running:
+                notes.append(
+                    f"{pack_id} will not load, and the check is set to run it, "
+                    "so a check stops with this error until the pack is fixed "
+                    f"or its box is unticked: {message}")
+            else:
+                notes.append(f"{pack_id} will not load. The rule library "
+                             f"says: {message}")
+        for path, message in self._drc_unreadable:
+            notes.append(f"{path} is not a rule pack the library can read, so "
+                         f"nothing in it is listed. The rule library says: "
+                         f"{message}")
+        return "\n\n".join(notes)
+
     def _refill_rules(self, *_):
         """List the rules of the packs ticked, keeping each rule's choices.
 
@@ -403,6 +429,8 @@ class SettingsDialog(QDialog):
                 "packs: " + ", ".join(self._drc_defaults) + ".")
         else:
             self.drc_pack_note.setText("")
+        self.drc_pack_failed.setText(
+            self._failure_note(set(chosen or self._drc_defaults)))
         disabled = set(self.config.audit_disabled_rules())
         overrides = self.config.audit_severity_overrides()
         table = self.drc_table

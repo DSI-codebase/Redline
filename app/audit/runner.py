@@ -91,21 +91,81 @@ def _reconcile(plot, source, notices: list) -> Optional[dict]:
         return None
 
 
+#: Pack file names when the library does not say. ``.json`` and
+#: ``PACK_SUFFIXES`` arrived together, with ``pydrc export-kit``.
+FALLBACK_SUFFIXES = (".yaml", ".yml")
+
+
+def _why_unreadable(loader, path: str, error=None) -> str:
+    """The library's reason a file is not a pack it can read.
+
+    ``lint`` words it best -- "pack must be a mapping" for an empty file,
+    where loading one raised ``'NoneType' object has no attribute 'get'`` --
+    but ``lint`` raises on a file that is not UTF-8, and then the loading
+    error is all there is.
+    """
+    try:
+        problems = loader.lint(path)
+    except Exception:
+        problems = []
+    return "\n".join(problems) or str(error or "it names no pack id")
+
+
+def _find_packs(dirs) -> tuple:
+    """``({pack_id: path}, unreadable)``: where each pack is, found the way
+    ``loader.discover`` finds it, and ``(path, reason)`` for each file there
+    that the library cannot read as a pack.
+
+    The same directories, suffixes and order, so a later directory wins, and
+    ``tests/test_unloadable_packs.py`` holds the map equal to ``discover``'s
+    on a tree ``discover`` can read. Done here because ``discover`` drops a
+    file that is not valid YAML, or names no pack id, without a word, and
+    raises on an empty file, a file whose top level is not a mapping, or one
+    that is not UTF-8 (measured against PyDRC 0.19.0, 2026-10-30). ``load_by_id``
+    calls ``discover``, so one such file in a pack directory emptied Settings
+    and stopped every check.
+    """
+    from pydrc.packs import loader
+    suffixes = tuple(getattr(loader, "PACK_SUFFIXES", FALLBACK_SUFFIXES))
+    found, unreadable = {}, {}
+    for d in loader.search_paths(dirs):
+        for name in sorted(os.listdir(d)):
+            if not name.endswith(suffixes):
+                continue
+            path = os.path.join(d, name)
+            try:
+                pack = loader.load(path, strict=False)
+            except Exception as e:
+                unreadable[path] = _why_unreadable(loader, path, e)
+                continue
+            if pack.id:
+                found[pack.id] = path
+            else:
+                unreadable[path] = _why_unreadable(loader, path)
+    return found, sorted(unreadable.items())
+
+
 def _load_each(pack_ids, dirs) -> tuple:
     """``(packs, failed)``: each named pack that loads, in order, and
     ``(pack_id, message)`` for each that does not.
 
-    The message is the loader's own text, which is what a check that runs the
-    pack stops with. Both listings below used to drop a failure with a bare
-    ``continue``, so a user pack PyDRC 0.19.0 refuses for its ``enabled`` key
-    dropped out of Settings, rules and all, without a word, while the check
-    reported the reason in "Design rule check failed".
+    The message is the loader's own text, and ``run_audit`` stops with it.
+    Both listings below used to drop a failure with a bare ``continue``, so a
+    user pack PyDRC 0.19.0 refuses for its ``enabled`` key dropped out of
+    Settings, rules and all, without a word, while the check reported the
+    reason in "Design rule check failed".
     """
     from pydrc.packs import loader
+    paths, _unreadable = _find_packs(dirs)
     packs, failed = [], []
     for pack_id in pack_ids:
+        if pack_id not in paths:
+            # load_by_id's own wording.
+            failed.append((pack_id, f"no rule pack named {pack_id!r}; "
+                                    f"found: {sorted(paths) or 'none'}"))
+            continue
         try:
-            packs.append(loader.load_by_id(pack_id, extra=dirs))
+            packs.append(loader.load(paths[pack_id]))
         except Exception as e:
             failed.append((pack_id, str(e)))
     return packs, failed
@@ -118,9 +178,8 @@ def available_packs(extra_dirs=None) -> list:
     any under ``PYDRC_PACK_PATH``. A pack that will not load is left out here;
     ``unloadable_packs`` names it and says why.
     """
-    from pydrc.packs import loader
     dirs = extra_dirs or user_pack_dirs()
-    packs, _failed = _load_each(sorted(loader.discover(dirs)), dirs)
+    packs, _failed = _load_each(sorted(_find_packs(dirs)[0]), dirs)
     return [(p.id, p.title, p.ref, " ".join(p.description.split()))
             for p in packs]
 
@@ -131,10 +190,16 @@ def unloadable_packs(pack_ids=(), extra_dirs=None) -> list:
     Covers each pack the library finds and each one in ``pack_ids``, the packs
     a check is set to run, which can name one the library no longer finds.
     """
-    from pydrc.packs import loader
     dirs = extra_dirs or user_pack_dirs()
-    named = sorted(set(loader.discover(dirs)) | set(pack_ids))
+    named = sorted(set(_find_packs(dirs)[0]) | set(pack_ids))
     return _load_each(named, dirs)[1]
+
+
+def unreadable_pack_files(extra_dirs=None) -> list:
+    """``(path, reason)`` for each file in a pack directory that the library
+    cannot read as a pack. No pack id names such a file, so neither listing
+    above can."""
+    return _find_packs(extra_dirs or user_pack_dirs())[1]
 
 
 def available_rules(pack_ids=(), extra_dirs=None) -> list:
@@ -174,10 +239,12 @@ def run_audit(pdf_path: str, sheet_labels: dict, sheet_sources: dict,
         raise AuditUnavailable(
             "The design rule library (PyDRC) is not installed.") from e
 
-    dirs = list(extra_pack_dirs or user_pack_dirs())
-    packs = []
-    for pack_id in (pack_ids or default_packs()):
-        packs.append(loader.load_by_id(pack_id, extra=dirs))
+    # Found and loaded the way Settings lists them, so the two agree, and a
+    # file in a pack directory that is not a pack does not stop the check.
+    packs, failed = _load_each(pack_ids or default_packs(),
+                               list(extra_pack_dirs or user_pack_dirs()))
+    if failed:
+        raise loader.PackError("\n\n".join(message for _id, message in failed))
 
     doc = fitz.open(pdf_path)
     try:
