@@ -86,6 +86,10 @@ rather than showing an empty list ([[Design Rule Check]]).
   them.
 - **ODA File Converter** — path to the executable used to read DWG files, or
   blank to auto-detect.
+- **Rule packs**: one box per pack the library finds, ticked for the packs
+  the check runs. The rule table below lists the rules of the packs ticked.
+  With none ticked, the check runs the library's default packs
+  ([[Design Rule Check]]).
 - **The rule table** — one row per rule, with **Run** to turn it off and a
   **Severity** override. Editing here re-evaluates the findings already on
   screen rather than forcing a re-run.

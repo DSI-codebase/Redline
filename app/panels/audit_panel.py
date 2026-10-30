@@ -350,6 +350,8 @@ class AuditPanel(QWidget):
             note = ("Advisory review — confirm each finding against the "
                     "governing standard.")
             text = f"{run.summary_line()}  {note}"
+            if run.unnumbered_line():
+                text += "\n" + run.unnumbered_line()
             # A run that recorded a problem says so here, beside the coverage
             # sentence. These used to be kept in `errors` and displayed
             # nowhere -- so a check that ran on the PDF alone because the

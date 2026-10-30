@@ -463,8 +463,8 @@ class TestDefaultPacks(unittest.TestCase):
         with open(os.path.join(here, "..", "docs", "Design Rule Check.md"),
                   encoding="utf-8") as fh:
             manual = " ".join(fh.read().split())
-        m = re.search(r"The rules come from (\w+) packs in the rule library: "
-                      r"(.*?)\. The library has", manual)
+        m = re.search(r"By default the check runs (\w+) packs from the rule "
+                      r"library: (.*?)\. The library has", manual)
         self.assertIsNotNone(m, "the manual no longer says which packs run")
         named = re.findall(r"`([\w-]+)`", m.group(2))
         self.assertEqual(tuple(named), default_packs())
@@ -472,8 +472,9 @@ class TestDefaultPacks(unittest.TestCase):
 
     @unittest.skipUnless(QT_OK, QT_REASON)
     def test_the_stored_setting_defaults_to_the_library(self):
-        """Nothing in the app writes this key, so its default is every
-        install's answer. It said drc-base."""
+        """Settings writes this key only for a choice other than the
+        library's default packs, so its default is most installs' answer. It
+        said drc-base."""
         from app.config import AppConfig
         cfg = AppConfig()
         saved = cfg.s.value("audit/packs")

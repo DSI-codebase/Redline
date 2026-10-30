@@ -279,10 +279,20 @@ was missing. Nothing is filled in for you.
 off and a severity you can override. Changes apply to the findings already on
 screen — no need to run the check again to see the effect.
 
-The rules come from two packs in the rule library: `drc-base`, the drafting
-rules, and `erc-nec-2026`, the electrical rules a drawing set can answer. The
-library has two more, `erc-ul508a` and `erc-heat`, which read a quote's project
-assumptions and parts list rather than a drawing, so the app does not run them.
+By default the check runs two packs from the rule library: `drc-base`, the
+drafting rules, and `erc-nec-2026`, the electrical rules a drawing set can
+answer. The library has two more, `erc-ul508a` and `erc-heat`, which read a
+quote's project assumptions and parts list rather than a drawing.
+
+**Rule packs**, on the same tab, lists every pack the library finds. Tick one
+to run it, or untick a default to leave it out. The rule list below shows the
+rules of the packs ticked.
+
+- On a drawing, a pack that reads a quote finds nothing to check, and the
+  coverage line says so.
+- Ticking exactly the default packs keeps the app on the library's own
+  default, which follows the library when a rule moves between packs.
+- With no pack ticked, the check runs the default packs, and the tab says so.
 
 ## Which rules produced a report
 

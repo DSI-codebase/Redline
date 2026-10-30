@@ -113,6 +113,8 @@ def export_markdown(document, path: str, disabled=()) -> str:
         out += [f"**{off}**", ""]
     if run is not None:
         out += [f"**Coverage.** {run.summary_line()}", ""]
+        if run.unnumbered_line():
+            out += [run.unnumbered_line(), ""]
         for problem in _problems(run):
             out += [f"> **{problem}**", ""]
         packs = _packs_line(run)
@@ -201,6 +203,8 @@ def export_csv(document, path: str, disabled=()) -> str:
         if run is not None:
             w.writerow([])
             w.writerow(["Coverage", run.summary_line()])
+            if run.unnumbered_line():
+                w.writerow(["Unnumbered pages", run.unnumbered_line()])
             for problem in _problems(run):
                 w.writerow(["Problem", problem])
             if run.packs:
@@ -264,6 +268,8 @@ def export_html(document, path: str, title: str = "", disabled=()) -> str:
         out.append(f"<div class='note'>{esc(off)}</div>")
     if run is not None:
         out.append(f"<p><strong>Coverage.</strong> {esc(run.summary_line())}</p>")
+        if run.unnumbered_line():
+            out.append(f"<p>{esc(run.unnumbered_line())}</p>")
         for problem in _problems(run):
             out.append(f"<div class='note'><strong>{esc(problem)}</strong></div>")
 
