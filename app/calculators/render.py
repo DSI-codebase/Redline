@@ -103,7 +103,9 @@ def sections_lines(sections) -> List[str]:
     for heading, result in sections:
         if lines:
             lines.append("")
-        lines += [f"== {heading} =="] + result_lines(result, advisory=False)
+        lines.append(f"== {heading} ==")
+        # A page's own note (the part ratings it read) is lines of text, not a Result.
+        lines += list(result) if isinstance(result, tuple) else result_lines(result, advisory=False)
     return lines + ["", ADVISORY]
 
 

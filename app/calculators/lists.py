@@ -11,6 +11,12 @@ yes-or-no the user left blank is asked for, except where PyDRC states a
 default (a load runs with the others; a supply is not 100% rated; a component
 is in the power circuit), which its arithmetic then names.
 
+One blank is filled, as an audit fills it: a part's SCCR or watts, when its row
+names the manufacturer and catalog number, is read from PyDRC's part ratings
+file (``Ratings.fill_sccr`` and ``fill_heat``). A rating nobody has signed is
+marked so and can show an SCCR shortfall but never a pass, and the results end
+with the file read, by digest, and which rows it filled.
+
 The pages themselves, their fields and their columns, are described in
 ``specs`` with every other calculator, which imports this module only when one
 of them runs.
@@ -74,6 +80,73 @@ def _function(module, name):
         raise specs.Missing(f"PyDRC {getattr(pydrc, '__version__', '?')} has no "
                             f"{module}.{name}. Update the design rule library.")
     return fn
+
+
+class _Lookup:
+    """PyDRC's part ratings file, read at the first row that needs it, and
+    what it filled. A row needs it when its rating is blank and it names both
+    the manufacturer and the catalog number."""
+
+    HEADING = "Part ratings read"
+
+    def __init__(self, build: _Build):
+        self._build = build
+        self._file = None
+        self.filled: List[str] = []
+        self.not_found: List[str] = []
+
+    def _ratings(self):
+        if self._file is None:
+            try:
+                from pydrc.catalog import ratings
+            except ImportError:
+                ratings = None
+            if ratings is None or not hasattr(ratings.Ratings, "fill_sccr"):
+                import pydrc
+                raise specs.Missing(
+                    f"PyDRC {getattr(pydrc, '__version__', '?')} cannot read a part's rating "
+                    f"from its ratings file. Update the design rule library, or give every "
+                    f"rating.")
+            try:
+                self._file = ratings.load().check()
+            except (OSError, ratings.RatingsError) as e:
+                self._build.problems.append(f"the part ratings file could not be read: {e}")
+                self._file = False
+        return self._file or None
+
+    def _note(self, tag, found):
+        (self.filled if found else self.not_found).append(tag)
+
+    def sccr(self, comp, manufacturer, catalog):
+        if comp.sccr_ka is not None or not (manufacturer and catalog):
+            return comp
+        r = self._ratings()
+        if r is None:
+            return comp
+        got = r.fill_sccr(comp, manufacturer, catalog)
+        self._note(comp.tag, got.sccr_ka is not None)
+        return got
+
+    def heat(self, comp):
+        if comp.watts_each is not None or not (comp.manufacturer and comp.catalog):
+            return comp
+        r = self._ratings()
+        if r is None:
+            return comp
+        got = r.fill_heat(comp)
+        self._note(comp.tag, got.watts_each is not None)
+        return got
+
+    def section(self) -> List[Tuple[str, object]]:
+        """The file read and the rows it filled, or nothing when no row
+        needed it."""
+        if not self._file:
+            return []
+        lines = [f"File: PyDRC's part ratings, {self._file.label}",
+                 "Filled from it: " + (", ".join(self.filled) or "none")]
+        if self.not_found:
+            lines.append("Not in it: " + ", ".join(self.not_found))
+        return [(self.HEADING, tuple(lines))]
 
 
 # ---------------------------------------------------------------- the load schedule
@@ -147,10 +220,11 @@ def panel_rating(raw) -> List[Tuple[str, object]]:
     volts = b.number(raw.get("system_voltage_v"), "system voltage")
     available = b.number(raw.get("available_fault_ka"), "available fault current")
     required = b.number(raw.get("required_sccr_ka"), "required SCCR")
+    lookup = _Lookup(b)
     comps = []
     for i, row in enumerate(specs.table_rows(raw.get("components")), 1):
         where = f"component {i}"
-        comps.append(sccr.SccrComponent(
+        comps.append(lookup.sccr(sccr.SccrComponent(
             tag=b.text(row.get("tag")) or where, kind=b.text(row.get("kind")),
             circuit=b.text(row.get("circuit")),
             sccr_ka=b.number(row.get("sccr_ka"), f"{where}, marked SCCR"),
@@ -158,7 +232,8 @@ def panel_rating(raw) -> List[Tuple[str, object]]:
             rating_source=b.text(row.get("rating_source")),
             sb41_row=b.number(row.get("sb41_row"), f"{where}, SB4.1 row", whole=True),
             control_circuit=b.yes_no(row.get("control_circuit"), f"{where}, control circuit",
-                                     default=False)))
+                                     default=False)),
+            b.text(row.get("manufacturer")), b.text(row.get("catalog"))))
         if not comps[-1].circuit:
             b.problems.append(f"missing {where}'s circuit: feeder, or its branch circuit")
     if not comps:
@@ -170,7 +245,7 @@ def panel_rating(raw) -> List[Tuple[str, object]]:
            ("Against the target", _function("sccr", "compare")(comps, volts, available, required))]
     circuits = list(dict.fromkeys(c.circuit for c in comps if not c.control_circuit))
     out += [(f"Circuit {cid}", _function("sccr", "circuit_sccr")(cid, comps, volts)) for cid in circuits]
-    return out
+    return out + lookup.section()
 
 
 # ---------------------------------------------------------------- heat
@@ -192,16 +267,17 @@ def enclosure_heat(raw) -> List[Tuple[str, object]]:
     from pydrc.calc.result import TIER_METHOD
     title = "Enclosure heat"
     b = _Build()
+    lookup = _Lookup(b)
     comps = []
     for i, row in enumerate(specs.table_rows(raw.get("components")), 1):
         where = f"part {i}"
-        comps.append(heat.HeatComponent(
+        comps.append(lookup.heat(heat.HeatComponent(
             tag=b.text(row.get("tag")) or where,
             quantity=_quantity(b, row.get("quantity"), where),
             watts_each=b.number(row.get("watts_each"), f"{where}, watts"),
             manufacturer=b.text(row.get("manufacturer")), catalog=b.text(row.get("catalog")),
             source=b.text(row.get("source")),
-            verified=b.yes_no(row.get("verified"), f"{where}, checked", default=False)))
+            verified=b.yes_no(row.get("verified"), f"{where}, checked", default=False))))
     enclosure = heat.Enclosure(
         height_in=b.number(raw.get("height_in"), "height"),
         width_in=b.number(raw.get("width_in"), "width"),
@@ -235,4 +311,4 @@ def enclosure_heat(raw) -> List[Tuple[str, object]]:
     out.append(("Against the selected cooling",
                 _function("heat", "cooling_check")(comps, margin, enclosure, outside, inside,
                                                    rated, unit)))
-    return out
+    return out + lookup.section()

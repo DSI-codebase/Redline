@@ -197,16 +197,21 @@ LOAD_COLUMNS = (
     F("branch_rating_a", "Branch rating", unit="A"),
 )
 
+#: The hint on a rating a blank row reads from PyDRC's part ratings file.
+_LOOKED_UP = "blank: read from the part ratings file by manufacturer and catalog"
+
 COMPONENT_COLUMNS = (
     F("tag", "Tag", "text"), F("kind", "Kind", CHOICE, choices=_sccr_kinds),
     F("circuit", "Circuit", "text", hint="feeder, or the branch circuit's name"),
-    F("sccr_ka", "Marked SCCR", unit="kA"), F("voltage_v", "At", unit="V"),
+    F("manufacturer", "Manufacturer", "text"), F("catalog", "Catalog", "text"),
+    F("sccr_ka", "Marked SCCR", unit="kA", hint=_LOOKED_UP), F("voltage_v", "At", unit="V"),
     F("rating_source", "Source", "text"), F("sb41_row", "SB4.1 row"),
     F("control_circuit", "Control circuit", CHOICE, choices=YES_NO, hint="blank: no"),
 )
 
 HEAT_COLUMNS = (
-    F("tag", "Tag", "text"), F("quantity", "Qty"), F("watts_each", "Watts each", unit="W"),
+    F("tag", "Tag", "text"), F("quantity", "Qty"),
+    F("watts_each", "Watts each", unit="W", hint=_LOOKED_UP),
     F("manufacturer", "Manufacturer", "text"), F("catalog", "Catalog", "text"),
     F("source", "Source of the watts", "text"),
     F("verified", "Checked against a datasheet", CHOICE, choices=YES_NO, hint="blank: no"),

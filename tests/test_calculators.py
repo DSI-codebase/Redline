@@ -325,6 +325,118 @@ class TestTheListPages(unittest.TestCase):
         self.assertEqual(text.count(render.ADVISORY), 1)
 
 
+@needs_pydrc
+class TestThePanelReadsPartRatings(unittest.TestCase):
+    """A blank SCCR or watts, on a row naming the manufacturer and catalog
+    number, is read from PyDRC's part ratings file as an audit reads it
+    (``Ratings.fill_sccr`` and ``fill_heat``). The file here is a scratch one
+    put where PyDRC looks, so the figures are this test's own."""
+
+    def setUp(self):
+        import json
+        import shutil
+        import tempfile
+        from unittest import mock
+        from pydrc.catalog import ratings
+        self.ratings = ratings
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        self.path = os.path.join(tmp, "ratings.json")
+        with open(self.path, "w", encoding="utf-8") as fh:
+            json.dump({"schema": ratings.SCHEMA, "parts": [
+                {"manufacturer": "Allen-Bradley", "catalog": "100-C23D10", "ratings": {
+                    "sccr_ka": {"value": 65, "voltage_v": 480, "source": "datasheet p. 4"}}},
+                {"manufacturer": "Allen-Bradley", "catalog": "1321-3R130-A", "ratings": {
+                    "watts_loss": {"value": 71, "source": "datasheet p. 9"}}}]}, fh)
+        patch = mock.patch.object(ratings, "PATH", self.path)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    #: K1 names its part and leaves the SCCR blank. CB1 is marked 65 kA.
+    BLANK = dict(SCCR, components=[
+        {"tag": "K1", "kind": "contactor", "circuit": "M1", "manufacturer": "Rockwell",
+         "catalog": "100-c23d10"},
+        SCCR["components"][1]])
+
+    def test_a_blank_sccr_is_read_from_the_file_and_never_passes_unsigned(self):
+        """65 kA from the file meets the 22 kA available only once the UL rep
+        signs it. Injected: panel_rating building its components without the
+        lookup (red: the panel had no SCCR to give)."""
+        s = _sections("sccr.panel_rating", self.BLANK)
+        self.assertEqual(s["Panel SCCR"]["sccr_ka"], 65.0)
+        self.assertIn("K1: marked 65 kA at 480 V (part ratings: datasheet p. 4, unsigned)",
+                      s["Circuit M1"].steps)
+        self.assertFalse(s["Against the target"].computed)
+        self.assertIn("only on ratings nobody has signed (K1)", s["Against the target"].reasons[0])
+        self.assertIn("Filled from it: K1", s["Part ratings read"])
+        self.ratings.sign(self.path, "Pat Rep", "ul_rep", "Allen-Bradley", on="2026-10-30")
+        s = _sections("sccr.panel_rating", self.BLANK)
+        self.assertEqual(s["Against the target"]["verdict"], "meets")
+
+    def test_a_stated_rating_is_never_replaced_and_the_file_is_not_read(self):
+        """K1 marked 10 kA keeps it, 12 kA short of 22. Injected: the page
+        looking up a part whose rating is stated (red: the file was read and K1
+        listed as filled from it)."""
+        rows = [dict(self.BLANK["components"][0], sccr_ka="10", voltage_v="480"),
+                SCCR["components"][1]]
+        s = _sections("sccr.panel_rating", dict(SCCR, components=rows))
+        self.assertEqual(s["Panel SCCR"]["sccr_ka"], 10.0)
+        self.assertEqual(s["Against the target"]["short_circuits"][0]["shortfall_ka"], 12.0)
+        self.assertNotIn("Part ratings read", s)
+
+    def test_a_row_missing_its_manufacturer_or_catalog_is_not_looked_up(self):
+        """Injected: the lookup ignoring a blank manufacturer (red: the file,
+        absent here, was read and the page refused)."""
+        os.remove(self.path)
+        for drop in ("manufacturer", "catalog"):
+            row = {k: v for k, v in self.BLANK["components"][0].items() if k != drop}
+            s = _sections("sccr.panel_rating", dict(SCCR, components=[row]))
+            self.assertNotIn("Part ratings read", s, drop)
+            self.assertIn("K1: no marked rating", " ".join(s["Panel SCCR"].reasons), drop)
+
+    def test_blank_watts_are_read_and_listed_as_unverified(self):
+        """LR1 is 2 x 71 W = 142 W from the file, unsigned. PS1 is not in it,
+        so the load is a floor. Injected: fill_heat's result discarded (red:
+        no rated part, the floor refused)."""
+        rows = [{"tag": "LR1", "quantity": "2", "manufacturer": "Rockwell Automation",
+                 "catalog": "1321-3R130-A"},
+                {"tag": "PS1", "manufacturer": "Siemens", "catalog": "6EP1334-3BA10"}]
+        s = _sections("heat.enclosure_heat", dict(HEAT, components=rows))
+        self.assertIn("PS1: missing watts", s["Heat load"].reasons)
+        floor = s["Heat load, the rated parts alone"]
+        self.assertEqual(floor["total_w"], 142.0)
+        self.assertEqual(floor["unverified"], ["LR1"])
+        self.assertEqual(s["Part ratings read"][1:], ("Filled from it: LR1", "Not in it: PS1"))
+
+    def test_an_unreadable_file_refuses_the_page(self):
+        """Never read as no ratings. Injected: the lookup swallowing the error
+        (red: the page ran, five sections, with K1 unrated)."""
+        with open(self.path, "w", encoding="utf-8") as fh:
+            fh.write("{ not json")
+        sections = specs.run(specs.find("sccr.panel_rating"), self.BLANK)
+        self.assertEqual(len(sections), 1)
+        self.assertFalse(sections[0][1].computed)
+        self.assertTrue(sections[0][1].reasons[0].startswith(
+            "the part ratings file could not be read: "), sections[0][1].reasons)
+
+    def test_a_library_without_the_lookup_says_to_update_it(self):
+        from unittest import mock
+        with mock.patch.object(self.ratings, "Ratings", type("Ratings", (), {})):
+            with self.assertRaises(specs.Missing) as e:
+                specs.run(specs.find("sccr.panel_rating"), self.BLANK)
+        self.assertIn("cannot read a part's rating from its ratings file", str(e.exception))
+
+    def test_copy_names_the_part_and_the_file_read(self):
+        calc = specs.find("sccr.panel_rating")
+        text = render.copy_text(calc, self.BLANK, specs.run(calc, self.BLANK), "0.16.0")
+        self.assertIn("    1. Tag K1, Kind contactor, Circuit M1, Manufacturer Rockwell, "
+                      "Catalog 100-c23d10\n", text)
+        label = self.ratings.load().label
+        self.assertIn(f"== Part ratings read ==\nFile: PyDRC's part ratings, {label}\n"
+                      f"Filled from it: K1\n", text)
+        self.assertEqual(text.count(render.ADVISORY), 1)
+
+
 class TestWithoutTheLibrary(unittest.TestCase):
     def test_status_reports_unavailable_with_the_install_instructions(self):
         from app import calculators
