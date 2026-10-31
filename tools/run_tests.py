@@ -129,11 +129,20 @@ def qt_missing() -> bool:
     return not QT_OK
 
 
-def gaps(reasons, absent, qt_absent) -> list:
+def gaps(reasons, absent, qt_absent, *, rule_library_missing) -> list:
     """``(count, why, hint)`` for each banner: one per cause, each built from
-    what was measured missing here rather than from the reason's wording."""
-    drc_skipped, qt_skipped = classify(reasons, qt_missing=qt_absent,
-                                       rule_library_missing=bool(absent))
+    what was measured missing here rather than from the reason's wording.
+
+    ``rule_library_missing`` is `drc_status`'s answer, never ``bool(absent)``.
+    The tests that skip with "needs PySide6 and PyDRC" check
+    ``audit.available()``, which imports pydrc and never ezdxf. Passing
+    ``bool(absent)`` charged them to ezdxf whenever ezdxf alone was missing:
+    17 skips bannered as "ezdxf ... could not be imported" with Qt missing
+    and PyDRC importable (2026-10-31).
+    """
+    drc_skipped, qt_skipped = classify(
+        reasons, qt_missing=qt_absent,
+        rule_library_missing=rule_library_missing)
     out = []
     if drc_skipped:
         # Name what is MEASURED absent, not the category the reason string
@@ -212,8 +221,9 @@ def main(argv) -> int:
     absent = missing_optional()
     qt_absent = qt_missing()
     drc_skipped, qt_skipped = classify(reasons, qt_missing=qt_absent,
-                                       rule_library_missing=bool(absent))
-    for count, why, hint in gaps(reasons, absent, qt_absent):
+                                       rule_library_missing=not ok)
+    for count, why, hint in gaps(reasons, absent, qt_absent,
+                                 rule_library_missing=not ok):
         print()
         print("!" * 72)
         print(f"!! {count} tests were SKIPPED because {why}.")
