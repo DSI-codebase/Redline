@@ -18,7 +18,9 @@ and `qt_missing()` ask the interpreter, which cannot be wrong about what it can
 import, and `classify` picks by what they measured.
 """
 
+import contextlib
 import importlib.util
+import io
 import os
 import re
 import shutil
@@ -26,7 +28,9 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import types
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _spec = importlib.util.spec_from_file_location(
@@ -221,8 +225,12 @@ class TestTheBanners(unittest.TestCase):
     """Each banner says what was measured missing, never what a reason's
     wording was filed under."""
 
-    def _whys(self, reasons, absent, qt_absent):
-        return [why for _n, why, _hint in run_tests.gaps(reasons, absent, qt_absent)]
+    EZDXF = ("ezdxf", run_tests._OPTIONAL["ezdxf"])
+
+    def _whys(self, reasons, absent, qt_absent, rule_library_missing):
+        return [why for _n, why, _hint in run_tests.gaps(
+            reasons, absent, qt_absent,
+            rule_library_missing=rule_library_missing)]
 
     def test_qt_missing_alone_never_blames_the_rule_library(self):
         """Measured 2026-10-30 with PyDRC 0.19.0 installed and Qt not: "13
@@ -230,23 +238,105 @@ class TestTheBanners(unittest.TestCase):
         Injected: ``gaps`` calling ``classify`` without the measurements (red)."""
         banners = run_tests.gaps({"needs PySide6 and PyDRC": 13,
                                   "PySide6 (or its system libraries) not available": 1},
-                                 absent=[], qt_absent=True)
+                                 absent=[], qt_absent=True,
+                                 rule_library_missing=False)
         self.assertEqual([(n, why) for n, why, _ in banners],
                          [(14, "Qt (PySide6) could not be loaded")])
 
+    def test_ezdxf_missing_takes_only_the_skips_that_checked_it(self):
+        """Qt missing, PyDRC importable, ezdxf not. The "needs PySide6 and
+        PyDRC" classes check ``audit.available()``, never ezdxf, so only the
+        five "needs ezdxf and pydrc" skips are ezdxf's. Injected:
+        ``rule_library_missing=bool(absent)`` in ``gaps`` (red: the ezdxf
+        banner said 22, counting the 17 Qt skips a second time)."""
+        banners = run_tests.gaps({"needs PySide6 and PyDRC": 17,
+                                  "needs ezdxf and pydrc": 5,
+                                  "PySide6 not available": 100},
+                                 absent=[self.EZDXF], qt_absent=True,
+                                 rule_library_missing=False)
+        self.assertEqual([(n, why) for n, why, _ in banners], [
+            (5, self.EZDXF[1] + " could not be imported"),
+            (117, "Qt (PySide6) could not be loaded"),
+        ])
+
     def test_a_skip_with_nothing_measured_absent_does_not_say_absent(self):
         """Injected: the old fallback, "the design rule library is absent" (red)."""
-        whys = self._whys({"PyDRC is not installed": 2}, absent=[], qt_absent=False)
+        # pydrc imports and its check still fails: audit.available() is False.
+        whys = self._whys({"PyDRC is not installed": 2}, absent=[],
+                          qt_absent=False, rule_library_missing=True)
         self.assertEqual(len(whys), 1)
         self.assertNotIn("absent", whys[0])
         self.assertNotIn("could not be imported", whys[0])
         self.assertIn("import here", whys[0])
 
     def test_an_absent_library_is_named(self):
-        whys = self._whys({"needs ezdxf and pydrc": 5},
-                          absent=[("ezdxf", run_tests._OPTIONAL["ezdxf"])],
-                          qt_absent=False)
-        self.assertEqual(whys, [run_tests._OPTIONAL["ezdxf"] + " could not be imported"])
+        whys = self._whys({"needs ezdxf and pydrc": 5}, absent=[self.EZDXF],
+                          qt_absent=False, rule_library_missing=False)
+        self.assertEqual(whys, [self.EZDXF[1] + " could not be imported"])
+
+
+class TestMainMeasuresTheRuleLibraryWithAudit(unittest.TestCase):
+    """`main` passes `drc_status`'s answer to both `classify` and `gaps`.
+
+    In-process rather than through a subprocess like
+    TestTheRunnerWithQtMissing, so it runs where PyDRC is not installed: the
+    probes run as written against modules planted in ``sys.modules`` (pydrc
+    0.19.0 importable, ezdxf blocked, ``tests._qt.QT_OK`` False), and only
+    the unittest child is replaced.
+    """
+
+    SKIPPED = 3
+
+    def _run(self, *flags):
+        def child(cmd, **_):
+            out = "".join(
+                f"test_{i} (tests.test_unloadable_packs.Settings.test_{i}) "
+                f"... skipped 'needs PySide6 and PyDRC'\n"
+                for i in range(self.SKIPPED))
+            out += f"\nRan 8 tests in 0.1s\n\nOK (skipped={self.SKIPPED})\n"
+            return subprocess.CompletedProcess(cmd, 0, "", out)
+
+        pydrc = types.ModuleType("pydrc")
+        pydrc.__version__ = "0.19.0"
+        pydrc.checks = types.ModuleType("pydrc.checks")
+        qt = types.ModuleType("tests._qt")
+        qt.QT_OK = False
+        planted = {"pydrc": pydrc, "pydrc.checks": pydrc.checks,
+                   "ezdxf": None, "tests._qt": qt}   # None: import raises
+
+        saved = {name: sys.modules.get(name, KeyError) for name in planted}
+        buf = io.StringIO()
+        try:
+            sys.modules.update(planted)
+            with mock.patch.dict(os.environ), \
+                    mock.patch.object(run_tests.subprocess, "run",
+                                      side_effect=child), \
+                    contextlib.redirect_stdout(buf):
+                code = run_tests.main(["tests.test_unloadable_packs", *flags])
+        finally:
+            for name, module in saved.items():
+                if module is KeyError:
+                    sys.modules.pop(name, None)
+                else:
+                    sys.modules[name] = module
+        return code, buf.getvalue()
+
+    def test_ezdxf_missing_does_not_fail_require_drc_for_a_qt_skip(self):
+        """Injected: ``rule_library_missing=bool(absent)`` in `main`'s own
+        ``classify`` call, ``gaps`` left fixed (red: "--require-drc: failing
+        because 3 tests were skipped for a missing optional library")."""
+        code, out = self._run("--strict", "--require-drc")
+        # Else the run never saw PyDRC as installed, and the assertions below
+        # would hold for a different reason.
+        self.assertIn("Design rule library: PyDRC 0.19.0", out)
+        self.assertIn(f"; {self.SKIPPED} skipped.", out)
+        banners = re.findall(r"^!! (\d+) tests were SKIPPED because (.*)\.$",
+                             out, re.M)
+        self.assertEqual(banners, [(str(self.SKIPPED),
+                                    "Qt (PySide6) could not be loaded")])
+        self.assertNotIn("--require-drc: failing", out)
+        self.assertIn("--strict: failing because", out)
+        self.assertEqual(code, 1)
 
 
 # Refuses PySide6 and nothing else, the blocker tests/test_qt_absent_degrades.py
