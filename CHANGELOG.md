@@ -4,6 +4,22 @@ All notable changes to **DSI Redline** are documented here. Versions are tagged
 `vX.Y.Z`; each tag triggers the Windows build that publishes the installer and a
 portable zip to the matching GitHub release.
 
+## v1.8.1
+
+Design rule checking in this release is PyDRC `v0.23.1` (`6360563`), the same
+rules as v1.8.0.
+
+- **The installed app starts again.** v1.8.0 stopped on launch with
+  `FileNotFoundError` naming `layout_rf2.4.1+imf1.yaml`. Its build picked up
+  PyMuPDF 2.0, which loads a page layout model when the PDF engine starts, and
+  the model's files were not in the installer. DSI Redline does not use that
+  model, so the build leaves it out, as every build before v1.8.0 did. That
+  also keeps 51 MB of model files and the ONNX runtime out of the installer.
+- **The Windows build starts the app it built before it packages it.** It runs
+  `DSI Redline.exe --self-test <report>`, which opens the window, closes it and
+  writes `ok` or the error to the report. A build that cannot start now fails
+  before the installer is made, so it is never published.
+
 ## v1.8.0
 
 Design rule checking in this release is PyDRC `v0.23.1` (`6360563`). v1.7.0

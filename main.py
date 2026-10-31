@@ -52,10 +52,26 @@ def land(win, pdf_path: Optional[str], splash=None) -> None:
         win.show_file_view()
 
 
-def main(argv=None) -> int:
-    argv = list(sys.argv if argv is None else argv)
+SELF_TEST = "--self-test"
+
+
+def self_test_report(argv) -> Optional[str]:
+    """Where ``--self-test`` should write its answer.
+
+    ``None`` when the launch is not a self-test, ``""`` when the flag has no
+    path after it, otherwise the path.
+    """
+    args = list(argv)[1:]
+    if SELF_TEST not in args:
+        return None
+    i = args.index(SELF_TEST)
+    return args[i + 1] if i + 1 < len(args) else ""
+
+
+def start(argv):
+    """Everything a launch does before the event loop. Returns ``(app, win)``."""
     _set_windows_app_id()
-    app = QApplication(argv)
+    app = QApplication.instance() or QApplication(argv)
 
     # lightweight imports so the splash can appear before the heavy modules load
     from app import __app_name__, __version__, app_icon
@@ -83,6 +99,40 @@ def main(argv=None) -> int:
     land(win, pdf_from_argv(argv), splash)
 
     splash.finish(win)
+    return app, win
+
+
+def self_test(argv, report: str) -> int:
+    """Launch, close, and write ``ok`` or the traceback to ``report``.
+
+    For the frozen build, which the suite never runs: v1.8.0 passed the suite
+    from source and died on launch (CHANGELOG, v1.8.1). A windowed build has
+    no stdout, and an exception that escapes it opens a message box that a CI
+    runner waits on until the job times out, so the launch runs inside this
+    handler and the answer goes to a file. Exit 0 with ``ok``, or 1 with the
+    traceback.
+    """
+    try:
+        app, win = start(argv)
+        app.processEvents()  # run what the window deferred to the event loop
+        win.close()
+        text, code = "ok\n", 0
+    except BaseException:  # noqa: BLE001 -- SystemExit too: the report is the point
+        import traceback
+        text, code = traceback.format_exc(), 1
+    with open(report, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    return code
+
+
+def main(argv=None) -> int:
+    argv = list(sys.argv if argv is None else argv)
+    report = self_test_report(argv)
+    if report == "":
+        return 2  # refused: a windowed build has nowhere else to say why
+    if report is not None:
+        return self_test(argv, report)
+    app, _win = start(argv)  # _win keeps the window alive for the event loop
     return app.exec()
 
 

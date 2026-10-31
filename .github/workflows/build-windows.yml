@@ -171,6 +171,43 @@ jobs:
       - name: Build app (PyInstaller)
         run: pyinstaller packaging/DSI_Redline.spec --noconfirm
 
+      # The suite above runs from SOURCE. v1.8.0 passed it and died on launch,
+      # because PyMuPDF 2.0's layout models were in the source install and not
+      # in the bundle, and nothing between here and the release ever started
+      # the built app. This starts it before anything is packaged or published.
+      # `--self-test` (main.py) builds the window, closes it, and writes "ok" or
+      # the traceback to the report, because a windowed exe has no stdout. An
+      # exception that escapes before main() opens a message box and waits, so
+      # that case arrives as the timeout below instead of a hang.
+      - name: Launch the built app (self-test)
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $exe = (Resolve-Path "dist/DSI Redline/DSI Redline.exe").Path
+          $report = Join-Path $env:RUNNER_TEMP "redline-self-test.txt"
+          Remove-Item $report -ErrorAction SilentlyContinue
+          $psi = [System.Diagnostics.ProcessStartInfo]::new($exe)
+          $psi.Arguments = "--self-test `"$report`""
+          $psi.UseShellExecute = $false
+          $p = [System.Diagnostics.Process]::Start($psi)
+          if (-not $p.WaitForExit(180000)) {
+            $p.Kill($true)
+            Write-Output "::error::The built app did not exit within 180 s of --self-test. An exception raised before main() opens a message box and waits, which is what this looks like."
+            exit 1
+          }
+          $text = if (Test-Path $report) { (Get-Content $report -Raw) } else { "" }
+          Write-Output "self-test exit $($p.ExitCode)"
+          Write-Output $text
+          if ($p.ExitCode -ne 0) {
+            Write-Output "::error::The built app failed its self-test (exit $($p.ExitCode)). The traceback is above. The suite passed from source, so look first for a file the bundle is missing."
+            exit 1
+          }
+          if ($text.Trim() -ne "ok") {
+            Write-Output "::error::The built app exited 0 without writing ok to $report, so the self-test did not run."
+            exit 1
+          }
+
       - name: Build installer (Inno Setup)
         run: |
           choco install innosetup --no-progress -y
