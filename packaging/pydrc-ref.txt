@@ -78,4 +78,9 @@
 # not empty, and the rules move from `drc-base` 1.34.0 alone to the default
 # packs, `drc-base` 1.38.0 and `erc-nec-2026` 1.2.0 (CHANGELOG.md, v1.8.0). Set
 # this back to `main` after the release.
-v0.23.1
+#
+# CHANGED 2026-10-31, from `v0.23.1` back to `main`. v1.8.0 shipped with
+# `v0.23.1` (the release notes read `pydrc 0.23.1 | drc-base@1.38.0 |
+# 6360563… (ref v0.23.1)`), so development tracks the library again. The next
+# release sets a tag here first, per the three steps above.
+main
