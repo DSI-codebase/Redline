@@ -19,6 +19,12 @@ rules as v1.8.0.
   `DSI Redline.exe --self-test <report>`, which opens the window, closes it and
   writes `ok` or the error to the report. A build that cannot start now fails
   before the installer is made, so it is never published.
+- **The third-party notices name every package the installer carries.**
+  `THIRD-PARTY-NOTICES.md` named ten, and the installer carries 39, most of them
+  installed by those ten. Each is listed with its license and its copyright
+  lines, and the `licenses` folder beside the app holds each package's own
+  license files, copied unchanged. PyMuPDF's license question is still open, as
+  the notices say.
 
 ## v1.8.0
 
