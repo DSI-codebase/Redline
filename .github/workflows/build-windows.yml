@@ -156,9 +156,12 @@ jobs:
           else
             python -c "from app import audit; ok, msg = audit.status(); print(msg); raise SystemExit(0 if ok else 1)"
             lib=$(python -c "import pydrc; print(pydrc.__version__)")
-            pack=$(python -c "from pydrc.packs import loader; print(loader.load_by_id('drc-base').ref)")
-            echo "Design rule checking: pydrc $lib, $pack, commit $PYDRC_SHA (ref $PYDRC_REF)"
-            echo "PYDRC_BUILT=pydrc $lib | $pack | ${PYDRC_SHA} (ref ${PYDRC_REF})" >> "$GITHUB_ENV"
+            # Every pack the app runs when Settings names none, asked of the app,
+            # which asks PyDRC. This named drc-base alone after the app had moved
+            # to PyDRC's default packs, so v1.8.0's notes named one of its two.
+            packs=$(python -c "from app.audit.runner import default_packs; from pydrc.packs import loader; print(', '.join(loader.load_by_id(p).ref for p in default_packs()))")
+            echo "Design rule checking: pydrc $lib, $packs, commit $PYDRC_SHA (ref $PYDRC_REF)"
+            echo "PYDRC_BUILT=pydrc $lib | $packs | ${PYDRC_SHA} (ref ${PYDRC_REF})" >> "$GITHUB_ENV"
           fi
 
       - name: Run tests
