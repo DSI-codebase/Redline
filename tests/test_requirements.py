@@ -423,5 +423,98 @@ class TestTheInterpreterClaimIsExercised(unittest.TestCase):
             "on a current runtime: " + str(undescribed))
 
 
+class TestThePyMuPDFFloorIsExercised(unittest.TestCase):
+    """`requirements.txt` declares a PyMuPDF floor, and a CI job installs it.
+
+    It said `PyMuPDF>=1.25` while the suite failed at 1.25.0 (measured
+    2026-10-31): `test_export_writes_freetext_with_leader` and
+    `test_printing_applies_the_line_weight_floor`, both green at 1.25.4.
+    Nothing ran the floor. A fresh install takes the newest PyMuPDF and
+    pdf2docx 0.5.13 requires 1.26.7, so every runner sat well above it, and
+    only an install that honored the floor met the two failures.
+
+    The `pymupdf-floor` job in `tests.yml` installs `PYMUPDF_FLOOR` as a
+    constraint and runs the suite. This holds that pin to the floor in both
+    directions, the way `TestTheInterpreterClaimIsExercised` holds the matrix
+    to the documented interpreter. Read with comments stripped, because the
+    comments in both files explain the floor and name it, and read **by job**,
+    because a pin set in one job and an install in another is not a floor run.
+    """
+
+    JOB = "pymupdf-floor"
+
+    def _floor(self):
+        """The `>=` bound on the one PyMuPDF line in requirements.txt."""
+        found = []
+        for line in _lines("requirements.txt"):
+            # The project's name, then a version specifier. pymupdf4llm and
+            # pymupdf-layout are other distributions and do not match.
+            m = re.match(r"pymupdf\s*([<>=!~].*)$", line, re.I)
+            if m:
+                found.append(m.group(1))
+        self.assertEqual(len(found), 1,
+                         f"requirements.txt should name PyMuPDF once, found "
+                         f"{len(found)} specifier(s): {found}")
+        bound = re.search(r">=\s*([0-9][^,\s;]*)", found[0])
+        self.assertIsNotNone(bound, f"the PyMuPDF line has no >= floor: "
+                                    f"{found[0]!r}")
+        return bound.group(1)
+
+    def _job(self):
+        """The floor job's lines, comment lines dropped."""
+        path = os.path.join(HERE, ".github", "workflows", "tests.yml")
+        with open(path, encoding="utf-8") as fh:
+            lines = [ln for ln in fh.read().splitlines()
+                     if not ln.lstrip().startswith("#")]
+        start = next((i for i, ln in enumerate(lines)
+                      if ln.rstrip() == f"  {self.JOB}:"), None)
+        self.assertIsNotNone(
+            start, f"tests.yml has no `{self.JOB}` job, so nothing installs "
+                   "the PyMuPDF floor requirements.txt declares")
+        body = []
+        for ln in lines[start + 1:]:
+            if ln.strip() and len(ln) - len(ln.lstrip()) <= 2:
+                break  # the next job, or the end of `jobs:`
+            body.append(ln)
+        return "\n".join(body)
+
+    def test_the_job_pins_the_floor_requirements_txt_declares(self):
+        job = self._job()
+        pins = re.findall(r'^\s+PYMUPDF_FLOOR:\s*"?([^"\s]+)"?\s*$', job, re.M)
+        self.assertEqual(len(pins), 1,
+                         f"the {self.JOB} job should set PYMUPDF_FLOOR once, "
+                         f"found {pins}")
+        floor = self._floor()
+        self.assertEqual(
+            pins[0], floor,
+            f"requirements.txt declares PyMuPDF>={floor} and the {self.JOB} "
+            f"job installs {pins[0]}. Move both in the same commit, and "
+            "re-measure the release you move to.")
+
+    def test_the_job_installs_the_pin_and_runs_the_suite(self):
+        """A pin that nothing installs agrees with the floor and runs nothing.
+
+        Each one has to BEGIN a line. The job echoes the command it runs, so
+        a substring check passed with the `python tools/run_tests.py` line
+        deleted: the echo above it still held the words (falsified on this
+        test's first draft, 2026-10-31).
+        """
+        commands = [ln.strip() for ln in self._job().splitlines()]
+        for command, why in (
+            ('echo "PyMuPDF==${PYMUPDF_FLOOR}" > ',
+             "the pin is no longer written out as an exact constraint"),
+            ("pip install -r requirements.txt -c ",
+             "requirements.txt is no longer installed under the constraint"),
+            ('test "$installed" = "$PYMUPDF_FLOOR"',
+             "nothing confirms that the installed PyMuPDF is the pin"),
+            ('ARGS="--strict"',
+             "the floor run no longer fails when Qt is missing"),
+            ("python tools/run_tests.py $ARGS",
+             "the job no longer runs the suite"),
+        ):
+            self.assertTrue(any(c.startswith(command) for c in commands),
+                            f"{self.JOB}: {why} (no line begins {command!r})")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -4,6 +4,16 @@ All notable changes to **DSI Redline** are documented here. Versions are tagged
 `vX.Y.Z`; each tag triggers the Windows build that publishes the installer and a
 portable zip to the matching GitHub release.
 
+## Unreleased
+
+- **Running from source needs PyMuPDF 1.25.4 or later.** `requirements.txt`
+  said 1.25, and two features do not work below 1.25.4. On 1.25.0 and 1.25.2
+  an exported callout's leader has its tip at x = 0, the page's left edge. On
+  1.25.0, 1.25.2 and 1.25.3 printing at the Medium line weight puts down no
+  more ink than printing as drawn. 1.25.1 was not tried. The installer's build
+  installs the newest PyMuPDF, so a shipped installer was not affected. Tests
+  now also run at the declared floor on every push.
+
 ## v1.8.0
 
 Design rule checking in this release is PyDRC `v0.23.1` (`6360563`). v1.7.0
