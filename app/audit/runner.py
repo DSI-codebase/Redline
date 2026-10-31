@@ -112,20 +112,40 @@ def _why_unreadable(loader, path: str, error=None) -> str:
 
 
 def _find_packs(dirs) -> tuple:
-    """``({pack_id: path}, unreadable)``: where each pack is, found the way
+    """``({pack_id: path}, unreadable)``: where each pack is, as
     ``loader.discover`` finds it, and ``(path, reason)`` for each file there
-    that the library cannot read as a pack.
+    that the library cannot read as a pack, sorted by path.
+
+    From PyDRC 0.21.0 both come from ``discover`` itself, which reports each
+    file it stepped over with ``lint``'s reason. Before that ``discover`` took
+    no ``skipped`` and said nothing, and ``_walk_packs`` finds them instead.
+    """
+    from pydrc.packs import loader
+    skipped: list = []
+    try:
+        found = loader.discover(dirs, skipped=skipped)
+    except Exception:
+        # TypeError from a PyDRC before 0.21.0. Anything else is a file
+        # discover did not step over, and the walk names it rather than
+        # letting it empty Settings and stop every check.
+        return _walk_packs(loader, dirs)
+    return found, sorted(dict(skipped).items())
+
+
+def _walk_packs(loader, dirs) -> tuple:
+    """``_find_packs``'s answer where ``discover`` will not say what it
+    skipped, or raises: found the way ``discover`` finds packs.
 
     The same directories, suffixes and order, so a later directory wins, and
     ``tests/test_unloadable_packs.py`` holds the map equal to ``discover``'s
-    on a tree ``discover`` can read. Done here because ``discover`` drops a
-    file that is not valid YAML, or names no pack id, without a word, and
-    raises on an empty file, a file whose top level is not a mapping, or one
-    that is not UTF-8 (measured against PyDRC 0.19.0, 2026-10-30). ``load_by_id``
-    calls ``discover``, so one such file in a pack directory emptied Settings
-    and stopped every check.
+    on a tree ``discover`` can read, and the files it names equal to what a
+    PyDRC from 0.21.0 reports. Written because ``discover`` drops a file that
+    is not valid YAML, or names no pack id, without a word, and raises on an
+    empty file, a file whose top level is not a mapping, or one that is not
+    UTF-8 (measured against PyDRC 0.19.0, 2026-10-30). ``load_by_id`` calls
+    ``discover``, so one such file in a pack directory emptied Settings and
+    stopped every check.
     """
-    from pydrc.packs import loader
     suffixes = tuple(getattr(loader, "PACK_SUFFIXES", FALLBACK_SUFFIXES))
     found, unreadable = {}, {}
     for d in loader.search_paths(dirs):
