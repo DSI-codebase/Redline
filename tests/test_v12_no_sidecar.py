@@ -10,7 +10,7 @@ from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 from app.model.annotations import KIND_COMMENT
 from app.model.storage import NullSidecar
@@ -25,7 +25,7 @@ except Exception:  # pragma: no cover
 
 def _make_pdf(dirpath, name="d.pdf"):
     src = os.path.join(dirpath, name)
-    d = fitz.open(); d.new_page(width=400, height=300)
+    d = pymupdf.open(); d.new_page(width=400, height=300)
     # give it a bit of text so "view / find" has something to work with
     d[0].insert_text((72, 72), "hello wire 300")
     d.save(src); d.close()

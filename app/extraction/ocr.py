@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-import fitz  # PyMuPDF
+import pymupdf
 
 from .wire_parser import Token, SOURCE_OCR
 
@@ -30,7 +30,7 @@ def available() -> bool:
         return False
 
 
-def ocr_page(page: "fitz.Page", page_index: int,
+def ocr_page(page: "pymupdf.Page", page_index: int,
              zoom: float = DEFAULT_OCR_ZOOM,
              min_conf: float = 0.0) -> list:
     """OCR a single page and return word-level :class:`Token` objects.
@@ -45,7 +45,7 @@ def ocr_page(page: "fitz.Page", page_index: int,
     from PIL import Image
     import io
 
-    pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
+    pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
     img = Image.open(io.BytesIO(pix.tobytes("png")))
     data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
 

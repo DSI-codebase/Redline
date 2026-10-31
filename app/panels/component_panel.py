@@ -57,10 +57,10 @@ class _ComponentWorker(QThread):
 
     def run(self):
         try:
-            import fitz
+            import pymupdf
             from ..extraction.text_extract import collect_component_tokens, page_has_text
             from ..extraction import ocr as _ocr, claude_api
-            doc = fitz.open(self.pdf_path)
+            doc = pymupdf.open(self.pdf_path)
             try:
                 families = tuple(self.cfg.families) if self.cfg else ()
                 ai_ok = self.method == "ai" and claude_api.available(self.ai_key)

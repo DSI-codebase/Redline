@@ -88,7 +88,7 @@ prerequisite (`CI.md`), and without them a third of the suite skips.
 
 ## An open PyMuPDF handle is a Windows file lock, and Linux cannot see it
 
-A `fitz.Document` left open holds the file: on Windows `os.remove` raises
+A `pymupdf.Document` left open holds the file: on Windows `os.remove` raises
 `WinError 32` and a save onto that path raises *"cannot remove file … Permission
 denied"* from inside PyMuPDF, and on Linux both succeed — so a test that leaks a
 handle is **green locally and red only on `windows-latest`**. The app has always

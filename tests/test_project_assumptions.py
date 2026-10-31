@@ -14,7 +14,7 @@ import shutil
 import tempfile
 import unittest
 
-import fitz
+import pymupdf
 
 from app import audit
 from app.audit.adapter import build_model
@@ -26,7 +26,7 @@ needs_pydrc = unittest.skipUnless(HAVE_PYDRC, "PyDRC is not installed")
 
 
 def _drawing(path):
-    doc = fitz.open()
+    doc = pymupdf.open()
     page = doc.new_page(width=792, height=612)
     page.insert_text((72.0, 72.0), "EL2507777-400")
     doc.save(path)
@@ -109,7 +109,7 @@ class TestTheModelCarriesThem(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _model(self, assumptions):
-        with fitz.open(self.src) as doc:
+        with pymupdf.open(self.src) as doc:
             return build_model(doc, {0: "400"}, {0: "user"}, {},
                                assumptions=assumptions).model
 

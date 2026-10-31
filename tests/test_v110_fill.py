@@ -11,7 +11,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 from app.model.annotations import (
     Annotation, KIND_RECT, KIND_TEXTBOX, KIND_HIGHLIGHT,
@@ -70,7 +70,7 @@ class TestFillBrush(unittest.TestCase):
 
 class TestFillExport(unittest.TestCase):
     def _blank(self, path):
-        d = fitz.open(); d.new_page(width=600, height=400); d.save(path); d.close()
+        d = pymupdf.open(); d.new_page(width=600, height=400); d.save(path); d.close()
 
     def test_rect_and_textbox_fill_export_and_reload(self):
         tmp = tempfile.mkdtemp()
@@ -84,13 +84,13 @@ class TestFillExport(unittest.TestCase):
                        color=(0, 0, 0), text="COVER", fill_color=(1.0, 1.0, 0.0),
                        fill_opacity=1.0),
         ]
-        d = fitz.open(src)
+        d = pymupdf.open(src)
         write_annotations_to_pdf(d, anns)
         mp = marked_pdf_path(src)
         d.save(mp)
         d.close()
 
-        d2 = fitz.open(mp)
+        d2 = pymupdf.open(mp)
         by_type = {a.type[1]: a for a in d2[0].annots()}
         # rect fill is stored as the interior color (/IC)
         self.assertEqual(len(by_type["Square"].colors.get("fill") or []), 3)
@@ -100,7 +100,7 @@ class TestFillExport(unittest.TestCase):
 
         # rect fill round-trips straight out of the PDF; the text-box fill relies
         # on the sidecar (a separate test), so only the rect is asserted here
-        loaded = load_pdf_annotations(fitz.open(mp), DEFAULT_IGNORE_PATTERNS)
+        loaded = load_pdf_annotations(pymupdf.open(mp), DEFAULT_IGNORE_PATTERNS)
         by_kind = {a.kind: a for a in loaded}
         self.assertIsNotNone(by_kind[KIND_RECT].fill_color)
         for got, want in zip(by_kind[KIND_RECT].fill_color, (1.0, 1.0, 1.0)):
@@ -110,14 +110,14 @@ class TestFillExport(unittest.TestCase):
         tmp = tempfile.mkdtemp()
         src = os.path.join(tmp, "draw.pdf")
         self._blank(src)
-        d = fitz.open(src)
+        d = pymupdf.open(src)
         write_annotations_to_pdf(d, [Annotation(page=0, kind=KIND_RECT,
                                                 rect=(10, 10, 90, 60), color=(1, 0, 0),
                                                 fill_color=(0, 0, 1), fill_opacity=0.4)])
         mp = marked_pdf_path(src)
         d.save(mp)
         d.close()
-        d2 = fitz.open(mp)
+        d2 = pymupdf.open(mp)
         opac = [a.opacity for a in d2[0].annots()]
         d2.close()
         self.assertTrue(opac and abs(opac[0] - 0.4) < 0.05)
@@ -128,7 +128,7 @@ class TestFillExport(unittest.TestCase):
         tmp = tempfile.mkdtemp()
         src = os.path.join(tmp, "d.pdf")
         self._blank(src)
-        d = fitz.open(src)
+        d = pymupdf.open(src)
         write_annotations_to_pdf(d, [Annotation(page=0, kind=KIND_TEXTBOX,
                                                 rect=(50, 50, 200, 90), color=(1, 0, 0),
                                                 text="HI", fill_color=(1.0, 1.0, 0.0),
@@ -136,7 +136,7 @@ class TestFillExport(unittest.TestCase):
         mp = marked_pdf_path(src)
         d.save(mp)
         d.close()
-        loaded = load_pdf_annotations(fitz.open(mp), DEFAULT_IGNORE_PATTERNS)
+        loaded = load_pdf_annotations(pymupdf.open(mp), DEFAULT_IGNORE_PATTERNS)
         tb = [a for a in loaded if a.kind == KIND_TEXTBOX][0]
         self.assertIsNotNone(tb.fill_color)
         for got, want in zip(tb.fill_color, (1.0, 1.0, 0.0)):
@@ -146,13 +146,13 @@ class TestFillExport(unittest.TestCase):
         tmp = tempfile.mkdtemp()
         src = os.path.join(tmp, "draw.pdf")
         self._blank(src)
-        d = fitz.open(src)
+        d = pymupdf.open(src)
         write_annotations_to_pdf(d, [Annotation(page=0, kind=KIND_RECT,
                                                 rect=(10, 10, 90, 60), color=(1, 0, 0))])
         mp = marked_pdf_path(src)
         d.save(mp)
         d.close()
-        d2 = fitz.open(mp)
+        d2 = pymupdf.open(mp)
         fills = [(a.colors or {}).get("fill") for a in d2[0].annots()]
         d2.close()
         self.assertTrue(all(f in (None, []) for f in fills))

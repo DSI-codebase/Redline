@@ -11,7 +11,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 from app.model.annotations import Annotation, KIND_RECT, KIND_COMMENT
 
@@ -25,7 +25,7 @@ except Exception:  # pragma: no cover
 
 def _make_pdf(dirpath, pages=3):
     src = os.path.join(dirpath, "d.pdf")
-    d = fitz.open()
+    d = pymupdf.open()
     for i in range(pages):
         p = d.new_page(width=400, height=300)
         p.insert_text((60, 60), f"PAGE {i + 1}")

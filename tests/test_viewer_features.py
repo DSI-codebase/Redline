@@ -7,7 +7,7 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 try:
-    import fitz
+    import pymupdf
     from PySide6.QtWidgets import QApplication
     _QT_OK = True
 except Exception:  # pragma: no cover
@@ -15,7 +15,7 @@ except Exception:  # pragma: no cover
 
 
 def _make_text_pdf(path, pages=3):
-    d = fitz.open()
+    d = pymupdf.open()
     for _ in range(pages):
         p = d.new_page(width=612, height=792)
         p.insert_text((72, 100), "HELLO WORLD apple")
@@ -133,7 +133,7 @@ class TestViewerFeatures(unittest.TestCase):
         from app.model.document import Document
         from app.viewer.pdf_view import PdfView
         src = os.path.join(self.tmp, f"rot{rot}.pdf")
-        d = fitz.open(); p = d.new_page(width=612, height=792)
+        d = pymupdf.open(); p = d.new_page(width=612, height=792)
         p.insert_text((100, 120), "TARGET", fontsize=14)
         p.set_rotation(rot)
         d.save(src); d.close()
@@ -143,7 +143,7 @@ class TestViewerFeatures(unittest.TestCase):
 
     def _expected_visual(self, page):
         w = next(x for x in page.get_text("words") if x[4] == "TARGET")
-        r = fitz.Rect(w[:4]) * page.rotation_matrix
+        r = pymupdf.Rect(w[:4]) * page.rotation_matrix
         r.normalize()
         return r
 

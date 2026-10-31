@@ -18,7 +18,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 from app import audit
 from app.audit.findings import AuditRun, Coverage, Finding, DEFINITE
@@ -48,7 +48,7 @@ def _sheet(doc, title, drawing_number, body=()):
 
 
 def _drawing(path):
-    doc = fitz.open()
+    doc = pymupdf.open()
     _sheet(doc, "TITLE PAGE", "EL2507777-000")
     _sheet(doc, "24 VDC DISTRIBUTION", "EL2507777-400",
            body=["400010", "400020", "PB-40010"])
@@ -64,7 +64,7 @@ class TestARefusedImportStillAuditsTheDrawing(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.src = _drawing(os.path.join(self.tmp, "set.pdf"))
-        doc = fitz.open(self.src)
+        doc = pymupdf.open(self.src)
         from app.extraction.sheet_number import resolve_document
         from app.extraction.sheet_role import detect_document_roles
         res = resolve_document(doc)

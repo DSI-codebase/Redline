@@ -24,7 +24,7 @@ needs_native_print = unittest.skipIf(
     "native QPrinter/QPrintPreviewDialog is unreliable on the headless Windows "
     "CI runner; verified manually on the real build")
 
-import fitz
+import pymupdf
 
 from app import printing
 from app.model.annotations import Annotation, KIND_RECT
@@ -40,7 +40,7 @@ except Exception:  # pragma: no cover
 
 def _make_pdf(dirpath, pages=2, name="d.pdf"):
     src = os.path.join(dirpath, name)
-    d = fitz.open()
+    d = pymupdf.open()
     for _ in range(pages):
         p = d.new_page(width=400, height=300)
         p.insert_text((72, 72), "sheet")
@@ -130,12 +130,12 @@ class TestPrint(unittest.TestCase):
         printer.setOutputFormat(QPrinter.PdfFormat)
         printer.setOutputFileName(out)
         printing.paint_document(win.document, printer, win.print_options)
-        chk = fitz.open(out)
+        chk = pymupdf.open(out)
         try:
             infos = chk[0].get_image_info()
             self.assertTrue(infos, "no raster was placed on the page")
             im = max(infos, key=lambda i: i["width"] * i["height"])
-            placed_inches = fitz.Rect(im["bbox"]).width / 72.0
+            placed_inches = pymupdf.Rect(im["bbox"]).width / 72.0
             effective_dpi = im["width"] / placed_inches
             self.assertGreater(effective_dpi, 550)     # ~600; was ~200 before
         finally:
@@ -146,7 +146,7 @@ class TestPrint(unittest.TestCase):
         win, tmp = self._win_with(pages=1)
         # a landscape page must keep its aspect ratio inside a portrait sheet
         src = os.path.join(tmp, "wide.pdf")
-        d = fitz.open(); d.new_page(width=792, height=612); d.save(src); d.close()
+        d = pymupdf.open(); d.new_page(width=792, height=612); d.save(src); d.close()
         win.load_document(src)
         target = QRect(0, 0, 2550, 3300)
         work = win.document.annotated_fitz()
@@ -168,7 +168,7 @@ class TestPrint(unittest.TestCase):
         from PySide6.QtCore import QRect
         win, tmp = self._win_with(pages=1)
         src = os.path.join(tmp, "big.pdf")
-        d = fitz.open(); d.new_page(width=1584, height=2448)   # ANSI D
+        d = pymupdf.open(); d.new_page(width=1584, height=2448)   # ANSI D
         d.save(src); d.close()
         win.load_document(src)
         out = os.path.join(tmp, "big_out.pdf")
@@ -177,7 +177,7 @@ class TestPrint(unittest.TestCase):
         printer.setOutputFormat(QPrinter.PdfFormat)
         printer.setOutputFileName(out)
         printing.paint_document(win.document, printer, win.print_options)
-        chk = fitz.open(out)
+        chk = pymupdf.open(out)
         try:
             infos = chk[0].get_image_info()
             self.assertGreater(len(infos), 1, "large sheet should be banded")
@@ -186,7 +186,7 @@ class TestPrint(unittest.TestCase):
                                      printing.PRINT_BAND_PX * 1.02)
             # ...and the bands together still cover the page at full resolution
             widest = max(infos, key=lambda i: i["width"])
-            span_in = fitz.Rect(widest["bbox"]).width / 72.0
+            span_in = pymupdf.Rect(widest["bbox"]).width / 72.0
             self.assertGreater(widest["width"] / span_in, 550)
         finally:
             chk.close()
@@ -234,7 +234,7 @@ class TestPrint(unittest.TestCase):
         win, tmp = self._win_with(pages=1)
         for rot in (0, 90):
             src = os.path.join(tmp, f"seam{rot}.pdf")
-            d = fitz.open(); pg = d.new_page(width=612, height=792)
+            d = pymupdf.open(); pg = d.new_page(width=612, height=792)
             for i in range(0, 780, 3):           # dense: any seam would show
                 pg.draw_line((20, i), (592, i + 2), width=0.3)
             if rot:
@@ -242,7 +242,7 @@ class TestPrint(unittest.TestCase):
             d.save(src); d.close()
 
             def render(band_px):
-                doc = fitz.open(src)
+                doc = pymupdf.open(src)
                 target = QRect(0, 0, 1200, 1550)
                 canvas = QImage(1200, 1550, QImage.Format_RGB888)
                 canvas.fill(0xFFFFFFFF)
@@ -282,7 +282,7 @@ class TestPrint(unittest.TestCase):
         printer.setOutputFileName(out)
         printing.paint_document(win.document, printer, win.print_options)
         self.assertTrue(os.path.exists(out) and os.path.getsize(out) > 0)
-        chk = fitz.open(out)
+        chk = pymupdf.open(out)
         try:
             self.assertEqual(chk.page_count, 3)
         finally:
@@ -297,7 +297,7 @@ class TestPrint(unittest.TestCase):
         printer.setOutputFileName(out)
         printer.setFromTo(2, 3)          # print only pages 2–3
         printing.paint_document(win.document, printer, win.print_options)
-        chk = fitz.open(out)
+        chk = pymupdf.open(out)
         try:
             self.assertEqual(chk.page_count, 2)
         finally:
@@ -313,7 +313,7 @@ class TestPrint(unittest.TestCase):
         from PySide6.QtCore import QRect
         win, tmp = self._win_with(pages=1)
         captured = []
-        orig = fitz.Page.get_pixmap
+        orig = pymupdf.Page.get_pixmap
 
         def spy(page, *a, **k):
             m = k.get("matrix")
@@ -324,13 +324,13 @@ class TestPrint(unittest.TestCase):
         # a dpi cap alone still scales with the paper, so check a big sheet too
         for label, (W, H) in (("letter", (612, 792)), ("esize", (2448, 3168))):
             src = os.path.join(tmp, f"prev_{label}.pdf")
-            d = fitz.open(); d.new_page(width=W, height=H)
+            d = pymupdf.open(); d.new_page(width=W, height=H)
             d.save(src); d.close()
             win.load_document(src)
             target = QRect(0, 0, int(W / 72 * 600), int(H / 72 * 600))
             work = win.document.annotated_fitz()
             captured.clear()
-            fitz.Page.get_pixmap = spy
+            pymupdf.Page.get_pixmap = spy
             try:
                 pic = QPicture()                   # what the preview paints into
                 painter = QPainter(pic)
@@ -339,7 +339,7 @@ class TestPrint(unittest.TestCase):
                 finally:
                     painter.end()
             finally:
-                fitz.Page.get_pixmap = orig
+                pymupdf.Page.get_pixmap = orig
                 work.close()
 
             self.assertEqual(len(captured), 1,
@@ -396,7 +396,7 @@ class TestPrint(unittest.TestCase):
         printer.setOutputFileName(out)
         painted = printing.paint_document(win.document, printer, win.print_options, on_page=lambda d, t: d < 2)
         self.assertEqual(painted, 2)
-        chk = fitz.open(out)
+        chk = pymupdf.open(out)
         try:
             self.assertEqual(chk.page_count, 2)
         finally:
@@ -414,7 +414,7 @@ class TestPrint(unittest.TestCase):
         painted = printing.paint_document(win.document, printer, win.print_options, on_page=lambda d, t: False)
         self.assertEqual(painted, 0)
         if os.path.exists(out) and os.path.getsize(out):
-            chk = fitz.open(out)
+            chk = pymupdf.open(out)
             try:
                 self.assertEqual(chk.page_count, 0, "a blank sheet was printed")
             finally:
@@ -475,12 +475,12 @@ class TestPrint(unittest.TestCase):
         printer.setOutputFormat(QPrinter.PdfFormat)
         printer.setOutputFileName(out)
         printing.paint_document(win.document, printer, win.print_options)
-        chk = fitz.open(out)
+        chk = pymupdf.open(out)
         try:
             infos = chk[0].get_image_info()
             self.assertTrue(infos, "no raster was placed on the page")
             im = max(infos, key=lambda i: i["width"] * i["height"])
-            bb = fitz.Rect(im["bbox"])
+            bb = pymupdf.Rect(im["bbox"])
             effective_dpi = im["width"] / (bb.width / 72.0)
             self.assertGreater(effective_dpi, 550)     # was exactly 96
             # and the page still fills the sheet rather than shrinking
@@ -499,13 +499,13 @@ class TestPrint(unittest.TestCase):
         from app.main_window import MainWindow
         win, tmp = self._win_with(pages=1)
         src = os.path.join(tmp, "dense.pdf")
-        d = fitz.open(); pg = d.new_page(width=612, height=792)
+        d = pymupdf.open(); pg = d.new_page(width=612, height=792)
         for i in range(0, 780, 3):              # dense: any seam would show
             pg.draw_line((20, i), (592, i + 2), width=0.3)
         d.save(src); d.close()
 
         def render(band_px):
-            doc = fitz.open(src)
+            doc = pymupdf.open(src)
             target = QRect(0, 0, 768, 994)      # a 96 dpi Letter viewport
             canvas = QImage(768, 994, QImage.Format_RGB888)
             canvas.fill(0xFFFFFFFF)
@@ -538,9 +538,9 @@ class TestPrint(unittest.TestCase):
     def _hairline_px(path, dpi=600):
         """Thickness in device px of the single hairline in a probe PDF."""
         import numpy as np
-        doc = fitz.open(path)
+        doc = pymupdf.open(path)
         try:
-            pm = doc[0].get_pixmap(matrix=fitz.Matrix(dpi / 72, dpi / 72),
+            pm = doc[0].get_pixmap(matrix=pymupdf.Matrix(dpi / 72, dpi / 72),
                                    alpha=False)
             a = np.frombuffer(pm.samples, dtype=np.uint8)
             a = a.reshape(pm.height, pm.width, 3).mean(axis=2)
@@ -552,7 +552,7 @@ class TestPrint(unittest.TestCase):
         # width 0.12 pt: a real hairline. (Note width=0.0 in PyMuPDF means the
         # *default* 1 pt, not a hairline — it would mask the whole effect.)
         p = os.path.join(tmp, name)
-        d = fitz.open(); pg = d.new_page(width=612, height=792)
+        d = pymupdf.open(); pg = d.new_page(width=612, height=792)
         pg.draw_line((72, 300), (540, 300), width=0.12)
         pg.insert_text((72, 500), "WIRE 300801", fontsize=5)
         d.save(p); d.close()
@@ -563,16 +563,16 @@ class TestPrint(unittest.TestCase):
         from app.main_window import MainWindow
         tmp = tempfile.mkdtemp()
         p = os.path.join(tmp, "mixed.pdf")
-        d = fitz.open(); pg = d.new_page(width=612, height=792)
+        d = pymupdf.open(); pg = d.new_page(width=612, height=792)
         pg.draw_line((72, 200), (540, 200), width=0.12)   # hairline
         pg.draw_line((72, 400), (540, 400), width=2.0)    # already heavy
         d.save(p); d.close()
 
         def widths():
             import numpy as np
-            doc = fitz.open(p)
+            doc = pymupdf.open(p)
             try:
-                pm = doc[0].get_pixmap(matrix=fitz.Matrix(600 / 72, 600 / 72),
+                pm = doc[0].get_pixmap(matrix=pymupdf.Matrix(600 / 72, 600 / 72),
                                        alpha=False)
                 a = np.frombuffer(pm.samples, dtype=np.uint8)
                 a = a.reshape(pm.height, pm.width, 3).mean(axis=2)
@@ -604,9 +604,9 @@ class TestPrint(unittest.TestCase):
         p = self._hairline_pdf(tmp)
 
         def text_ink():
-            doc = fitz.open(p)
+            doc = pymupdf.open(p)
             try:
-                pm = doc[0].get_pixmap(matrix=fitz.Matrix(600 / 72, 600 / 72),
+                pm = doc[0].get_pixmap(matrix=pymupdf.Matrix(600 / 72, 600 / 72),
                                        alpha=False)
                 a = np.frombuffer(pm.samples, dtype=np.uint8)
                 a = a.reshape(pm.height, pm.width, 3).mean(axis=2)
@@ -669,9 +669,9 @@ class TestPrint(unittest.TestCase):
             pr.setOutputFormat(QPrinter.PdfFormat)
             pr.setOutputFileName(out)
             printing.paint_document(win.document, pr, win.print_options)
-            doc = fitz.open(out)
+            doc = pymupdf.open(out)
             try:
-                pm = doc[0].get_pixmap(matrix=fitz.Matrix(300 / 72, 300 / 72),
+                pm = doc[0].get_pixmap(matrix=pymupdf.Matrix(300 / 72, 300 / 72),
                                        alpha=False)
                 a = np.frombuffer(pm.samples, dtype=np.uint8)
                 a = a.reshape(pm.height, pm.width, 3).mean(axis=2)
@@ -709,7 +709,7 @@ class TestPrint(unittest.TestCase):
         with mock.patch.object(QPrintDialog, "exec", fake_exec):
             win.print_document()
         self.assertTrue(os.path.exists(out) and os.path.getsize(out) > 0)
-        chk = fitz.open(out)
+        chk = pymupdf.open(out)
         try:
             self.assertEqual(chk.page_count, 2)
         finally:
@@ -811,7 +811,7 @@ class TestPrint(unittest.TestCase):
         printer.setOutputFormat(QPrinter.PdfFormat)
         printer.setOutputFileName(out)
         printing.paint_document(win.document, printer, win.print_options)
-        chk = fitz.open(out)
+        chk = pymupdf.open(out)
         try:
             self.assertEqual(chk.page_count, 2)
         finally:

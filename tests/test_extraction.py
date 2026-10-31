@@ -2,7 +2,7 @@
 
 import unittest
 
-import fitz
+import pymupdf
 
 import app.extraction.claude_api as capi
 import app.extraction.text_extract as te
@@ -15,7 +15,7 @@ from app.extraction.wire_parser import (
 class TestAIExtraction(unittest.TestCase):
     def setUp(self):
         # a page with no text behaves like a scanned image
-        self.doc = fitz.open()
+        self.doc = pymupdf.open()
         self.doc.new_page(width=600, height=400)
         self._read = capi.read_wire_region
         self._avail = capi.available

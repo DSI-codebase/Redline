@@ -29,7 +29,7 @@ from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 try:
     from PySide6.QtWidgets import QApplication, QMessageBox
@@ -41,7 +41,7 @@ except Exception:  # pragma: no cover
 
 
 def _make_pdf(path, pages=2):
-    d = fitz.open()
+    d = pymupdf.open()
     for i in range(pages):
         p = d.new_page(width=400, height=300)
         p.insert_text((60, 60), f"PAGE {i + 1}")

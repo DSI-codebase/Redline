@@ -12,7 +12,7 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 try:
-    import fitz
+    import pymupdf
     from PySide6.QtWidgets import QApplication
     from PySide6.QtCore import QMimeData, QUrl
     _QT_OK = True
@@ -21,7 +21,7 @@ except Exception:  # pragma: no cover
 
 
 def _make_pdf(path, pages=8):
-    d = fitz.open()
+    d = pymupdf.open()
     for i in range(pages):
         p = d.new_page(width=612, height=792)
         p.insert_text((60, 60), f"PAGE {i + 1}")

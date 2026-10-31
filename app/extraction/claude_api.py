@@ -133,7 +133,7 @@ def read_wire_region(pix, field_widths: tuple = (3, 2, 1),
                      api_key: Optional[str] = None) -> list:
     """Send a rendered region to Claude and return parsed wire dicts.
 
-    ``pix`` is a :class:`fitz.Pixmap`.  Returns ``[]`` on any failure so callers
+    ``pix`` is a :class:`pymupdf.Pixmap`.  Returns ``[]`` on any failure so callers
     can always fall back to Tesseract + rules.
     """
     key = resolve_key(api_key)

@@ -19,6 +19,10 @@ rules as v1.8.0.
   `DSI Redline.exe --self-test <report>`, which opens the window, closes it and
   writes `ok` or the error to the report. A build that cannot start now fails
   before the installer is made, so it is never published.
+- **A later PyMuPDF release will not stop the app from starting.** PyMuPDF 2.0
+  deprecates `fitz`, the module name DSI Redline used for it, and says a future
+  release removes that name. The app now imports `pymupdf`, which PyMuPDF has
+  supported since 1.24.3, so nothing changes in how it works today.
 
 ## v1.8.0
 

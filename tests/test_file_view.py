@@ -25,7 +25,7 @@ from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 from app.model import recent as R
 from tests._qt import QT_OK as _QT_OK, REASON as _QT_REASON
@@ -45,7 +45,7 @@ _KEYS = ("recent/files", "recent/opened", "recent/pinned", "recent/max",
 def _touch(path, pdf=True):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     if pdf:
-        d = fitz.open()
+        d = pymupdf.open()
         d.new_page(width=300, height=200)
         d.save(path)
         d.close()

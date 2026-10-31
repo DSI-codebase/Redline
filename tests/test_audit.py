@@ -12,7 +12,7 @@ import shutil
 import tempfile
 import unittest
 
-import fitz
+import pymupdf
 
 from app import audit
 from app.audit.adapter import AdapterOptions, build_model, parse_drawing_index
@@ -45,7 +45,7 @@ def _sheet(doc, title, drawing_number, body=()):
 
 def _drawing(path):
     """A small set: a schematic whose wire claims a sheet that is not there."""
-    doc = fitz.open()
+    doc = pymupdf.open()
     _sheet(doc, "TITLE PAGE", "EL2507777-000")
     _sheet(doc, "24 VDC DISTRIBUTION", "EL2507777-400",
            body=["400010", "400020", "PB-40010"])
@@ -209,7 +209,7 @@ class TestDrawingIndex(unittest.TestCase):
         # ranges. Measured 2026-10-04 on a real one, the parser read 1 row of 5.
         # The page is synthetic (tests/_el_sheets.py) and read the way the
         # adapter reads it.
-        doc = fitz.open()
+        doc = pymupdf.open()
         try:
             page = el.new_page(doc)
             el.title_block(page, "TITLE PAGE", "000", "001")
@@ -238,12 +238,12 @@ class TestElGenerationSet(unittest.TestCase):
     def _make(self, index_rows=el.EL_INDEX_ROWS):
         from app.extraction.sheet_number import resolve_document
         from app.extraction.sheet_role import detect_document_roles
-        doc = fitz.open()
+        doc = pymupdf.open()
         tags = el.build_set(doc, index_rows)
         path = os.path.join(self.tmp, "el-set.pdf")
         doc.save(path)
         doc.close()
-        doc = fitz.open(path)
+        doc = pymupdf.open(path)
         try:
             res = resolve_document(doc)
             labels = {k: v.label for k, v in res.items() if v.resolved}
@@ -303,7 +303,7 @@ class TestAdapter(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.src = _drawing(os.path.join(self.tmp, "set.pdf"))
-        self.doc = fitz.open(self.src)
+        self.doc = pymupdf.open(self.src)
         from app.extraction.sheet_number import resolve_document
         from app.extraction.sheet_role import detect_document_roles
         res = resolve_document(self.doc)
@@ -357,7 +357,7 @@ class TestRunner(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.src = _drawing(os.path.join(self.tmp, "set.pdf"))
-        doc = fitz.open(self.src)
+        doc = pymupdf.open(self.src)
         from app.extraction.sheet_number import resolve_document
         from app.extraction.sheet_role import detect_document_roles
         res = resolve_document(doc)

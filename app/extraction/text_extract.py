@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-import fitz  # PyMuPDF
+import pymupdf
 
 from .wire_parser import Token, SOURCE_TEXT
 
@@ -19,7 +19,7 @@ from .wire_parser import Token, SOURCE_TEXT
 MIN_TEXT_CHARS = 8
 
 
-def page_has_text(page: "fitz.Page") -> bool:
+def page_has_text(page: "pymupdf.Page") -> bool:
     """True when the page has a usable text layer (vs scanned raster)."""
     try:
         txt = page.get_text("text") or ""
@@ -28,7 +28,7 @@ def page_has_text(page: "fitz.Page") -> bool:
     return len(txt.strip()) >= MIN_TEXT_CHARS
 
 
-def get_ocg_names(doc: "fitz.Document") -> dict:
+def get_ocg_names(doc: "pymupdf.Document") -> dict:
     """Return ``{xref: name}`` for every optional-content group in the doc.
 
     Returns an empty dict when the document has no layers (most AutoCAD PDF
@@ -46,7 +46,7 @@ def get_ocg_names(doc: "fitz.Document") -> dict:
     return names
 
 
-def _build_mcid_layer_map(page: "fitz.Page", ocg_names: dict) -> dict:
+def _build_mcid_layer_map(page: "pymupdf.Page", ocg_names: dict) -> dict:
     """Best-effort map of marked-content-id -> layer name for a page.
 
     AutoCAD plots almost never carry OCGs, so this normally returns ``{}`` and
@@ -66,7 +66,7 @@ def _build_mcid_layer_map(page: "fitz.Page", ocg_names: dict) -> dict:
 
 
 def extract_tokens(
-    page: "fitz.Page",
+    page: "pymupdf.Page",
     page_index: int,
     ocg_names: Optional[dict] = None,
 ) -> list:
@@ -104,7 +104,7 @@ def extract_tokens(
         if not text:
             continue
         if rot is not None:
-            r = (fitz.Rect(w[0], w[1], w[2], w[3]) * rot).normalize()
+            r = (pymupdf.Rect(w[0], w[1], w[2], w[3]) * rot).normalize()
             x0, y0, x1, y1 = r.x0, r.y0, r.x1, r.y1
         else:
             x0, y0, x1, y1 = w[0], w[1], w[2], w[3]
@@ -129,7 +129,7 @@ def extract_tokens(
 _SHEET_RE = re.compile(r"\b(?:SHEET|SHT)\.?\s*(?:NO\.?\s*)?(\d{1,4})", re.IGNORECASE)
 
 
-def read_titleblock_sheet(page: "fitz.Page", sheet_width: int = 3) -> Optional[int]:
+def read_titleblock_sheet(page: "pymupdf.Page", sheet_width: int = 3) -> Optional[int]:
     """Best-effort title-block sheet number for cross-checking.
 
     Returns ``None`` when nothing convincing is found.  Never raises.
@@ -147,7 +147,7 @@ def read_titleblock_sheet(page: "fitz.Page", sheet_width: int = 3) -> Optional[i
         return None
 
 
-def read_titleblock_sheet_label(page: "fitz.Page") -> Optional[str]:
+def read_titleblock_sheet_label(page: "pymupdf.Page") -> Optional[str]:
     """Best-effort title-block sheet number as the *raw* string (e.g. ``"000"``).
 
     Two passes, both preserving leading zeros (a cover sheet reads ``"000"``):
@@ -171,7 +171,7 @@ def read_titleblock_sheet_label(page: "fitz.Page") -> Optional[str]:
     return _corner_sheet_label(page)
 
 
-def _corner_sheet_label(page: "fitz.Page",
+def _corner_sheet_label(page: "pymupdf.Page",
                         x_frac: float = 0.70, y_frac: float = 0.82,
                         max_candidates: int = 4) -> Optional[str]:
     """The lesser numeric token in the page's bottom-right corner, or ``None``."""
@@ -195,7 +195,7 @@ def _corner_sheet_label(page: "fitz.Page",
     return min(nums, key=lambda s: int(s))
 
 
-def extract_document_tokens(doc: "fitz.Document") -> list:
+def extract_document_tokens(doc: "pymupdf.Document") -> list:
     """Extract tokens for every text-bearing page in a document.
 
     Pages without a text layer are reported via :func:`page_has_text` and left
@@ -259,7 +259,7 @@ def _dedupe_ai_tokens(tokens, tol=8.0):
     return kept
 
 
-def ai_page(page: "fitz.Page", page_index: int, field_widths=(3, 2, 1),
+def ai_page(page: "pymupdf.Page", page_index: int, field_widths=(3, 2, 1),
             zero_pad: bool = True, model: str = "claude-opus-4-8",
             api_key: str = "", tiles: int = 2, should_cancel=None,
             on_tile=None) -> list:
@@ -292,8 +292,8 @@ def ai_page(page: "fitz.Page", page_index: int, field_widths=(3, 2, 1),
             x1 = min(W, (cx + 1) * tile_w + pad_x)
             y1 = min(H, (ry + 1) * tile_h + pad_y)
             try:
-                pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom),
-                                      clip=fitz.Rect(x0, y0, x1, y1), alpha=False)
+                pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom),
+                                      clip=pymupdf.Rect(x0, y0, x1, y1), alpha=False)
                 results = claude_api.read_wire_region(
                     pix, field_widths=field_widths, zero_pad=zero_pad,
                     model=model, api_key=api_key)
@@ -359,8 +359,8 @@ def ai_page_components(page, page_index, families=(), model="claude-opus-4-8",
             x1 = min(W, (cx + 1) * tile_w + pad_x)
             y1 = min(H, (ry + 1) * tile_h + pad_y)
             try:
-                pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom),
-                                      clip=fitz.Rect(x0, y0, x1, y1), alpha=False)
+                pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom),
+                                      clip=pymupdf.Rect(x0, y0, x1, y1), alpha=False)
                 results = claude_api.read_component_region(
                     pix, families=families, model=model, api_key=api_key)
                 tokens.extend(_ai_component_results_to_tokens(
@@ -373,7 +373,7 @@ def ai_page_components(page, page_index, families=(), model="claude-opus-4-8",
     return _dedupe_ai_tokens(tokens)
 
 
-def collect_component_tokens(doc: "fitz.Document", method: str = "ai",
+def collect_component_tokens(doc: "pymupdf.Document", method: str = "ai",
                              ai_key: str = "", ai_model: str = "claude-opus-4-8",
                              ai_tiles: int = 2, families=(), ocr_zoom: float = 3.0,
                              progress=None, should_cancel=None,
@@ -422,7 +422,7 @@ def collect_component_tokens(doc: "fitz.Document", method: str = "ai",
     return tokens
 
 
-def collect_tokens(doc: "fitz.Document", ocr_enabled: bool = False,
+def collect_tokens(doc: "pymupdf.Document", ocr_enabled: bool = False,
                    ocr_zoom: float = 3.0, progress=None, should_cancel=None,
                    ai_enabled: bool = False, ai_key: str = "",
                    ai_model: str = "claude-opus-4-8", field_widths=(3, 2, 1),
