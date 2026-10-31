@@ -4,6 +4,66 @@ All notable changes to **DSI Redline** are documented here. Versions are tagged
 `vX.Y.Z`; each tag triggers the Windows build that publishes the installer and a
 portable zip to the matching GitHub release.
 
+## v1.8.0
+
+Design rule checking in this release is PyDRC `v0.23.1` (`6360563`). v1.7.0
+shipped `v0.2.1` (`09dbb19`), so the rules change, as the first list says.
+
+### Design rule checking
+
+- **The check runs PyDRC's default rule packs, `drc-base` 1.38.0 and
+  `erc-nec-2026` 1.2.0.** It ran `drc-base` alone, which in v1.7.0's PyDRC held
+  every rule. PyDRC has since moved its seven electrical rules into
+  `erc-nec-2026`, and both packs run now. **Settings ▸ Design rules** lists
+  every pack PyDRC finds and chooses which run. A pack that will not load is
+  listed with the reason, ticked when your choice runs it, and a file in a pack
+  folder that is not a pack is named.
+- **Two rules that read a drawing are new.**
+  - `DRC-SHEET-REV-001` reports a sheet whose title block states a different
+    revision from most of the set. It reads `REV.CURRENT` from imported
+    drawings. A plot's revision is not read yet, so a check of a plot alone
+    skips every sheet and the coverage line counts them.
+  - `ERC-AMP-TEMP-001` reports a protective device rated above what its
+    conductor carries at the temperature inside the enclosure, which you
+    state per drawing (next).
+- **Project assumptions.** **Project assumptions…** on the Audit tab, or
+  **Tools ▸ Project assumptions…**, states the temperature inside the enclosure
+  and the termination rating (60, 75 or 90 C), kept with the drawing. A blank
+  is not stated. No rule reads the termination rating yet.
+- **A waiver names its role, and the rule decides whether that role closes its
+  finding.** The waive dialog asks for the role, shows the roles the rule
+  takes, and says in red before you save when the waiver will not close the
+  finding. The list shows "Open, waiver not accepted", and the exports say who
+  waived, in what role and on what day. A waiver given before this release has
+  no role, so on a rule that names roles its finding reopens and says why.
+  Waivers on `drc-base` findings are unchanged.
+- **The coverage line names the pages with no sheet number,** which a rule
+  that needs one skips: up to 12 pages, then how many more. The Markdown, CSV
+  and HTML reports carry it.
+- **A check with imported drawings compares the plot against them.** The
+  Audit tab says how many of each kind the plot found and how many disagree.
+  The reports add a table per kind (matched, mismatched, not comparable, each
+  side alone, recall and precision) and every disagreement.
+- **Sheet roles on DSI's EL title block.** The "ENCLOSURE NUMBER:" label no
+  longer makes a sheet a panel layout. On a real 29-sheet set it had made all
+  six ladder sheets layouts, so the check skipped them. The drawing index's
+  ranges ("000-015") are read too, where the EL title page gave one row of
+  five.
+
+### Calculators
+
+- **A Calculators tab beside Audit,** over PyDRC's calculators, on seven
+  pages: Conductors, Voltage drop, Raceway, Motors, Power, Estimating and
+  Panel. Panel holds the load schedule, the panel SCCR and enclosure heat over
+  a table editor. Each result shows its tier, its arithmetic, the clauses and
+  every table's sign-off note, and Copy puts it on the clipboard as text. What
+  you type lasts until the app closes. See the Calculators page.
+- **The Panel page fills a blank rating from PyDRC's part ratings file** for a
+  row that names its manufacturer and catalog number, the way the audit does.
+  A rating you type is never replaced. An unsigned SCCR, and a Table SB4.1
+  rating while that table is unsigned, can show a shortfall and never a pass.
+  Unsigned watts are listed as not yet confirmed against a datasheet.
+
 ## v1.7.0
 
 Design rule checking in this release is PyDRC `v0.2.1` (`09dbb19`), the same
