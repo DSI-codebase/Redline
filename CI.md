@@ -117,8 +117,25 @@ box, so the step also stops the app at 180 s and fails. Locally:
 "dist\DSI Redline\DSI Redline.exe" --self-test report.txt
 ```
 
-`tests/test_frozen_build.py` holds the step's position and the spec's
-`excludes` on every push. The step itself runs only where the exe exists.
+A launch reads no calculator table, so the self-test passed a v1.8.1 build
+whose spec collected PyDRC's YAML and none of its JSON: the bundle had the rule
+packs and not the 28 calculator tables or the part ratings file, and every calculator
+stopped with "no NEC 2026 table". So **Build Windows** also runs, after
+PyInstaller and before Inno Setup:
+
+```
+python tools/bundle_check.py --dist "dist/DSI Redline" pydrc
+```
+
+It lists every file in the installed PyDRC that is not a module and fails,
+naming each one, when `_internal/pydrc/` lacks it. It exits 2 rather than
+passing when PyDRC is not installed or has no data files, and the step runs
+only when `PYDRC_BUILT` is not `none`, because a build without `PYDRC_TOKEN`
+has no PyDRC to compare and has already warned so.
+
+`tests/test_frozen_build.py` holds both steps' positions, the spec's
+`excludes`, and the spec's `includes` against the installed PyDRC's files, on
+every push. The steps themselves run only where the exe exists.
 
 ### Which rules a release contains
 

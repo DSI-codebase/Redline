@@ -19,6 +19,14 @@ rules as v1.8.0.
   `DSI Redline.exe --self-test <report>`, which opens the window, closes it and
   writes `ok` or the error to the report. A build that cannot start now fails
   before the installer is made, so it is never published.
+- **The calculators work in the installed app.** The installer carried PyDRC's
+  rule packs and none of the tables its calculators read, so every calculation
+  stopped with "The calculator stopped with an error: no NEC 2026 table ..."
+  and the size, wire type and device lists offered no choices. The part
+  ratings file the Panel page reads was missing too. The installer now carries
+  all of them.
+  Before it packages the app, the Windows build compares the app it built with
+  the installed PyDRC, file by file, and fails on any file the app is missing.
 - **A later PyMuPDF release will not stop the app from starting.** PyMuPDF 2.0
   deprecates `fitz`, the module name DSI Redline used for it, and says a future
   release removes that name. The app now imports `pymupdf`, which PyMuPDF has
