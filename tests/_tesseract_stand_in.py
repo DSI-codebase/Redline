@@ -1,7 +1,8 @@
 """A stand-in for the Tesseract binary, for ``tests/test_ocr.py``.
 
 Run as ``python _tesseract_stand_in.py WORKDIR <Tesseract's own arguments>``.
-It answers ``--version`` as Tesseract 5.3.4 does. Otherwise it copies
+It answers ``--version`` as Tesseract 5.3.4 does, or with the contents of
+``WORKDIR/version.txt`` when that file exists. Otherwise it copies
 ``WORKDIR/answer.tsv`` or ``WORKDIR/answer.txt`` to the output file pytesseract
 asked for, and appends one JSON line to ``WORKDIR/runs.jsonl`` saying which
 output was asked for and what image arrived. Standard library only, because it
@@ -19,7 +20,12 @@ PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 def main(argv):
     workdir, args = argv[0], argv[1:]
     if args == ["--version"]:
-        sys.stdout.write("tesseract 5.3.4\n leptonica-1.84.1\n")
+        version = os.path.join(workdir, "version.txt")
+        if os.path.exists(version):
+            with open(version, encoding="utf-8") as fh:
+                sys.stdout.write(fh.read())
+        else:
+            sys.stdout.write("tesseract 5.3.4\n leptonica-1.84.1\n")
         return 0
 
     image, output_base = args[0], args[1]
