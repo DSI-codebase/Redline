@@ -83,4 +83,10 @@
 # `v0.23.1` (the release notes read `pydrc 0.23.1 | drc-base@1.38.0 |
 # 6360563… (ref v0.23.1)`), so development tracks the library again. The next
 # release sets a tag here first, per the three steps above.
-main
+#
+# CHANGED 2026-10-31, from `main` back to `v0.23.1`, for the app's v1.8.1
+# release. v1.8.1 is a hotfix for v1.8.0's launch crash (CHANGELOG.md, v1.8.1)
+# and ships the rules v1.8.0 shipped, so step 1 needed no new tag. Whether
+# PyDRC `main` has moved past `6360563` was not checked, and the pin makes it
+# irrelevant. Set this back to `main` after the release.
+v0.23.1

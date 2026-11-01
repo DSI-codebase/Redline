@@ -5,7 +5,7 @@ Two workflows, both under `.github/workflows/`.
 | Workflow | Runs on | Does |
 |---|---|---|
 | **Tests** (`tests.yml`) | every push, every pull request | the suite, on Ubuntu and Windows |
-| **Build Windows** (`build-windows.yml`) | manual dispatch, `v*` tags | the suite, then the portable app, the installer, and the release |
+| **Build Windows** (`build-windows.yml`) | manual dispatch, `v*` tags | the suite, then the portable app, a launch of it, the installer, and the release |
 
 ## Running the suite
 
@@ -96,6 +96,29 @@ Push a `v*` tag, or run **Build Windows** manually. On a tag it also publishes a
 GitHub Release with the installer and the portable zip attached. A release built
 without `PYDRC_TOKEN` ships without design rule checking; the workflow logs a
 warning saying so rather than producing a quietly reduced build.
+
+### The built app is started before it is packaged
+
+The suite runs from source, and a source install is not the bundle. v1.8.0
+passed the suite and stopped on launch: PyMuPDF 2.0 loads a layout model at
+`import fitz` from data files that a source install has and the PyInstaller
+analysis did not collect. Nothing between the build and the release had ever
+started the app.
+
+So **Build Windows** runs `DSI Redline.exe --self-test <report>` right after
+PyInstaller and before Inno Setup. `main.py`'s `self_test` runs the whole
+launch (QApplication, splash, the `app.main_window` import, the window), closes
+it, and writes `ok` or the traceback to the report, because a windowed exe has
+no stdout. Exit 1 fails the job before anything is packaged or published. An
+exception raised before `main()` runs escapes the handler and opens a message
+box, so the step also stops the app at 180 s and fails. Locally:
+
+```
+"dist\DSI Redline\DSI Redline.exe" --self-test report.txt
+```
+
+`tests/test_frozen_build.py` holds the step's position and the spec's
+`excludes` on every push. The step itself runs only where the exe exists.
 
 ### Which rules a release contains
 

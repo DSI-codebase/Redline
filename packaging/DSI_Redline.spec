@@ -53,6 +53,20 @@ except Exception:
 
 icon_path = os.path.join(ROOT, "app", "assets", "app.ico")  # brand icon
 
+# PyMuPDF's optional add-ons stay OUT of the frozen build. From PyMuPDF 2.0 the
+# wheel carries `pymupdf.layout` and requires `pymupdf4llm`, and `import fitz`
+# imports both, each inside `try/except ImportError`. The layout package then
+# loads an ONNX model from YAML and .onnx files beside its own modules, which
+# the analysis does not collect (no hook for them in hooks-contrib 2026.9), so
+# v1.8.0 died on launch with FileNotFoundError on layout_rf2.4.1+imf1.yaml.
+# Redline calls neither (no find_tables, get_layout or to_markdown), so a
+# module that is absent is the state PyMuPDF already handles, and it is the
+# state every PyMuPDF 1.x build ran in. Collecting the models instead would
+# ship onnxruntime (69 MB on Linux) and 51 MB of models to load at every
+# launch for nothing. The self-test step in build-windows.yml is what catches
+# this class of defect, a bundle missing a file the source install has.
+excludes = ["tkinter", "pymupdf.layout", "pymupdf4llm"]
+
 a = Analysis(
     [os.path.join(ROOT, "main.py")],
     pathex=[ROOT],
@@ -62,7 +76,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter"],
+    excludes=excludes,
     noarchive=False,
 )
 
