@@ -26,6 +26,13 @@ portable zip to the matching GitHub release.
   customer's rule pack can ask for. The waiver dialog lists Owner beside
   Estimator, Engineer and UL rep, and a waiver in that role closes a finding
   whose rule takes it.
+- **A waiver can name the document it rests on.** The waiver dialog has an
+  optional **Reference** line for the number of an RFI answer or a deviation
+  request, as the design rule library's approvals carry it. The Markdown and
+  HTML reports and the Audit tab print it after the reason, for example
+  *Owner accepts the 480 V tap (ref. RFI-0142)*. A reference never decides
+  whether a waiver closes its finding. Waivers recorded by earlier releases
+  open with no reference.
 
 ## v1.8.1
 

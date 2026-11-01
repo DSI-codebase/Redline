@@ -163,12 +163,20 @@ anyone's waiver.
    finding stays open as **Open, waiver not accepted**, with the reason. The
    dialog says so in red before you save.
 3. For a rule that names roles, the waiver also needs your name.
+4. If the waiver rests on a document, such as an RFI answer or a deviation
+   request, type its number in **Reference**, as the document's issuer numbers
+   it. A reference is optional for every role, and it never decides whether the
+   waiver closes the finding.
 
 A waiver given before waivers had a role names none. On a rule that names
 roles, its finding reopens and says why. Waive it again with your role.
 
-Every export names who waived each finding, in what role and on what day, and
-why a waiver did not close its finding.
+The Markdown and HTML reports name who waived each finding, in what role and on
+what day, and why a waiver did not close its finding. A waiver's reference
+follows its reason, for example *Waived by LWH (Owner) on 2026-10-30: Owner
+accepts the 480 V tap (ref. RFI-0142)*. The Audit tab shows the same line when
+you point at a waived finding. The CSV gives each finding's status: **Waived**,
+**Open** or **Open, waiver not accepted**.
 
 Waivers are stored per project and **survive re-running the check**. They are
 keyed to the finding itself rather than to where it sits, so re-extracting the

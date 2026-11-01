@@ -6,6 +6,7 @@ graceful degradation -- always run, because a sidecar written by a colleague who
 has the library must still open for someone who does not.
 """
 
+import json
 import os
 import re
 import shutil
@@ -167,6 +168,128 @@ class TestAWaiverIsJudgedByItsRole(unittest.TestCase):
             self.assertEqual(ours, theirs, (approvers, role, author, reason, created))
             compared += 1
         self.assertEqual(compared, 200)        # 5 approver sets x 5 roles x 2 x 2 x 2
+
+
+class TestAWaiverCarriesItsReference(unittest.TestCase):
+    """PyDRC's optional ``Approval.reference``: the document a waiver rests
+    on, an RFI answer or a deviation request. Stored with the waiver, printed
+    after its reason, and never read by ``judge``."""
+
+    OLD_ROW = {"key": "k1", "rule_id": "ERC-SCCR-001", "reason": "Accepted by client",
+               "author": "LWH", "created": "2026-10-30T09:15:00", "subject_id": "Q1",
+               "role": "owner"}
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.src = _drawing(os.path.join(self.tmp, "set.pdf"))
+
+    def test_it_round_trips_through_to_dict_and_from_dict(self):
+        """Injected: to_dict leaving the reference out (red)."""
+        w = Waiver(key="k1", reason="Owner accepts the 480 V tap", author="LWH",
+                   role="owner", created="2026-10-30T09:15:00", reference="RFI-0142")
+        self.assertEqual(w.to_dict()["reference"], "RFI-0142")
+        self.assertEqual(Waiver.from_dict(w.to_dict()), w)
+
+    def test_it_is_written_only_when_set(self):
+        self.assertNotIn("reference", Waiver(key="k1", reason="ok").to_dict())
+        self.assertEqual(set(Waiver(**self.OLD_ROW).to_dict()), set(self.OLD_ROW))
+
+    def test_an_old_sidecar_with_no_reference_still_loads(self):
+        """A row as an earlier build wrote it, put in the sidecar's own table
+        and read back by the sidecar. Injected: from_dict reading
+        d["reference"] (red: KeyError)."""
+        self.assertEqual(Waiver.from_dict(dict(self.OLD_ROW)).reference, "")
+        db = SidecarDB(sidecar_path(self.src))
+        try:
+            db.conn.execute(
+                "INSERT INTO waivers (key, rule_id, subject_id, reason, author, "
+                "created, json) VALUES (?,?,?,?,?,?,?)",
+                ("k1", "ERC-SCCR-001", "Q1", "Accepted by client", "LWH",
+                 "2026-10-30T09:15:00", json.dumps(self.OLD_ROW)))
+            db.conn.commit()
+            loaded = db.load_waivers()
+        finally:
+            db.close()
+        self.assertEqual(sorted(loaded), ["k1"])
+        self.assertEqual((loaded["k1"].reference, loaded["k1"].role,
+                          loaded["k1"].reason), ("", "owner", "Accepted by client"))
+
+    def test_it_survives_the_document_and_the_sidecar(self):
+        doc = Document(self.src)
+        doc.load()
+        doc.set_findings([Finding(key="k1", rule_id="R1")], AuditRun())
+        doc.waive_finding("k1", "Owner accepts the 480 V tap", "LWH", "owner",
+                          "DR-0007")
+        doc.close()
+        again = Document(self.src)
+        again.load()
+        try:
+            self.assertEqual(again.waiver_for("k1").reference, "DR-0007")
+        finally:
+            again.close()
+
+    def test_it_never_decides_whether_a_finding_closes(self):
+        for approvers, author in ((("owner",), "LWH"), (("owner",), ""),
+                                  (("engineer",), "LWH"), ((), "")):
+            got = []
+            for reference in ("", "RFI-0142"):
+                f = Finding(key="k", approvers=list(approvers))
+                apply_waivers([f], {"k": Waiver(
+                    key="k", reason="ok", author=author, role="owner",
+                    created="2026-10-30T09:15:00", reference=reference)})
+                got.append((f.status, f.waiver_problem))
+            self.assertEqual(got[0], got[1], (approvers, author))
+
+    def test_it_follows_the_reason(self):
+        from app.audit.findings import waiver_text
+        w = Waiver(key="k", reason="Owner accepts the 480 V tap.", author="LWH",
+                   role="owner", created="2026-10-30T09:15:00", reference=" RFI-0142 ")
+        self.assertEqual(waiver_text(w), "Waived by LWH (Owner) on 2026-10-30: "
+                                         "Owner accepts the 480 V tap (ref. RFI-0142)")
+        w.reference = ""
+        self.assertEqual(waiver_text(w), "Waived by LWH (Owner) on 2026-10-30: "
+                                         "Owner accepts the 480 V tap.")
+
+    @needs_pydrc
+    def test_it_is_printed_as_the_rule_library_describes_it(self):
+        """The text after "<who>: " is the rule library's own ``describe``
+        up to its verdict, with and without a reference and a closing period.
+        Injected: waiver_text printing "[ref. ...]" (red)."""
+        from pydrc.engine import approvals
+        from app.audit.findings import waiver_text
+        compared = 0
+        for reason in ("Owner accepts the 480 V tap", "Owner accepts the 480 V tap."):
+            for reference in ("", "RFI-0142"):
+                row = approvals.Approval(fingerprint="k", name="LWH", role="owner",
+                                         date="2026-10-30", reason=reason,
+                                         reference=reference).to_dict()
+                row.pop("fingerprint")
+                row["accepted"] = True
+                theirs = approvals.describe(row)
+                verdict = ". Accepted."
+                self.assertTrue(theirs.endswith(verdict), theirs)
+                theirs = theirs[:-len(verdict)].split(": ", 1)[1]
+                ours = waiver_text(Waiver(key="k", reason=reason, author="LWH",
+                                          role="owner", created="2026-10-30T09:15:00",
+                                          reference=reference)).split(": ", 1)[1]
+                self.assertEqual(ours.rstrip("."), theirs, (reason, reference))
+                compared += 1
+        self.assertEqual(compared, 4)
+
+    @needs_pydrc
+    def test_a_waiver_carries_every_field_an_approval_does(self):
+        """Redline's waiver is its own type, so a field the rule library adds
+        to ``Approval`` is missing here until somebody carries it. This names
+        the counterpart of each, and goes red on the next one."""
+        import dataclasses
+        from pydrc.engine import approvals
+        counterpart = {"fingerprint": "key", "name": "author", "role": "role",
+                       "date": "created", "reason": "reason", "reference": "reference"}
+        theirs = {f.name for f in dataclasses.fields(approvals.Approval)}
+        self.assertEqual(theirs, set(counterpart))
+        ours = {f.name for f in dataclasses.fields(Waiver)}
+        self.assertLessEqual(set(counterpart.values()), ours)
 
 
 class TestAuditRunSummary(unittest.TestCase):
