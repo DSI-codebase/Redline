@@ -31,6 +31,15 @@ doubling the application font):
    Each dock that exists at a change gets a paint filter that draws the title
    the way Qt does, with the font read when it paints. A dock built later
    copies the right one, and a launch at 100% installs nothing.
+5. **A length written at 100% and multiplied does not hold the same text on
+   every platform.** The PDF Tools options panel is 300 px at 100%, and at
+   300% the Windows CI runner's fonts asked 1276 px of it where Ubuntu's ask
+   675 (Tests run 168, 2026-11-01). So at any size but 100%, a fixed or
+   maximum length from :func:`sized` is never less than the widget's own
+   minimum size hint. That is read again whenever the widget's layout asks,
+   because a window BUILT at 300% sets the length before its children
+   exist, and has to arrive where a window changed to 300% does. At 100% the length is exactly the one written, as in every
+   earlier release.
 
 ``tests/test_text_scale.py`` builds the window, changes the size, and fails on
 any widget whose text did not follow, on a window laid out differently from
@@ -78,9 +87,16 @@ SIZE_SETTERS = frozenset((
 
 _FONT_SIZE = re.compile(r"(font-size\s*:\s*)(\d+(?:\.\d+)?)(px|pt)", re.I)
 
+# The setters that cap a length, so a capped widget can be held smaller than
+# its own text (point 5). A minimum cannot hold anything smaller.
+_CAPS = frozenset((
+    "setFixedWidth", "setFixedHeight", "setMaximumWidth", "setMaximumHeight",
+))
+
 _base = None        # (application font, {class name: font}) at 100%
 _percent = 100
 _dock_titles = None  # the one _DockTitle filter, made at the first change
+_fit = None          # the one _Fit filter, made at the first sized()
 
 
 # -- the scale ------------------------------------------------------------------
@@ -199,19 +215,42 @@ def sized(widget, **lengths: int) -> None:
     """Set fixed, minimum or maximum lengths written at 100%, scaled.
 
     ``sized(rail, setFixedWidth=196)``. Only for a length that holds text: a
-    width an icon or a color swatch needs is not a text size.
+    width an icon or a color swatch needs is not a text size. At any size but
+    100%, a fixed or maximum length is never less than the widget's own
+    minimum size hint (point 5 of the module docstring).
     """
+    global _fit
     unknown = set(lengths) - SIZE_SETTERS
     if unknown:
         raise ValueError(f"sized() sets only {sorted(SIZE_SETTERS)}, "
                          f"not {sorted(unknown)}")
     widget.setProperty(PROP_SIZES, json.dumps(lengths, sort_keys=True))
+    if _fit is None:
+        _fit = _Fit(QApplication.instance())
+    widget.installEventFilter(_fit)        # once: Qt drops a repeat
     _apply_sizes(widget, lengths)
 
 
 def _apply_sizes(widget, lengths: dict) -> None:
+    need = widget.minimumSizeHint() if _percent != 100 else None
     for setter, value in sorted(lengths.items()):
-        getattr(widget, setter)(px(int(value)))
+        length = px(int(value))
+        if need is not None and setter in _CAPS:
+            length = max(length, need.width() if setter.endswith("Width")
+                         else need.height())
+        getattr(widget, setter)(length)
+
+
+class _Fit(QObject):
+    """Reads a sized widget's minimum size hint again when its layout asks,
+    so its caps follow the text it holds (point 5)."""
+
+    def eventFilter(self, widget, event):
+        if _percent != 100 and event.type() == QEvent.LayoutRequest:
+            sizes = widget.property(PROP_SIZES)
+            if sizes:
+                _apply_sizes(widget, json.loads(str(sizes)))
+        return False
 
 
 def _depth(widget) -> int:

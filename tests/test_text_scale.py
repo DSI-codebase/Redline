@@ -327,8 +327,11 @@ class TestEveryWidgetFollows(_AtSavedSize):
         before = {id(w): (w.minimumWidth(), w.maximumWidth(),
                           w.minimumHeight(), w.maximumHeight()) for w in carried}
         self.ts.apply(200)
+        _settle(self.app, 5)
         import json
+        exact = 0
         for w in carried:
+            need = w.minimumSizeHint()
             for setter, value in json.loads(w.property(self.ts.PROP_SIZES)).items():
                 getter = {"setFixedWidth": w.maximumWidth,
                           "setFixedHeight": w.maximumHeight,
@@ -336,12 +339,66 @@ class TestEveryWidgetFollows(_AtSavedSize):
                           "setMinimumHeight": w.minimumHeight,
                           "setMaximumWidth": w.maximumWidth,
                           "setMaximumHeight": w.maximumHeight}[setter]
-                self.assertEqual(getter(), value * 2, f"{type(w).__name__} {setter}")
+                # A cap follows the scale exactly, unless the widget's own
+                # content asks for more, and then exactly that (point 5).
+                want = value * 2
+                if setter in self.ts._CAPS:
+                    want = max(want, need.width() if setter.endswith("Width")
+                               else need.height())
+                self.assertEqual(getter(), want, f"{type(w).__name__} {setter}")
+                exact += getter() == value * 2
+        # The floor: lengths that simply doubled. On Ubuntu that is every one.
+        self.assertGreaterEqual(exact, 4, "sized() lengths did not follow the scale")
         self.ts.apply(100)
         for w in carried:
             self.assertEqual((w.minimumWidth(), w.maximumWidth(),
                               w.minimumHeight(), w.maximumHeight()), before[id(w)])
         self.assertIsNotNone(win)
+
+    def _frame(self, width):
+        """A frame sized at 100% narrower than the one line of text it holds,
+        the way the Windows runner's fonts left the PDF Tools options panel at
+        300% (point 5 of app/text_scale.py)."""
+        from PySide6.QtWidgets import QFrame, QHBoxLayout, QPushButton
+        frame = QFrame()
+        self.ts.sized(frame, setFixedWidth=width)
+        QHBoxLayout(frame).addWidget(
+            QPushButton("Merge the extracted pages into one PDF file"))
+        frame.show()
+        self.addCleanup(self._delete_now, frame)
+        _settle(self.app, 5)
+        return frame
+
+    def _delete_now(self, widget):
+        # Deleted before the next test, not at some later event loop: a
+        # leftover sized frame is in the allWidgets() sweeps that follow.
+        from PySide6.QtCore import QEvent
+        widget.deleteLater()
+        QApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+    def test_a_cap_is_never_below_its_own_text(self):
+        """Changed to 300% and built at 300%, the frame is as wide as its
+        text, the same width both ways. At 100% it is the width written, as
+        in every earlier release. Falsified by the floor removed from
+        _apply_sizes, by the filter not installed (the built frame stays
+        capped) and by the floor applied at 100% too, each red."""
+        width = 40
+        changed = self._frame(width)
+        self.assertGreater(changed.minimumSizeHint().width(), width,
+                           "the text fits, so this proves nothing")
+        self.assertEqual(changed.maximumWidth(), width)
+        self.ts.apply(300)
+        _settle(self.app, 5)
+        need = changed.minimumSizeHint().width()
+        self.assertGreater(need, width * 3, "the text fits at 300%")
+        self.assertEqual(changed.maximumWidth(), need)
+        built = self._frame(width)
+        self.assertEqual(built.maximumWidth(), built.minimumSizeHint().width())
+        self.assertEqual(built.maximumWidth(), changed.maximumWidth())
+        self.ts.apply(100)
+        _settle(self.app, 5)
+        self.assertEqual((changed.maximumWidth(), built.maximumWidth()),
+                         (width, width))
 
 
 @unittest.skipUnless(_QT_OK, _QT_REASON)
