@@ -4,7 +4,7 @@ Two workflows, both under `.github/workflows/`.
 
 | Workflow | Runs on | Does |
 |---|---|---|
-| **Tests** (`tests.yml`) | every push, every pull request | the suite, on Ubuntu and Windows |
+| **Tests** (`tests.yml`) | every push, every pull request | the suite, on Ubuntu and Windows, and once more on Ubuntu at the PyMuPDF floor |
 | **Build Windows** (`build-windows.yml`) | manual dispatch, `v*` tags | the suite, then the portable app, a launch of it, a check of the notices against it, the installer, and the release |
 
 ## Running the suite
@@ -31,6 +31,27 @@ crash in the log.
 
 Qt also needs a display. The runner sets `QT_QPA_PLATFORM=offscreen` itself, so
 there is nothing to remember locally.
+
+## The PyMuPDF floor is run, not just declared
+
+A fresh install takes the newest PyMuPDF, so the matrix never meets the floor
+`requirements.txt` declares. That floor said 1.25 while two tests failed there
+(measured 2026-10-31), and no runner noticed. The **`pymupdf-floor`** job
+installs `requirements.txt` with `PyMuPDF==$PYMUPDF_FLOOR` as a pip constraint,
+checks that the installed PyMuPDF is that version, and runs the suite on Ubuntu
+and Python 3.11, with the rule library when the token is present.
+
+To move the floor to version X:
+
+1. Write `PyMuPDF==X` into a file, `floor.txt` here.
+2. In a new virtual environment, run
+   `pip install -r requirements.txt -c floor.txt`.
+3. Run `python tools/run_tests.py` and confirm it reports no failed module.
+4. Change the `PyMuPDF>=` line in `requirements.txt` and `PYMUPDF_FLOOR` in
+   `tests.yml` in the same commit.
+
+`tests/test_requirements.py::TestThePyMuPDFFloorIsExercised` fails when the two
+disagree.
 
 ## The design rule library is optional, and CI says so
 

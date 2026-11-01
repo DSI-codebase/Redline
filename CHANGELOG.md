@@ -6,6 +6,13 @@ portable zip to the matching GitHub release.
 
 ## Unreleased
 
+- **Running from source needs PyMuPDF 1.25.4 or later.** `requirements.txt`
+  said 1.25, and two features do not work below 1.25.4. On 1.25.0 and 1.25.2
+  an exported callout's leader has its tip at x = 0, the page's left edge. On
+  1.25.0, 1.25.2 and 1.25.3 printing at the Medium line weight puts down no
+  more ink than printing as drawn. 1.25.1 was not tried. The installer's build
+  installs the newest PyMuPDF, so a shipped installer was not affected. Tests
+  now also run at the declared floor on every push.
 - **Text size, from 50% to 300%.** **Settings ▸ General ▸ Text size** is a
   slider that sets the size of the text in every menu, pane, tab, table and
   dialog, as a percentage of the system's text size. 100% is the size every

@@ -1,7 +1,20 @@
 # Below 6.12: on PySide6 6.12.0 a widget destroyed from Python before the
 # QApplication segfaults the interpreter at exit. 6.11.2 does not.
 PySide6>=6.6,<6.12
-PyMuPDF>=1.25
+# 1.25.4 is the first release on which two features work. Measured 2026-10-31
+# on Python 3.11 by running tests/test_v110_callout.py and
+# tests/test_v12_print.py at each release probed (1.25.1 was not):
+#   - Callout export. 1.25.0 and 1.25.2 write the leader's tip (the FreeText
+#     `CL` entry) at x = 0. 1.25.3 writes it where it was drawn.
+#   - The print line weight floor. On 1.25.0, 1.25.2 and 1.25.3 a page printed
+#     at Medium carries no more ink than as drawn. 1.25.4 thickens it.
+# The floor was 1.25, and no runner installed it: a fresh install takes the
+# newest PyMuPDF, and pdf2docx 0.5.13, which a fresh install resolves, itself
+# requires PyMuPDF>=1.26.7. The pymupdf-floor job in
+# .github/workflows/tests.yml runs the suite at this version, and
+# tests/test_requirements.py::TestThePyMuPDFFloorIsExercised holds its pin to
+# this line.
+PyMuPDF>=1.25.4
 openpyxl>=3.1
 python-docx>=1.1
 pdf2docx>=0.5.8

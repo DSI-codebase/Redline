@@ -336,7 +336,10 @@ def write_annotations_to_pdf(doc: "pymupdf.Document", annotations: Iterable[Anno
                 if ann.fill_color is not None:
                     base_kwargs["fill_color"] = ann.fill_color
                 try:
-                    # the callout leader (CL/FreeTextCallout) needs PyMuPDF >= 1.25
+                    # the callout leader (CL/FreeTextCallout). PyMuPDF 1.25.0
+                    # and 1.25.2 take `callout=` and write the tip at x = 0,
+                    # and 1.25.3 writes it where it was drawn (measured
+                    # 2026-10-31). requirements.txt says 1.25.4 and why.
                     annot = page.add_freetext_annot(
                         rect, ann.text or "", callout=cl,
                         line_end=pymupdf.PDF_ANNOT_LE_OPEN_ARROW, **base_kwargs)
