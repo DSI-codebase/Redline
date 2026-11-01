@@ -45,7 +45,10 @@ installed with the app.
 > cutting a release rather than trusting this list to be current.
 > `tools/notices_audit.py` does steps 2 and 4 above and checks `licenses/`
 > against the wheels, and `CI.md` gives the order under "The notices name
-> what the build ships".
+> what the build ships". The Windows build workflow runs that check on every
+> build that installs PyDRC, and a tag build fails when `licenses/` differs
+> from the wheels of the packages it carries. The check compares license
+> files, so a version heading below is corrected by hand.
 
 ---
 
@@ -434,7 +437,10 @@ the v1.8.0 tag build did. PyDRC's `dxf` extra brings these two.
   PyInstaller to build and distribute non-free programs (including commercial
   ones)`
 - What ships is the bootloader that becomes `DSI Redline.exe`, and the runtime
-  modules `_pyi_rth_utils` and `_pyi_rth_utils.qt`.
+  modules `_pyi_rth_utils` and `_pyi_rth_utils.qt`. The archive appended to the
+  executable also carries PyInstaller's bootstrap script and four of its
+  run-time hooks (`inspect`, `pkgutil`, `multiprocessing` and `pyside6`), read
+  from a Linux build of this spec on 2026-11-01.
 - **Copyright**, verbatim from `COPYING.txt`:
   > Copyright (c) 2010-2023, PyInstaller Development Team
   > Copyright (c) 2005-2009, Giovanni Bajo
