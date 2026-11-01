@@ -21,12 +21,18 @@ LOW_CONF = 55.0
 
 
 def available() -> bool:
-    """True when both ``pytesseract`` and the Tesseract binary are usable."""
+    """True when both ``pytesseract`` and the Tesseract binary are usable.
+
+    ``SystemExit`` is caught beside ``Exception`` because pytesseract 0.3.10
+    and 0.3.13 raise it from ``get_tesseract_version()`` when the binary's
+    ``--version`` output does not parse, or parses below 3.05 (both read
+    2026-11-01). ``KeyboardInterrupt`` is neither, and still propagates.
+    """
     try:
         import pytesseract  # noqa: F401
         pytesseract.get_tesseract_version()
         return True
-    except Exception:
+    except (Exception, SystemExit):
         return False
 
 
