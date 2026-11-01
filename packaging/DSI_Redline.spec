@@ -39,10 +39,19 @@ try:
         try:
             __import__(_opt)
             hiddenimports += collect_submodules(_opt)
-            # Rule packs are YAML data files, not modules. PyDRC finds its
-            # built-ins relative to its own package directory, and
-            # collect_data_files reproduces that layout in the frozen build.
-            datas += collect_data_files(_opt, includes=["**/*.yaml"])
+            # PyDRC's data files are not modules: the rule packs and vendor
+            # catalogs are YAML, and the calculators' code tables and the part
+            # ratings file are JSON. PyDRC finds each one relative to its own
+            # package directory, and collect_data_files reproduces that layout
+            # in the frozen build. This collected YAML alone until v1.8.1, so
+            # PyDRC v0.23.1's bundle carried its 9 YAML files and none of its
+            # 29 JSON files, and every calculator stopped with
+            # "no NEC 2026 table ...". The other two
+            # packages carry no file of either kind (measured 2026-11-01 with
+            # anthropic 2.3.0 and pdf2docx 0.5.13). tools/bundle_check.py, run
+            # by build-windows.yml, compares the bundle with the installed
+            # PyDRC file by file.
+            datas += collect_data_files(_opt, includes=["**/*.yaml", "**/*.json"])
         except Exception:
             pass
     # PyDRC imports PyYAML lazily from inside its pack loader, so the analysis

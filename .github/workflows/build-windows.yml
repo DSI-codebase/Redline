@@ -174,6 +174,19 @@ jobs:
       - name: Build app (PyInstaller)
         run: pyinstaller packaging/DSI_Redline.spec --noconfirm
 
+      # The spec collected PyDRC's YAML and none of its JSON until v1.8.1, so
+      # the bundle had the rule packs and not the 28 calculator tables or the
+      # part ratings file, and every calculator stopped with "no NEC 2026
+      # table". The self-test below builds the window without reading a table,
+      # so it passed that build. This compares the bundle with the PyDRC this
+      # job installed, file by file, and fails on any data file the bundle
+      # lacks. A build without PYDRC_TOKEN has no PyDRC to compare, and the
+      # step that set PYDRC_BUILT=none has already warned that it ships
+      # without design rule checking.
+      - name: Check the bundle carries PyDRC's data files
+        if: env.PYDRC_BUILT != 'none'
+        run: python tools/bundle_check.py --dist "dist/DSI Redline" pydrc
+
       # The suite above runs from SOURCE. v1.8.0 passed it and died on launch,
       # because PyMuPDF 2.0's layout models were in the source install and not
       # in the bundle, and nothing between here and the release ever started
