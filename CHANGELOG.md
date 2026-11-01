@@ -4,6 +4,14 @@ All notable changes to **DSI Redline** are documented here. Versions are tagged
 `vX.Y.Z`; each tag triggers the Windows build that publishes the installer and a
 portable zip to the matching GitHub release.
 
+## Unreleased
+
+- **A waiver can be given in the Owner role.** The design rule library added
+  the role for the customer's or facility owner's own acceptance, which a
+  customer's rule pack can ask for. The waiver dialog lists Owner beside
+  Estimator, Engineer and UL rep, and a waiver in that role closes a finding
+  whose rule takes it.
+
 ## v1.8.1
 
 Design rule checking in this release is PyDRC `v0.23.1` (`6360563`), the same
