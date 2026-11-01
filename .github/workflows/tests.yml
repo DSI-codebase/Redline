@@ -93,23 +93,33 @@ jobs:
           echo "running: python tools/run_tests.py $ARGS"
           python tools/run_tests.py $ARGS
 
-  # The PyMuPDF floor that requirements.txt declares, run. The job above takes
-  # the newest PyMuPDF, and pdf2docx 0.5.13 requires 1.26.7, so no runner ever
-  # installed the floor. It said 1.25 while two tests failed there (measured
-  # 2026-10-31), and only an install that honored it met them.
+  # Every floor requirements.txt declares, installed together and run. The job
+  # above takes the newest release of everything, so no runner met a floor.
+  # PyMuPDF>=1.25 failed two tests at 1.25.0 (measured 2026-10-31) and
+  # PySide6>=6.6 failed two at 6.6.0 (measured 2026-11-01), while every run
+  # above them was green.
   #
-  # One runner and one interpreter, because the claim exercised here is a
-  # library version. The job above covers both operating systems and every
-  # interpreter on the newest release.
+  # ONE job pinning every floor at once, a lowest-direct resolution, rather
+  # than one job per library. The floors are one claim, that any install
+  # inside them works, and the corner where all of them are lowest is the one
+  # install that claim covers and no other job builds. It is also the only
+  # place two old releases meet, such as pdf2docx 0.5.8 on PyMuPDF 1.25.4.
+  # Measured 2026-11-01, each floor alone with everything else at its newest
+  # release found no failure this corner missed. A red run here names no
+  # library, so CI.md says how to find which.
   #
-  # PYMUPDF_FLOOR is held to requirements.txt by
-  # tests/test_requirements.py::TestThePyMuPDFFloorIsExercised, so moving
-  # either one alone fails the suite.
-  pymupdf-floor:
+  # One runner and the interpreter the documents promise, because the claim is
+  # a set of library versions, and some floors publish no wheel for a newer
+  # one: PyYAML 6.0 has wheels up to Python 3.11 and Pillow 10.0.0 up to 3.12.
+  # The job above covers both operating systems and every interpreter at the
+  # newest releases.
+  #
+  # .github/floors.txt is held to requirements.txt line by line, in both
+  # directions, by tests/test_requirements.py::TestTheFloorsAreExercised.
+  floors:
     runs-on: ubuntu-latest
     env:
       PYDRC_TOKEN: ${{ secrets.PYDRC_TOKEN }}
-      PYMUPDF_FLOOR: "1.25.4"
 
     steps:
       - uses: actions/checkout@v5
@@ -128,36 +138,34 @@ jobs:
             libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
             libxcb-shape0 libxcb-xinerama0 libxcb-xfixes0
 
-      # A constraint rather than an edited requirements.txt, so the floor is
-      # the only thing that moves. pip then resolves pdf2docx to a release
-      # that accepts this PyMuPDF (0.5.8 on the day this was written).
-      - name: Install at the PyMuPDF floor
+      # A constraint rather than an edited requirements.txt, so the floors are
+      # the only thing that moves. Transitive dependencies stay with the
+      # resolver, which takes the newest release the floors accept.
+      - name: Install at the declared floors
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          echo "PyMuPDF==${PYMUPDF_FLOOR}" > "$RUNNER_TEMP/pymupdf-floor.txt"
-          pip install -r requirements.txt -c "$RUNNER_TEMP/pymupdf-floor.txt"
+          pip install -r requirements.txt -c .github/floors.txt
 
-      # PyDRC declares no PyMuPDF requirement today. The same constraint makes
-      # a release that starts to declare a newer one fail this install rather
-      # than lift the floor without a word.
-      - name: Install the design rule library at the floor (optional)
+      # PyDRC declares PyYAML>=6.0. Under the same constraint, a PyDRC release
+      # that declared a newer PyYAML, or any other library pinned here, fails
+      # this install rather than lifting that floor without a word.
+      - name: Install the design rule library at the floors (optional)
         if: env.PYDRC_TOKEN != ''
         shell: bash
         run: |
-          pip install -c "$RUNNER_TEMP/pymupdf-floor.txt" "pydrc[dxf] @ git+https://x-access-token:${PYDRC_TOKEN}@github.com/${{ github.repository_owner }}/PyDRC@main"
+          pip install -c .github/floors.txt "pydrc[dxf] @ git+https://x-access-token:${PYDRC_TOKEN}@github.com/${{ github.repository_owner }}/PyDRC@main"
 
-      # The oracle is the installed package, not the constraint file. A step
-      # that installed without the constraint would otherwise run the newest
-      # PyMuPDF under this job's name.
-      - name: Confirm the installed PyMuPDF is the floor
+      # The oracle is the installed distributions, not the constraint file. A
+      # step that installed without the constraint would otherwise run the
+      # newest releases under this job's name. The check exits 2 on a file
+      # that pins nothing.
+      - name: Confirm the installed versions are the floors
         shell: bash
         run: |
-          installed="$(python -c 'import importlib.metadata as m; print(m.version("PyMuPDF"))')"
-          echo "PyMuPDF installed: ${installed}, declared floor: ${PYMUPDF_FLOOR}"
-          test "$installed" = "$PYMUPDF_FLOOR"
+          python tools/check_floors.py .github/floors.txt
 
-      - name: Run tests at the PyMuPDF floor
+      - name: Run tests at the floors
         env:
           QT_QPA_PLATFORM: offscreen
         shell: bash
