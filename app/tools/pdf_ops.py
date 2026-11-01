@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from dataclasses import dataclass
 from typing import Callable, Iterable, Optional
 
@@ -615,6 +616,46 @@ def crop_regions_to_png(src: str, out_dir: str, regions_by_page: dict,
 
 # --- PDF -> Word ------------------------------------------------------------
 
+# pdf2docx imports PyMuPDF under its old name, `fitz`. Every release on PyPI
+# from 0.5.0 to 0.5.13 does, and so does its upstream master (read 2026-10-31,
+# by AST over each wheel). PyMuPDF 2.0 still ships `fitz` as a shim that warns
+# it "will be removed in future", and no release that removes it is named yet.
+# Binding the names pdf2docx imports to the modules they stand for keeps
+# PDF -> Word working when the shim goes, without pinning the PDF engine the
+# whole app runs on: the owner chose this over a PyMuPDF ceiling on 2026-10-31.
+#
+# `setdefault`, so a `fitz` already imported is left in place. The shim is
+# `from pymupdf import *`, so either binding hands pdf2docx the same objects.
+# sys.modules is process-wide, so once PDF -> Word has run, any later `import
+# fitz` gets `pymupdf` too. `tests/test_pdf_to_word_imports.py` asserts these
+# names cover every `fitz` module and attribute the INSTALLED pdf2docx uses, so
+# a pdf2docx release that reaches for a new one fails there first.
+
+
+def _fitz_aliases() -> dict:
+    """The ``fitz`` module names pdf2docx imports, mapped to what they stand for.
+
+    ``fitz.utils`` is here because ``pdf2docx/common/share.py`` does ``from
+    fitz.utils import getColorList, getColorInfoList``. Literal imports rather
+    than ``importlib.import_module`` strings, so PyInstaller's analysis sees
+    ``pymupdf.utils`` and bundles it.
+    """
+    import pymupdf
+    import pymupdf.utils
+    return {"fitz": pymupdf, "fitz.utils": pymupdf.utils}
+
+
+def import_pdf2docx():
+    """Import pdf2docx with its ``fitz`` names bound to ``pymupdf`` first.
+
+    Raises whatever the import raises. :func:`app.tools.dialogs.pdf2docx_problem`
+    turns that into the message the user reads.
+    """
+    for name, module in _fitz_aliases().items():
+        sys.modules.setdefault(name, module)
+    import pdf2docx
+    return pdf2docx
+
 
 def pdf_to_docx(src: str, out_path: str, progress: Optional[Callable] = None) -> str:
     """Convert a PDF to .docx via pdf2docx (raises if pdf2docx is unavailable)."""
@@ -622,7 +663,7 @@ def pdf_to_docx(src: str, out_path: str, progress: Optional[Callable] = None) ->
     # own-input half can fire -- kept for uniformity, because the next writer
     # added here should not have to decide which half applies.
     _guard_out(out_path, src)
-    from pdf2docx import Converter
+    Converter = import_pdf2docx().Converter
     cv = Converter(src)
     try:
         cv.convert(out_path)
