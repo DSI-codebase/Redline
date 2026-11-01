@@ -222,7 +222,7 @@ class SheetNumberWizard(QObject):
         box.setWindowTitle("More boxes?")
         box.setText("Add another title-block box, or finish and split?")
         add = box.addButton("Add another box", QMessageBox.ActionRole)
-        fin = box.addButton("Finish & split", QMessageBox.AcceptRole)
+        fin = box.addButton("Finish && split", QMessageBox.AcceptRole)
         box.addButton(QMessageBox.Cancel)
         box.exec()
         clicked = box.clickedButton()
