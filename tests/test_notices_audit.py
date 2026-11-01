@@ -581,7 +581,7 @@ class TestTheRepositoryIsWhatTheToolWrites(unittest.TestCase):
 # ------------------------------------------------- the Build Windows step
 
 # The job that builds the bundle the check reads. Named rather than searched
-# for, as `TestThePyMuPDFFloorIsExercised.JOB` in test_requirements.py is.
+# for, as `TestTheFloorsAreExercised.JOB` in test_requirements.py is.
 BUILD_JOB = "build"
 
 # Two hand readers stood here. `_step_names` took every `- name:` line in the

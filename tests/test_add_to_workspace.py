@@ -16,8 +16,10 @@ Asserted where each rule acts:
   before copying, keep both / cancel, open the identical one, New folder…, the
   switch to the copy, and the same menu on a File view Recent row.
 
-`AppConfig` is the real per-user QSettings store, so every test that writes it
-puts back exactly the keys it touched.
+`AppConfig` is QSettings, and in a test process that is the process's own
+store (`tests/__init__.py`), not the developer's. It is still one store for
+every test in the module, so every test that writes it puts back exactly the
+keys it touched.
 """
 
 import hashlib
@@ -37,6 +39,7 @@ from app.model.annotations import Annotation, KIND_RECT
 from tests._qt import QT_OK as _QT_OK, REASON as _QT_REASON
 
 if _QT_OK:
+    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication, QMenu, QMessageBox
     from app.config import AppConfig
 
@@ -281,7 +284,25 @@ class _Window(unittest.TestCase):
 
     @staticmethod
     def _sub(menu, label):
-        return next(a.menu() for a in menu.actions() if a.text() == label and a.menu())
+        """The submenu ``label`` of ``menu``, found as a child QMenu and never
+        through ``QAction.menu()``.
+
+        The app does not call ``QAction.menu()``. This helper did, and on
+        PySide6 6.6.0, 6.8.2 and 6.10.2 a wrapper it returns raises "Internal
+        C++ object (PySide6.QtWidgets.QMenu) already deleted" once an earlier
+        one for the same menu has been discarded, while the menu is alive:
+        ``findChildren`` lists it and its actions trigger. 6.11.3 does not.
+        Measured 2026-11-01 with a script outside the suite, after the run at
+        the declared PySide6 floor failed four tests here on this helper.
+        """
+        found = [m for m in menu.findChildren(
+                     QMenu, options=Qt.FindDirectChildrenOnly)
+                 if m.menuAction().text() == label
+                 and m.menuAction() in menu.actions()]
+        if len(found) != 1:
+            raise AssertionError(f"{len(found)} submenus of {menu.title()!r} "
+                                 f"are called {label!r}")
+        return found[0]
 
     @staticmethod
     def _trigger(menu, label):

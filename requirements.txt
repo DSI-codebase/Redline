@@ -1,6 +1,21 @@
 # Below 6.12: on PySide6 6.12.0 a widget destroyed from Python before the
 # QApplication segfaults the interpreter at exit. 6.11.2 does not.
-PySide6>=6.6,<6.12
+#
+# 6.8.1 is the first release on which two features work. Measured 2026-11-01
+# on Python 3.11 by running tests/test_text_scale.py and tests/test_v12_print.py
+# at each release probed (6.6.3, 6.6.3.1 and 6.7.1 to 6.7.3 were not):
+#   - Text size. On 6.6.0, 6.7.0, 6.8.0, 6.8.0.1 and 6.8.0.2 a table's
+#     existing rows stay 30 px high under 44 px text at 300%. On 6.6.1 and
+#     6.6.2 a window changed to 300% draws a band of every pane differently
+#     from a window opened at 300%. 6.8.1 does neither.
+#   - The print line weight floor. On 6.6.0 and 6.6.1 a page printed at Heavy
+#     carries no more ink than at Medium. 6.6.2 thickens it.
+# The floor was 6.6, and no runner installed it: a fresh install takes the
+# newest release below 6.12. The floors job in .github/workflows/tests.yml
+# runs the suite with .github/floors.txt as a constraint, and
+# tests/test_requirements.py::TestTheFloorsAreExercised holds that file's pin
+# to this line.
+PySide6>=6.8.1,<6.12
 # 1.25.4 is the first release on which two features work. Measured 2026-10-31
 # on Python 3.11 by running tests/test_v110_callout.py and
 # tests/test_v12_print.py at each release probed (1.25.1 was not):
@@ -10,11 +25,19 @@ PySide6>=6.6,<6.12
 #     at Medium carries no more ink than as drawn. 1.25.4 thickens it.
 # The floor was 1.25, and no runner installed it: a fresh install takes the
 # newest PyMuPDF, and pdf2docx 0.5.13, which a fresh install resolves, itself
-# requires PyMuPDF>=1.26.7. The pymupdf-floor job in
-# .github/workflows/tests.yml runs the suite at this version, and
-# tests/test_requirements.py::TestThePyMuPDFFloorIsExercised holds its pin to
-# this line.
+# requires PyMuPDF>=1.26.7. The floors job in .github/workflows/tests.yml runs
+# the suite at this version, and
+# tests/test_requirements.py::TestTheFloorsAreExercised holds the pin in
+# .github/floors.txt to this line.
 PyMuPDF>=1.25.4
+# Each line below passed the suite at its floor on 2026-11-01 on Python 3.11,
+# alone with everything else at its newest release, and with every floor in
+# this file at once. This said "The suite barely reaches three of them: no
+# test imports pytesseract, the anthropic tests never build a client, and only
+# the rule library imports PyYAML." tests/_workflow.py imports PyYAML too, so
+# the suite reaches it with or without the rule library. It barely reaches
+# two: no test imports pytesseract, and the anthropic tests never build a
+# client. CI.md says so where the floors job is described.
 openpyxl>=3.1
 python-docx>=1.1
 pdf2docx>=0.5.8

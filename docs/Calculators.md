@@ -5,18 +5,19 @@ tags: [calculators, drc]
 # Calculators
 
 The **Calculators** tab works out the electrical figures a review keeps
-needing: voltage drop, wire and conduit sizes, motor currents, a panel's load
-schedule, its short-circuit current rating (SCCR), the heat its enclosure must
-shed, power conversions and a few estimating figures. Every calculation is the design rule
+needing: voltage drop, wire and conduit sizes, motor currents, a transformer's
+overcurrent devices, a panel's load schedule, its short-circuit current rating
+(SCCR), the heat its enclosure must shed, power conversions and a few
+estimating figures. Every calculation is the design rule
 library's (PyDRC), the same arithmetic the [[Design Rule Check]] runs, so a
 number here and a finding there come from one table.
 
 ## Using it
 
 1. Open the **Calculators** tab.
-2. Pick a calculator in the list on the left. They are grouped on seven pages:
-   **Conductors**, **Voltage drop**, **Raceway**, **Motors**, **Panel**,
-   **Power** and **Estimating**.
+2. Pick a calculator in the list on the left. They are grouped on eight pages:
+   **Conductors**, **Voltage drop**, **Raceway**, **Motors**, **Transformers**,
+   **Panel**, **Power** and **Estimating**.
 3. Fill in the fields. A field's unit is in its label, and a grey hint says
    what goes in it.
 4. Press **Calculate**, or Enter in a field.
@@ -77,6 +78,29 @@ ratings file, the same file a design rule check reads.
 
 A row with no manufacturer or no catalog number is not looked up.
 
+## Transformers
+
+The **Transformers** page gives the largest overcurrent devices NEC Table
+450.3(B) permits for a transformer of 1000 V or less. Fill in the nameplate
+(kVA, phases, primary and secondary voltage) and the protection method:
+primary only, or primary and secondary. The result has four headings: **Rated
+primary current**, **Rated secondary current**, **Largest primary device** and
+**Largest secondary device**.
+
+1. **Primary device** and **Secondary device** say whether each is a fuse, a
+   nonadjustable breaker or an adjustable setting. Note 1 permits the next
+   standard rating up for a fuse or a nonadjustable breaker, never for a
+   setting. The device is asked for only where Note 1 applies.
+2. **Coordinated thermal overload protection** decides Note 3, which permits a
+   larger primary device on a transformer that has it. Answered yes, the result
+   needs the **Impedance**. Left blank, it is not stated: the table's percentage
+   stands and the result says Note 3 was not applied.
+3. With primary protection only, the result says no secondary device is
+   required.
+
+The table is NEC 2017's, typed from a page of the code book and not yet
+confirmed against NEC 2026, and both device headings say so under **TABLES**.
+
 ## Reading a result
 
 The first line says what kind of answer it is:
@@ -105,7 +129,9 @@ example *missing power factor*.
 
 A few inputs have a stated default in the library: copper as the material, one
 set of conductors in parallel, a breaker as the device. Left empty, those take
-the default, and the result's arithmetic names it.
+the default, and the result's arithmetic names it. A transformer's thermal
+overload protection left empty is not stated, which is not the same as no, and
+the result says Note 3 was not applied.
 
 ## When the tab is unavailable
 

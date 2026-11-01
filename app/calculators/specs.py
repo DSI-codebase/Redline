@@ -10,9 +10,10 @@ with the reason, or the test fails.
 
 Most calculators take plain fields. A few take a list (conductors in a
 raceway, a pull's segments, a panel's loads or components), held in a TABLE
-field whose columns are described the same way. Three calculators run several
-PyDRC functions on one form: the panel load schedule, the panel SCCR and the
-enclosure's heat. They are described here with the rest, and their builders,
+field whose columns are described the same way. Four calculators run several
+PyDRC functions on one form: a transformer's overcurrent protection, the panel
+load schedule, the panel SCCR and the enclosure's heat. They are described here
+with the rest, and their builders,
 which turn the rows into PyDRC's own input types, are
 ``app/calculators/lists.py``. That module imports this one, so this one
 imports it only when such a page runs (``_runner``).
@@ -87,6 +88,13 @@ def _panel_choices(name):
     def choices():
         from pydrc.calc import panel
         return tuple(getattr(panel, name))
+    return choices
+
+
+def _transformer_choices(name):
+    def choices():
+        from pydrc.calc import transformer
+        return tuple(getattr(transformer, name))
     return choices
 
 
@@ -363,6 +371,28 @@ PAGES: Tuple[Page, ...] = (
             hint="optional, sizes the grounding conductor")),
         C("motors.vfd_cable_guide", "Drive cable guide", F("voltage", "Voltage", unit="V")),
     )),
+    Page("Transformers", (
+        C("transformer.protection", "Transformer overcurrent protection (Table 450.3(B))",
+          F("kva", "Rating", unit="kVA"),
+          F("phases", "Phases", CHOICE, choices=("1", "3")),
+          F("primary_voltage", "Primary voltage", unit="V"),
+          F("secondary_voltage", "Secondary voltage", unit="V"),
+          F("method", "Protection", CHOICE, choices=_transformer_choices("METHODS"),
+            hint="primary only, or primary and secondary"),
+          F("primary_device", "Primary device", CHOICE,
+            choices=_transformer_choices("DEVICES"),
+            hint="adjustable is a setting, which Note 1 does not raise"),
+          F("secondary_device", "Secondary device", CHOICE,
+            choices=_transformer_choices("DEVICES")),
+          F("thermal_protection", "Coordinated thermal overload protection", CHOICE,
+            choices=YES_NO, hint="blank: not stated, so Note 3 is not applied"),
+          F("impedance_pct", "Impedance", unit="%", hint="with thermal protection, for Note 3"),
+          summary="The rated currents, and the largest primary and secondary devices for a "
+                  "transformer of 1000 V or less, with Notes 1 to 3.",
+          runner=_runner("transformer_protection"),
+          covers=("transformer.rated_current", "transformer.max_primary",
+                  "transformer.max_secondary")),
+    )),
     Page("Panel", (
         C("panel.load_schedule", "Panel load schedule",
           F("supply_voltage", "Supply voltage", unit="V"),
@@ -443,6 +473,14 @@ PAGES: Tuple[Page, ...] = (
                       "water_blocking", "voltage_class"))),
     )),
 )
+
+#: The ``pydrc.calc`` modules that hold no calculator, and why. Every other
+#: module's public functions are held to the pages, so a module PyDRC adds is
+#: described or named here, or tests/test_calculators.py fails.
+NOT_CALCULATORS = {
+    "result": "the result every calculator returns",
+    "tables": "reads the code tables the calculators look up",
+}
 
 #: Public PyDRC functions that are not calculators: they list or spell things.
 #: A function that appears in PyDRC and on no page, in no page's ``covers`` and

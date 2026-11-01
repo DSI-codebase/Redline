@@ -141,7 +141,13 @@ class AppConfig:
     """Thin typed wrapper over QSettings."""
 
     def __init__(self):
-        self.s = QSettings(ORG, APP)
+        # QSettings(ORG, APP) with the format spelled out, so it follows
+        # QSettings.setDefaultFormat. The app never calls that, so this is
+        # NativeFormat, the user's own store. The test suite does
+        # (tests/__init__.py): NativeFormat is the registry on Windows, and
+        # QSettings.setPath cannot move the registry, only an INI file.
+        self.s = QSettings(QSettings.defaultFormat(), QSettings.Scope.UserScope,
+                           ORG, APP)
 
     # -- generic get/set -----------------------------------------------------
 

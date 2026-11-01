@@ -14,6 +14,7 @@ import builtins
 import importlib
 import inspect
 import os
+import pkgutil
 import unittest
 
 from app import audit
@@ -23,13 +24,20 @@ from tests._qt import QT_OK, REASON as QT_REASON
 HAVE_PYDRC = audit.available()
 needs_pydrc = unittest.skipUnless(HAVE_PYDRC, "PyDRC is not installed")
 
-#: The PyDRC modules whose public functions must each be accounted for.
-MODULES = ("conductors", "raceway", "motors", "power", "estimating", "panel", "sccr", "heat")
+def _modules():
+    """The PyDRC modules whose public functions must each be accounted for:
+    every module in ``pydrc.calc``, less the ones ``specs.NOT_CALCULATORS``
+    names. Asked of the package, never listed here: a list of eight held the
+    pages to eight modules while PyDRC 0.24.0 added a ninth."""
+    import pydrc.calc
+    found = sorted(m.name for m in pkgutil.iter_modules(pydrc.calc.__path__)
+                   if not m.name.startswith("_"))
+    return found, [m for m in found if m not in specs.NOT_CALCULATORS]
 
 
 def _public_functions():
     out = set()
-    for m in MODULES:
+    for m in _modules()[1]:
         mod = importlib.import_module("pydrc.calc." + m)
         for name, fn in inspect.getmembers(mod, inspect.isfunction):
             if fn.__module__ == mod.__name__ and not name.startswith("_"):
@@ -80,10 +88,15 @@ class TestTheDescriptionsMatchTheLibrary(unittest.TestCase):
 
     def test_every_public_calculator_is_on_a_page_or_named_with_its_reason(self):
         """Both directions: what PyDRC has is accounted for, and what the lists
-        name exists. Every public function of the eight modules is on a page,
-        run by a page (``covers``) or a helper. Injected: conductors.metal_weight's
+        name exists. Every public function of every calculator module is on a
+        page, run by a page (``covers``) or a helper. Injected: conductors.metal_weight's
         description removed (red: unaccounted); a HELPERS entry misspelled (red:
-        names nothing); heat.temperature_rise dropped from its page's covers (red)."""
+        names nothing); heat.temperature_rise dropped from its page's covers (red);
+        the Transformers page removed (red: three unaccounted)."""
+        modules, calculators = _modules()
+        for name in specs.NOT_CALCULATORS:
+            self.assertIn(name, modules, f"NOT_CALCULATORS names {name}, which PyDRC lacks")
+        self.assertGreaterEqual(len(calculators), 9, calculators)
         found = _public_functions()
         self.assertGreaterEqual(len(found), 50)
         unaccounted = sorted(n for n in found if not _accounted(n))
@@ -183,6 +196,14 @@ class TestRunning(unittest.TestCase):
             specs.call(ghost, {})
         self.assertIn("has no conductors.no_such_calculator", str(cm.exception))
 
+    def test_a_page_whose_module_this_pydrc_lacks_names_the_version(self):
+        """A PyDRC from before 0.24.0 has no transformer module. Injected:
+        lists._function importing without the guard (red: ModuleNotFoundError)."""
+        from app.calculators import lists
+        with self.assertRaises(specs.Missing) as cm:
+            lists._function("no_such_module", "rated_current")
+        self.assertIn("has no no_such_module.rated_current", str(cm.exception))
+
 
 #: A 10 hp motor at 480 V on a 30 A breaker, fed through a breaker.
 SCHEDULE = {"supply_voltage": "480", "supply_phases": "3",
@@ -203,6 +224,12 @@ HEAT = {"components": [{"tag": "VFD1", "quantity": "1", "watts_each": "500",
         "margin_pct": "0", "height_in": "48", "width_in": "36", "depth_in": "12",
         "sealed": "yes", "indoor": "yes", "insulated": "no", "unit": "C",
         "outside_max": "40", "inside_max": "35", "rated_btu_hr": "2500"}
+
+
+#: 45 kVA, 480 V to 208 V three-phase, protected on both sides by breakers.
+TRANSFORMER = {"kva": "45", "phases": "3", "primary_voltage": "480", "secondary_voltage": "208",
+               "method": "primary_and_secondary", "primary_device": "breaker",
+               "secondary_device": "breaker"}
 
 
 def _sections(calc_id, raw):
@@ -306,6 +333,55 @@ class TestTheListPages(unittest.TestCase):
                               loads=[dict(SCHEDULE["loads"][0], simultaneous="yes")]))
         self.assertEqual({h: dict(r.values) for h, r in blank.items()},
                          {h: dict(r.values) for h, r in said.items()})
+
+    def test_the_transformer_by_hand(self):
+        """45 kVA, 480 V to 208 V, three-phase, a breaker on each side.
+        45000 / (480 x 1.7321) = 54.127 A, and 250% of it is 135.316 A.
+        45000 / (208 x 1.7321) = 124.908 A, 125% of it is 156.134 A, and Note 1
+        takes the breaker up to the next standard rating, 175 A."""
+        s = _sections("transformer.protection", TRANSFORMER)
+        self.assertEqual(list(s), ["Rated primary current", "Rated secondary current",
+                                   "Largest primary device", "Largest secondary device"])
+        self.assertAlmostEqual(s["Rated primary current"]["rated_a"], 54.127, places=3)
+        self.assertAlmostEqual(s["Rated secondary current"]["rated_a"], 124.908, places=3)
+        self.assertAlmostEqual(s["Largest primary device"]["max_rating_a"], 135.316, places=3)
+        self.assertEqual(s["Largest primary device"]["note_3"], "not stated")
+        self.assertAlmostEqual(s["Largest secondary device"]["max_a"], 156.134, places=3)
+        self.assertEqual(s["Largest secondary device"]["max_rating_a"], 175)
+
+    def test_thermal_protection_left_blank_is_not_stated_and_never_refused(self):
+        """Blank is passed on as not stated, so 250% stands. Said yes at 5%
+        impedance, Note 3 permits six times: 6 x 54.127 = 324.760 A. Injected:
+        thermal protection asked as a yes or no with no default (red: the blank
+        form refused)."""
+        s = _sections("transformer.protection", TRANSFORMER)
+        self.assertTrue(all(r.computed for r in s.values()), {h: r.reasons for h, r in s.items()})
+        said = _sections("transformer.protection",
+                         dict(TRANSFORMER, thermal_protection="yes", impedance_pct="5"))
+        primary = said["Largest primary device"]
+        self.assertEqual((primary["percent"], primary["note_3"]), (600, "applied"))
+        self.assertAlmostEqual(primary["max_rating_a"], 324.760, places=3)
+        no = _sections("transformer.protection", dict(TRANSFORMER, thermal_protection="no"))
+        self.assertEqual(no["Largest primary device"]["note_3"], "not applicable")
+        self.assertEqual(no["Largest primary device"]["max_rating_a"],
+                         s["Largest primary device"]["max_rating_a"])
+
+    def test_a_transformer_cell_that_is_not_a_number_or_an_answer_is_named(self):
+        sections = specs.run(specs.find("transformer.protection"),
+                             dict(TRANSFORMER, kva="forty-five", thermal_protection="maybe"))
+        self.assertEqual(len(sections), 1)
+        reasons = sections[0][1].reasons
+        self.assertIn("rating: 'forty-five' is not a number", reasons)
+        self.assertIn("coordinated thermal overload protection: 'maybe' is neither yes nor no",
+                      reasons)
+
+    def test_primary_protection_only_needs_no_secondary_device(self):
+        """Primary only at 9 A or more: 125% x 54.127 = 67.658 A, and Note 1
+        takes a breaker to 70 A. The secondary needs none."""
+        s = _sections("transformer.protection",
+                      dict(TRANSFORMER, method="primary_only", secondary_device=""))
+        self.assertEqual(s["Largest primary device"]["max_rating_a"], 70)
+        self.assertIs(s["Largest secondary device"]["required"], False)
 
     def test_a_list_with_no_rows_or_a_row_with_no_circuit_is_refused(self):
         r = specs.run(specs.find("panel.load_schedule"), dict(SCHEDULE, loads=[{}]))[0][1]
@@ -496,8 +572,8 @@ class TestWithoutTheLibrary(unittest.TestCase):
     def test_the_descriptions_load_without_the_library(self):
         self.assertGreaterEqual(len(specs.all_calculators()), 39)
         self.assertEqual([p.title for p in specs.PAGES],
-                         ["Conductors", "Voltage drop", "Raceway", "Motors", "Panel", "Power",
-                          "Estimating"])
+                         ["Conductors", "Voltage drop", "Raceway", "Motors", "Transformers",
+                          "Panel", "Power", "Estimating"])
 
 
 @unittest.skipUnless(QT_OK, QT_REASON)

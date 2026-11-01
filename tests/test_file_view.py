@@ -13,8 +13,10 @@ Three layers, asserted where each one acts:
   menu, Esc, drops, the overlay's geometry, Ctrl+O, and a successful open from
   ANY route taking the view down.
 
-`AppConfig` is QSettings, which is the real per-user store, so every test that
-writes the recent keys puts back exactly what was there.
+`AppConfig` is QSettings, and in a test process that is the process's own
+store (`tests/__init__.py`), not the developer's. It is still one store for
+every test in the module, so every test that writes the recent keys puts back
+exactly what was there.
 """
 
 import os
@@ -152,7 +154,7 @@ class TestSearch(unittest.TestCase):
 
 @unittest.skipUnless(_QT_OK, _QT_REASON)
 class _KeepsSettings(unittest.TestCase):
-    """Snapshot and restore the recent keys of the real per-user settings."""
+    """Snapshot and restore the recent keys of this process's settings."""
 
     def setUp(self):
         self.cfg = AppConfig()

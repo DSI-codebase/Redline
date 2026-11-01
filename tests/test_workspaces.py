@@ -18,8 +18,10 @@ Asserted where each rule acts:
   right-click menus, the Unavailable state, search reaching workspace files,
   the scan running off the UI thread, and opens being recorded.
 
-`AppConfig` is the real per-user QSettings store, so every test that writes it
-puts back exactly the keys it touched.
+`AppConfig` is QSettings, and in a test process that is the process's own
+store (`tests/__init__.py`), not the developer's. It is still one store for
+every test in the module, so every test that writes it puts back exactly the
+keys it touched.
 """
 
 import json
