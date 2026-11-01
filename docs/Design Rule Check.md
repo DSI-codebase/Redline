@@ -154,8 +154,11 @@ branch circuits, the UL rep for the panel SCCR, and an estimator, an engineer
 or the UL rep for enclosure cooling. The drawing rules name no roles and take
 anyone's waiver.
 
-1. Choose your role in the dialog: **Estimator**, **Engineer** or **UL rep**.
-   The role you choose is offered again for the next waiver.
+1. Choose your role in the dialog: **Estimator**, **Engineer**, **UL rep** or
+   **Owner**. Owner is the customer's or facility owner's own acceptance, for a
+   deviation from the owner's standard that is theirs to grant. No built-in
+   rule asks for it, and a customer's own rule pack can. The role you choose is
+   offered again for the next waiver.
 2. A waiver from a role the rule does not take is still recorded, and the
    finding stays open as **Open, waiver not accepted**, with the reason. The
    dialog says so in red before you save.

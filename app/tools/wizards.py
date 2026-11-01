@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os
 
-import fitz
+import pymupdf
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPlainTextEdit,
@@ -223,7 +223,7 @@ class SheetNumberWizard(QObject):
         box.setWindowTitle("More boxes?")
         box.setText("Add another title-block box, or finish and split?")
         add = box.addButton("Add another box", QMessageBox.ActionRole)
-        fin = box.addButton("Finish & split", QMessageBox.AcceptRole)
+        fin = box.addButton("Finish && split", QMessageBox.AcceptRole)
         box.addButton(QMessageBox.Cancel)
         box.exec()
         clicked = box.clickedButton()
@@ -388,13 +388,13 @@ class CropWizard(QObject):
                 items = [(pg, i, r) for pg in sorted(regions)
                          for i, r in enumerate(regions[pg])]
                 total = len(items)
-                doc = fitz.open(src)
+                doc = pymupdf.open(src)
                 try:
                     for done_n, (pg, i, rect) in enumerate(items, 1):
                         if cancel():
                             break
-                        pix = doc[pg].get_pixmap(matrix=fitz.Matrix(3, 3),
-                                                 clip=fitz.Rect(*rect), alpha=False)
+                        pix = doc[pg].get_pixmap(matrix=pymupdf.Matrix(3, 3),
+                                                 clip=pymupdf.Rect(*rect), alpha=False)
                         results.append(_classify_region(
                             pix, pg, i, ai_ok, ocr_ok, ai_key, ai_model))
                         progress(done_n, total)

@@ -6,7 +6,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 from app.model.document import Document
 from app.model.annotations import Annotation, KIND_RECT, KIND_CLOUD
@@ -20,7 +20,7 @@ except Exception:  # pragma: no cover
 
 
 def _annot_count(path):
-    d = fitz.open(path)
+    d = pymupdf.open(path)
     n = sum(len(list(pg.annots() or [])) for pg in d)
     d.close()
     return n
@@ -30,7 +30,7 @@ class TestSaveAsFork(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.src = os.path.join(self.tmp, "orig.pdf")
-        d = fitz.open(); d.new_page(width=400, height=300); d.save(self.src); d.close()
+        d = pymupdf.open(); d.new_page(width=400, height=300); d.save(self.src); d.close()
 
     def _doc_with_marks(self):
         doc = Document(self.src); doc.load()
@@ -101,7 +101,7 @@ class TestSaveAsFork(unittest.TestCase):
         # must not leak them into the fork (regression)
         from app.model.storage import SidecarDB, sidecar_path
         dest = os.path.join(self.tmp, "fork.pdf")
-        d = fitz.open(); d.new_page(width=400, height=300); d.save(dest); d.close()
+        d = pymupdf.open(); d.new_page(width=400, height=300); d.save(dest); d.close()
         stale = SidecarDB(sidecar_path(dest))
         # a bare object with the attributes save_wires reads is enough
         class _W:
@@ -143,7 +143,7 @@ class TestSaveAsWindow(unittest.TestCase):
         from PySide6.QtWidgets import QFileDialog, QMessageBox
         tmp = tempfile.mkdtemp()
         src = os.path.join(tmp, "orig.pdf")
-        d = fitz.open(); d.new_page(width=400, height=300); d.save(src); d.close()
+        d = pymupdf.open(); d.new_page(width=400, height=300); d.save(src); d.close()
         win = MainWindow(); win.load_document(src)
         win.view.store.add(Annotation(page=0, kind=KIND_RECT, rect=(10, 10, 90, 60),
                                       text="x"))

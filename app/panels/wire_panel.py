@@ -92,10 +92,10 @@ class _ExtractWorker(QThread):
 
     def run(self):
         try:
-            import fitz
+            import pymupdf
             from ..extraction.text_extract import page_has_text
             from ..extraction import ocr as _ocr, claude_api
-            doc = fitz.open(self.pdf_path)
+            doc = pymupdf.open(self.pdf_path)
             try:
                 cfg = self.cfg
                 fw = ((cfg.sheet_width, cfg.rung_width, cfg.wire_width)

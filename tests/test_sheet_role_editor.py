@@ -18,7 +18,7 @@ from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 from app.extraction.sheet_role import (
     INDEX, JEV_WORDING, LAYOUT, PLC_IO, SCHEMATIC, TOPOLOGY,
@@ -30,7 +30,7 @@ TITLES = ("TITLE PAGE", "BACK PANEL LAYOUT", "24 VDC DISTRIBUTION")
 
 
 def _drawing(path):
-    doc = fitz.open()
+    doc = pymupdf.open()
     for title in TITLES:
         page = doc.new_page(width=792, height=1224)
         page.insert_text((40.0, 1000.0), title, rotate=270)

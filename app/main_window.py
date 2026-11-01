@@ -712,8 +712,10 @@ class MainWindow(QMainWindow):
             box.setIcon(QMessageBox.Question)
             box.setText(f"Change the commenter name?\n\nCurrently “{current}”.")
             one_btn = box.addButton("This mark only", QMessageBox.AcceptRole)
-            all_btn = box.addButton(f"All {len(same)} by “{current}”",
-                                    QMessageBox.AcceptRole)
+            # "&&": a single "&" in a name like "R&D" is a mnemonic marker
+            all_btn = box.addButton(
+                f"All {len(same)} by “{current.replace('&', '&&')}”",
+                QMessageBox.AcceptRole)
             box.addButton(QMessageBox.Cancel)
             box.exec()
             clicked = box.clickedButton()

@@ -135,12 +135,14 @@ class TestTheWindowDoesNotPrint(unittest.TestCase):
     line count is a snapshot; *the window neither drives a printer nor
     rasterises a page* is permanent, is exactly what was extracted, and is what
     an accumulation looks like on its FIRST step — a print helper written back
-    into the window reaches for `QtPrintSupport` or for `fitz` on its first
+    into the window reaches for `QtPrintSupport` or for `pymupdf` on its first
     line, because those are the two libraries the job needs.
 
     Measured before it was taken: every `QtPrintSupport` import and every
     `fitz` use in `main_window.py` was inside the 409-line printing block, so
-    the claim is zero rather than a threshold.
+    the claim is zero rather than a threshold. (`fitz` was PyMuPDF's module
+    name then. The app imports `pymupdf` since PyMuPDF 2.0 deprecated the
+    alias, and both stay in PRINT_LIBS so either spelling is caught here.)
     """
 
     PRINT_LIBS = ("PySide6.QtPrintSupport", "fitz", "pymupdf")
@@ -162,7 +164,7 @@ class TestTheWindowDoesNotPrint(unittest.TestCase):
         # well by a checkout where printing was deleted, or by a sweep that
         # parses nothing.
         names = _imported_names(APP / "printing.py")
-        for lib in ("PySide6.QtPrintSupport", "fitz"):
+        for lib in ("PySide6.QtPrintSupport", "pymupdf"):
             self.assertIn(
                 lib,
                 names,

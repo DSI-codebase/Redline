@@ -33,8 +33,9 @@ STATUS_WAIVED = "waived"
 
 # The roles a waiver can be given in, as the rule library names them
 # (pydrc.engine.approvals.ROLES), and how this application shows them.
-ROLES = ("estimator", "engineer", "ul_rep")
-ROLE_LABELS = {"estimator": "Estimator", "engineer": "Engineer", "ul_rep": "UL rep"}
+ROLES = ("estimator", "engineer", "ul_rep", "owner")
+ROLE_LABELS = {"estimator": "Estimator", "engineer": "Engineer", "ul_rep": "UL rep",
+               "owner": "Owner"}
 
 _ORDER = {DEFINITE: 0, POTENTIAL: 1, INFO: 2}
 

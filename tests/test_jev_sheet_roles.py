@@ -13,7 +13,7 @@ from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 from app.extraction import jev_api, sheet_role
 from app.extraction.sheet_role import (
@@ -28,7 +28,7 @@ KEYWORD_ROLES = {0: INDEX, 1: LAYOUT, 2: SCHEMATIC}
 
 
 def _drawing(path, titles=TITLES, blank_last=False):
-    doc = fitz.open()
+    doc = pymupdf.open()
     for title in titles:
         page = doc.new_page(width=792, height=1224)
         page.insert_text((40.0, 1000.0), title, rotate=270)
@@ -83,8 +83,8 @@ class TestQuestion(unittest.TestCase):
 class TestState(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
-        self.doc = fitz.open(_drawing(os.path.join(self.tmp, "s.pdf"),
-                                      blank_last=True))
+        self.doc = pymupdf.open(_drawing(os.path.join(self.tmp, "s.pdf"),
+                                         blank_last=True))
 
     def tearDown(self):
         self.doc.close()
@@ -98,7 +98,7 @@ class TestState(unittest.TestCase):
         self.assertIsNone(sheet_role.jev_state(self.doc[3]))
 
     def test_a_busy_page_sends_only_its_title_block(self):
-        doc = fitz.open()
+        doc = pymupdf.open()
         page = doc.new_page(width=1224, height=792)
         page.insert_text((900.0, 760.0), "NETWORK TOPOLOGY")
         for i in range(60):
@@ -113,8 +113,8 @@ class TestDocumentRoles(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
-        self.doc = fitz.open(_drawing(os.path.join(self.tmp, "s.pdf"),
-                                      blank_last=True))
+        self.doc = pymupdf.open(_drawing(os.path.join(self.tmp, "s.pdf"),
+                                         blank_last=True))
 
     def tearDown(self):
         self.doc.close()

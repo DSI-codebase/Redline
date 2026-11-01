@@ -11,7 +11,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 from app.model.annotations import (
     Annotation, COPYABLE_KINDS, KIND_CIRCLE, KIND_LINE, KIND_ARROW, KIND_RECT,
@@ -31,7 +31,7 @@ except Exception:  # pragma: no cover
 def _doc(dirpath, name="d.pdf"):
     from app.model.document import Document
     src = os.path.join(dirpath, name)
-    d = fitz.open(); d.new_page(width=400, height=300); d.save(src); d.close()
+    d = pymupdf.open(); d.new_page(width=400, height=300); d.save(src); d.close()
     doc = Document(src); doc.load()
     return doc, src
 
@@ -53,7 +53,7 @@ class TestCircleLineModel(unittest.TestCase):
                                  color=(0, 0, 1), width=3), silent=True)
         out = doc.save(); doc.close()
 
-        chk = fitz.open(out)
+        chk = pymupdf.open(out)
         try:
             self.assertEqual(sorted(a.type[1] for a in chk[0].annots()),
                              ["Circle", "Line", "Line"])

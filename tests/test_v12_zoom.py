@@ -7,7 +7,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 try:
     from PySide6.QtWidgets import QApplication
@@ -21,7 +21,7 @@ def _doc_with_page(w, h):
     from app.model.document import Document
     tmp = tempfile.mkdtemp()
     src = os.path.join(tmp, "d.pdf")
-    d = fitz.open(); d.new_page(width=w, height=h); d.save(src); d.close()
+    d = pymupdf.open(); d.new_page(width=w, height=h); d.save(src); d.close()
     doc = Document(src); doc.load()
     return doc
 

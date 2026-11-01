@@ -16,7 +16,7 @@ mapped back through the page's derotation, so a position here is one a reader of
 the measurement can check against the rendered sheet.
 """
 
-import fitz
+import pymupdf
 
 from app.extraction.sheet_role import (
     BOM, INDEX, LAYOUT, LEGEND, PLC_IO, SCHEMATIC, TERMINAL_DETAIL, TOPOLOGY)
@@ -42,7 +42,7 @@ def new_page(doc):
 def put(page, x, y, text, size=VALUE_PT):
     """Write ``text`` with its baseline origin at displayed ``(x, y)``,
     reading left to right on screen."""
-    page.insert_text(fitz.Point(x, y) * page.derotation_matrix, text,
+    page.insert_text(pymupdf.Point(x, y) * page.derotation_matrix, text,
                      fontsize=size, rotate=270)
 
 

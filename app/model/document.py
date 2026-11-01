@@ -1,6 +1,6 @@
 """High-level document controller (GUI-free).
 
-Owns the open :class:`fitz.Document`, the :class:`AnnotationStore`, and the
+Owns the open :class:`pymupdf.Document`, the :class:`AnnotationStore`, and the
 :class:`SidecarDB`, and implements the hybrid open/save workflow described in
 the spec.  The viewer/panels talk to this object.
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from typing import Iterable, Optional
 
-import fitz  # PyMuPDF
+import pymupdf
 
 from ..extraction import sheet_number, sheet_role
 from .annotations import Annotation, AnnotationStore
@@ -63,7 +63,7 @@ class Document:
 
     def __init__(self, path: str, ignore_patterns: Optional[Iterable[str]] = None):
         self.path = path
-        self.fitz_doc = fitz.open(path)
+        self.fitz_doc = pymupdf.open(path)
         self.store = AnnotationStore()
         sc_path = sidecar_path(path)
         # Opening a *.marked.pdf reuses the ORIGINAL's single sidecar. If that
@@ -128,17 +128,17 @@ class Document:
     def page_count(self) -> int:
         return self.fitz_doc.page_count
 
-    def page_rect(self, page_no: int) -> "fitz.Rect":
+    def page_rect(self, page_no: int) -> "pymupdf.Rect":
         return self.fitz_doc[page_no].rect
 
-    def get_pixmap(self, page_no: int, zoom: float = 1.0) -> "fitz.Pixmap":
-        """Render a page to a :class:`fitz.Pixmap` (GUI converts to QImage).
+    def get_pixmap(self, page_no: int, zoom: float = 1.0) -> "pymupdf.Pixmap":
+        """Render a page to a :class:`pymupdf.Pixmap` (GUI converts to QImage).
 
         ``annots=False`` so the bitmap is the clean page: the app draws every
         mark as its own overlay item, so a PDF that already carries annotations
         (a ``.marked.pdf`` or a colleague's markup) isn't rendered twice.
         """
-        mat = fitz.Matrix(zoom, zoom)
+        mat = pymupdf.Matrix(zoom, zoom)
         return self.fitz_doc[page_no].get_pixmap(matrix=mat, alpha=False, annots=False)
 
     # -- loading -------------------------------------------------------------
@@ -531,9 +531,9 @@ class Document:
         # annotations first. Either way the store is the single source of truth.
         original = original_pdf_path(self.path)
         if os.path.exists(original):
-            work = fitz.open(original)
+            work = pymupdf.open(original)
         else:
-            work = fitz.open(self.path)
+            work = pymupdf.open(self.path)
             if is_marked_pdf(self.path):
                 strip_annotations(work)
         write_annotations_to_pdf(work, self.store.all(), include_ignored=include_ignored)
@@ -560,7 +560,7 @@ class Document:
             except Exception:
                 pass
             os.replace(tmp, out)
-            self.fitz_doc = fitz.open(out)
+            self.fitz_doc = pymupdf.open(out)
             self.path = out
         else:
             work.save(out, garbage=3, deflate=True)
@@ -582,8 +582,8 @@ class Document:
         return out
 
     def annotated_fitz(self, include_ignored: bool = False,
-                       with_marks: bool = True) -> "fitz.Document":
-        """Return an **in-memory** ``fitz.Document`` of the pages — for
+                       with_marks: bool = True) -> "pymupdf.Document":
+        """Return an **in-memory** ``pymupdf.Document`` of the pages — for
         printing/preview. With ``with_marks`` (default) the current marks are
         written into the pages; with ``with_marks=False`` the clean drawing is
         returned (the app's markups are left off). Never touches disk or the
@@ -591,9 +591,9 @@ class Document:
         caller owns the returned doc and must close it."""
         original = original_pdf_path(self.path)
         if os.path.exists(original):
-            work = fitz.open(original)
+            work = pymupdf.open(original)
         else:
-            work = fitz.open(self.path)
+            work = pymupdf.open(self.path)
             if is_marked_pdf(self.path):
                 strip_annotations(work)
         if with_marks:
@@ -619,9 +619,9 @@ class Document:
         refuse_protected(out_path, self.path)
         original = original_pdf_path(self.path)
         if os.path.exists(original):
-            work = fitz.open(original)
+            work = pymupdf.open(original)
         else:
-            work = fitz.open(self.path)
+            work = pymupdf.open(self.path)
             if is_marked_pdf(self.path):
                 strip_annotations(work)
         write_annotations_to_pdf(work, self.store.all(), include_ignored=include_ignored)
@@ -659,7 +659,7 @@ class Document:
 
         # 1) write a pristine (annotation-free) copy of the source to dest
         if os.path.abspath(dest) != os.path.abspath(src):
-            work = fitz.open(src)
+            work = pymupdf.open(src)
             try:
                 if is_marked_pdf(src):
                     strip_annotations(work)
@@ -677,7 +677,7 @@ class Document:
         except Exception:
             pass
         self.path = dest
-        self.fitz_doc = fitz.open(dest)
+        self.fitz_doc = pymupdf.open(dest)
         self.sidecar = SidecarDB(sidecar_path(dest))
         self.sidecar_available = True     # the fork lives at a usable path
         self.sidecar_recreated = False

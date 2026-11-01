@@ -10,7 +10,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 from tests._qt import QT_OK as _QT_OK, REASON as _QT_REASON
 
@@ -24,7 +24,7 @@ if _QT_OK:
 
 def _make_pdf(dirpath, name):
     p = os.path.join(dirpath, name)
-    d = fitz.open(); d.new_page(width=300, height=200); d.save(p); d.close()
+    d = pymupdf.open(); d.new_page(width=300, height=200); d.save(p); d.close()
     return p
 
 

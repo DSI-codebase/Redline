@@ -20,7 +20,7 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Iterable, Optional
 
-import fitz  # PyMuPDF
+import pymupdf
 
 from .annotations import (
     Annotation, now_iso,
@@ -116,7 +116,7 @@ def _color_or_default(colors: dict, key: str, default):
 
 
 def load_pdf_annotations(
-    doc: "fitz.Document",
+    doc: "pymupdf.Document",
     ignore_patterns: Optional[Iterable[str]] = None,
 ) -> list:
     """Read existing PDF annotations into :class:`Annotation` objects.
@@ -170,16 +170,16 @@ def load_pdf_annotations(
                     pts = []
                     for stroke in verts:
                         if isinstance(stroke, (list, tuple)) and stroke and isinstance(stroke[0], (list, tuple)):
-                            pts.extend(tuple(fitz.Point(p[0], p[1]) * rotm) for p in stroke)
+                            pts.extend(tuple(pymupdf.Point(p[0], p[1]) * rotm) for p in stroke)
                         else:
-                            pts.append(tuple(fitz.Point(stroke[0], stroke[1]) * rotm))
+                            pts.append(tuple(pymupdf.Point(stroke[0], stroke[1]) * rotm))
                     ann.points = pts
                 except Exception:
                     pass
             if kind == KIND_CLOUD:
                 try:
                     verts = annot.vertices or []
-                    ann.points = [tuple(fitz.Point(p[0], p[1]) * rotm) for p in verts]
+                    ann.points = [tuple(pymupdf.Point(p[0], p[1]) * rotm) for p in verts]
                 except Exception:
                     pass
             if kind == KIND_TEXTBOX:
@@ -241,7 +241,7 @@ def _apply_common(annot, ann: Annotation) -> None:
         pass
 
 
-def write_annotations_to_pdf(doc: "fitz.Document", annotations: Iterable[Annotation],
+def write_annotations_to_pdf(doc: "pymupdf.Document", annotations: Iterable[Annotation],
                              include_ignored: bool = False) -> int:
     """Write our marks into ``doc`` as standard PDF annotations.
 
@@ -265,9 +265,9 @@ def write_annotations_to_pdf(doc: "fitz.Document", annotations: Iterable[Annotat
         derot = page.derotation_matrix
         prot = page.rotation
         x0, y0, x1, y1 = ann.rect
-        rect = fitz.Rect(x0, y0, x1, y1) * derot
-        p0 = fitz.Point(x0, y0) * derot
-        p1 = fitz.Point(x1, y1) * derot
+        rect = pymupdf.Rect(x0, y0, x1, y1) * derot
+        p0 = pymupdf.Point(x0, y0) * derot
+        p1 = pymupdf.Point(x1, y1) * derot
         annot = None
         try:
             if ann.kind == KIND_HIGHLIGHT:
@@ -278,7 +278,7 @@ def write_annotations_to_pdf(doc: "fitz.Document", annotations: Iterable[Annotat
                 except Exception:
                     pass
             elif ann.kind == KIND_PEN and ann.points:
-                stroke = [tuple(fitz.Point(px, py) * derot) for px, py in ann.points]
+                stroke = [tuple(pymupdf.Point(px, py) * derot) for px, py in ann.points]
                 annot = page.add_ink_annot([stroke])
                 annot.set_colors(stroke=ann.color)
                 annot.set_border(width=ann.width)
@@ -287,7 +287,7 @@ def write_annotations_to_pdf(doc: "fitz.Document", annotations: Iterable[Annotat
                 # an explicit popup makes the note open as a genuine comment in
                 # Adobe / Chrome / other PDF viewers
                 try:
-                    annot.set_popup(fitz.Rect(x0 + 20, y0, x0 + 220, y0 + 90) * derot)
+                    annot.set_popup(pymupdf.Rect(x0 + 20, y0, x0 + 220, y0 + 90) * derot)
                 except Exception:
                     pass
             elif ann.kind == KIND_TEXTBOX:
@@ -320,8 +320,8 @@ def write_annotations_to_pdf(doc: "fitz.Document", annotations: Iterable[Annotat
                 annot.set_border(width=ann.width)
                 if ann.kind == KIND_ARROW:
                     try:
-                        annot.set_line_ends(fitz.PDF_ANNOT_LE_NONE,
-                                            fitz.PDF_ANNOT_LE_OPEN_ARROW)
+                        annot.set_line_ends(pymupdf.PDF_ANNOT_LE_NONE,
+                                            pymupdf.PDF_ANNOT_LE_OPEN_ARROW)
                     except Exception:
                         pass
             elif ann.kind == KIND_CALLOUT:
@@ -329,8 +329,8 @@ def write_annotations_to_pdf(doc: "fitz.Document", annotations: Iterable[Annotat
                 tip = ann.callout_point or (x0 - 36.0, y1 + 36.0)
                 ax = min(max(tip[0], min(x0, x1)), max(x0, x1))
                 ay = min(max(tip[1], min(y0, y1)), max(y0, y1))
-                cl = [fitz.Point(tip[0], tip[1]) * derot,
-                      fitz.Point(ax, ay) * derot]
+                cl = [pymupdf.Point(tip[0], tip[1]) * derot,
+                      pymupdf.Point(ax, ay) * derot]
                 base_kwargs = dict(fontsize=ann.font_size, text_color=ann.color,
                                    rotate=prot)
                 if ann.fill_color is not None:
@@ -339,7 +339,7 @@ def write_annotations_to_pdf(doc: "fitz.Document", annotations: Iterable[Annotat
                     # the callout leader (CL/FreeTextCallout) needs PyMuPDF >= 1.25
                     annot = page.add_freetext_annot(
                         rect, ann.text or "", callout=cl,
-                        line_end=fitz.PDF_ANNOT_LE_OPEN_ARROW, **base_kwargs)
+                        line_end=pymupdf.PDF_ANNOT_LE_OPEN_ARROW, **base_kwargs)
                 except TypeError:
                     # older PyMuPDF: degrade to a plain text box (no leader)
                     annot = page.add_freetext_annot(rect, ann.text or "",
@@ -350,7 +350,7 @@ def write_annotations_to_pdf(doc: "fitz.Document", annotations: Iterable[Annotat
                     except Exception:
                         pass
             elif ann.kind == KIND_CLOUD and ann.points and len(ann.points) >= 3:
-                poly = [tuple(fitz.Point(px, py) * derot) for px, py in ann.points]
+                poly = [tuple(pymupdf.Point(px, py) * derot) for px, py in ann.points]
                 annot = page.add_polygon_annot(poly)
                 annot.set_colors(stroke=ann.color)
                 try:
@@ -374,13 +374,13 @@ def write_annotations_to_pdf(doc: "fitz.Document", annotations: Iterable[Annotat
             if (ann.kind not in (KIND_COMMENT, KIND_TEXTBOX, KIND_CALLOUT)
                     and (ann.text or "").strip()):
                 try:
-                    note_pt = fitz.Point(max(x0, x1), min(y0, y1)) * derot
+                    note_pt = pymupdf.Point(max(x0, x1), min(y0, y1)) * derot
                     note = page.add_text_annot(note_pt, ann.text, icon="Comment")
                     note.set_info({"title": ann.author or "", "content": ann.text})
                     note.set_name(f"{ann.id}{_NOTE_SUFFIX}")
                     try:
-                        note.set_popup(fitz.Rect(note_pt.x + 18, note_pt.y,
-                                                 note_pt.x + 218, note_pt.y + 90))
+                        note.set_popup(pymupdf.Rect(note_pt.x + 18, note_pt.y,
+                                                    note_pt.x + 218, note_pt.y + 90))
                     except Exception:
                         pass
                     note.update()
@@ -921,7 +921,7 @@ def refuse_overwriting_input(out_path: str, *inputs: Optional[str]) -> None:
 
     PyMuPDF already refuses SOME of these with
     ``ValueError: save to original must be incremental`` -- but only where the
-    output is saved from the very ``fitz.Document`` that opened it.  Where a
+    output is saved from the very ``pymupdf.Document`` that opened it.  Where a
     tool builds a NEW document from the pages it read, that check never fires
     and the write succeeds.  Measured on this codebase: ``extract_pages`` took
     a four-page drawing to one page, and ``combine_pdfs`` replaced its own input
@@ -937,7 +937,7 @@ def refuse_overwriting_input(out_path: str, *inputs: Optional[str]) -> None:
             )
 
 
-def strip_annotations(doc: "fitz.Document") -> None:
+def strip_annotations(doc: "pymupdf.Document") -> None:
     """Remove every annotation from ``doc`` (used when a ``.marked.pdf`` is the
     only available base, so re-saving the store doesn't double the marks)."""
     for page in doc:

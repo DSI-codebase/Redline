@@ -106,8 +106,9 @@ class SettingsDialog(QDialog):
         fe.addRow("Default mode:", self.exp_mode)
         fe.addRow("Default format:", self.exp_fmt)
 
-        # comments / junk
-        gb_c = QGroupBox("Comments & junk filter")
+        # comments / junk. "&&" is one literal ampersand: a bare "&" in a group
+        # title is a mnemonic marker (tests/test_ampersand_titles.py)
+        gb_c = QGroupBox("Comments && junk filter")
         fc = QFormLayout(gb_c)
         self.treat_todo = QCheckBox("Treat all comments as TODO items")
         self.treat_todo.setChecked(bool(config.get("comments/treat_all_as_todo")))
@@ -120,7 +121,7 @@ class SettingsDialog(QDialog):
         fc.addRow("Ignore patterns (one regex/line):", self.ignore)
 
         # ocr / ai
-        gb_a = QGroupBox("OCR & AI assist")
+        gb_a = QGroupBox("OCR && AI assist")
         fa = QFormLayout(gb_a)
         self.ocr = QCheckBox("Enable OCR fallback (Tesseract)")
         self.ocr.setChecked(bool(config.get("ocr/enabled")))
@@ -411,7 +412,8 @@ class SettingsDialog(QDialog):
         v.addWidget(QLabel("Rule packs the check runs:"))
         self.drc_packs = []
         for pack_id, label, tip in sorted(offered):
-            box = QCheckBox(label)
+            # "&&": a single "&" in a pack's ref, title or id is a mnemonic marker
+            box = QCheckBox(label.replace("&", "&&"))
             box.setChecked(pack_id in chosen)
             box.setToolTip(tip)
             box.toggled.connect(self._refill_rules)

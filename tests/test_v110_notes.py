@@ -11,7 +11,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 from app.model.annotations import (
     Annotation, AnnotationStore,
@@ -109,7 +109,7 @@ class TestSidebarIncludesNoted(unittest.TestCase):
 
 class TestNoteExport(unittest.TestCase):
     def _blank(self, path):
-        d = fitz.open(); d.new_page(width=600, height=400); d.save(path); d.close()
+        d = pymupdf.open(); d.new_page(width=600, height=400); d.save(path); d.close()
 
     def test_noted_shape_exports_popup_and_content(self):
         tmp = tempfile.mkdtemp()
@@ -121,13 +121,13 @@ class TestNoteExport(unittest.TestCase):
             Annotation(page=0, kind=KIND_ARROW, rect=(300, 60, 380, 140),
                        color=(0, 0, 1), width=2.0, author="Eli", text="reroute"),
         ]
-        d = fitz.open(src)
+        d = pymupdf.open(src)
         write_annotations_to_pdf(d, anns)
         mp = marked_pdf_path(src)
         d.save(mp)
         d.close()
 
-        d2 = fitz.open(mp)
+        d2 = pymupdf.open(mp)
         # each note also becomes a standalone sticky-note comment (visible in any
         # viewer), carrying the content and a popup
         stickies = [a for a in d2[0].annots() if a.type[1] == "Text"]
@@ -137,7 +137,7 @@ class TestNoteExport(unittest.TestCase):
         d2.close()
 
         # the note round-trips back onto the same mark (the sticky is skipped)
-        loaded = load_pdf_annotations(fitz.open(mp), DEFAULT_IGNORE_PATTERNS)
+        loaded = load_pdf_annotations(pymupdf.open(mp), DEFAULT_IGNORE_PATTERNS)
         by_kind = {a.kind: a for a in loaded}
         self.assertEqual(by_kind[KIND_RECT].text, "raise 6 in")
         self.assertEqual(by_kind[KIND_ARROW].text, "reroute")
@@ -147,13 +147,13 @@ class TestNoteExport(unittest.TestCase):
         tmp = tempfile.mkdtemp()
         src = os.path.join(tmp, "draw.pdf")
         self._blank(src)
-        d = fitz.open(src)
+        d = pymupdf.open(src)
         write_annotations_to_pdf(d, [Annotation(page=0, kind=KIND_RECT,
                                                 rect=(10, 10, 90, 60), color=(1, 0, 0))])
         mp = marked_pdf_path(src)
         d.save(mp)
         d.close()
-        d2 = fitz.open(mp)
+        d2 = pymupdf.open(mp)
         self.assertFalse(any(a.has_popup for a in d2[0].annots()))
         d2.close()
 

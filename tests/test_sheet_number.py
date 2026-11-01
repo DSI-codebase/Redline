@@ -9,7 +9,7 @@ import os
 import tempfile
 import unittest
 
-import fitz
+import pymupdf
 
 from app.extraction.sheet_number import (
     SheetNumberConfig, SheetResolution, resolve_page, resolve_document,
@@ -29,7 +29,7 @@ def _page(doc, entries):
 
 
 def _doc(pages):
-    doc = fitz.open()
+    doc = pymupdf.open()
     for entries in pages:
         _page(doc, entries)
     return doc
@@ -89,7 +89,7 @@ class TestExtractionQuirks(unittest.TestCase):
         # number is unrecoverable. Documented here because the correct behavior
         # is to say nothing and let the next strategy try -- not to loosen the
         # pattern until it matches part of a catalog number.
-        doc = fitz.open()
+        doc = pymupdf.open()
         page = doc.new_page(width=792.0, height=1224.0)
         page.insert_text((40.0, 1000.0), "24 VDC DISTRIBUTION", rotate=270)
         page.insert_text((40.0, 1120.0), "EL2507777-400", rotate=270)
@@ -176,7 +176,7 @@ def _tb_doc(entries):
     overlap and "on the line below" stops meaning anything. Real plots write
     this text around five points high.
     """
-    doc = fitz.open()
+    doc = pymupdf.open()
     page = doc.new_page(width=W, height=H)
     for text, x, y in entries:
         page.insert_text((x, y), text, fontsize=5)

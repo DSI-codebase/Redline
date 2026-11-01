@@ -6,7 +6,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 from app.model.annotations import (
     Annotation, AnnotationStore, KIND_CALLOUT, KIND_TEXTBOX, TEXT_KINDS,
@@ -134,7 +134,7 @@ class TestCalloutItem(unittest.TestCase):
 
 class TestCalloutExport(unittest.TestCase):
     def _blank(self, path):
-        d = fitz.open(); d.new_page(width=400, height=300); d.save(path); d.close()
+        d = pymupdf.open(); d.new_page(width=400, height=300); d.save(path); d.close()
 
     def test_export_writes_freetext_with_leader(self):
         tmp = tempfile.mkdtemp()
@@ -142,13 +142,13 @@ class TestCalloutExport(unittest.TestCase):
         self._blank(src)
         ann = Annotation(page=0, kind=KIND_CALLOUT, rect=(100, 100, 220, 150),
                          color=(1, 0, 0), text="SEE NOTE", callout_point=(60, 220))
-        d = fitz.open(src)
+        d = pymupdf.open(src)
         n = write_annotations_to_pdf(d, [ann])
         self.assertEqual(n, 1)
         mp = marked_pdf_path(src)
         d.save(mp)
         d.close()
-        d2 = fitz.open(mp)
+        d2 = pymupdf.open(mp)
         found = []
         for a in d2[0].annots():
             found.append((a.type[1], a.info.get("content"),
@@ -187,12 +187,12 @@ class TestCalloutDraft(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     def test_tip_default_uses_final_box_not_preview(self):
-        import tempfile, fitz
+        import tempfile, pymupdf
         from app.main_window import MainWindow
         import app.viewer.tools as T
         tmp = tempfile.mkdtemp()
         src = os.path.join(tmp, "d.pdf")
-        d = fitz.open(); d.new_page(width=600, height=400); d.save(src); d.close()
+        d = pymupdf.open(); d.new_page(width=600, height=400); d.save(src); d.close()
         win = MainWindow(); win.load_document(src)
         v = win.view
         v.tool.current = T.TOOL_CALLOUT
