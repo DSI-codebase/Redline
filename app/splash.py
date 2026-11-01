@@ -13,6 +13,8 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QProgressBar, QApplication,
 )
 
+from . import text_scale
+
 # Brand palette (from the DSI Redline icon)
 NAVY = "#16233F"
 ORANGE = "#E8772E"
@@ -63,6 +65,14 @@ class SplashScreen(QWidget):
         self.bar.setTextVisible(False)
         self.bar.setFixedHeight(8)
         lay.addWidget(self.bar)
+
+        # A fixed 440 x 280 panel, so its text keeps the platform's size
+        # whatever Settings ▸ Text size says, and the window applies that size
+        # while this is still on screen (app/text_scale.py). Set on each child
+        # rather than on the panel: under a stylesheet Qt resolves a child
+        # against the APPLICATION font, not its parent's.
+        for w in (ver, self.status, self.bar):
+            w.setFont(text_scale.base_font())
 
         self.setStyleSheet(f"""
             QLabel {{ color: white; background: transparent; }}

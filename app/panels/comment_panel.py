@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QApplication,
 )
 
+from .. import text_scale
 from ..model.annotations import (
     Annotation, KIND_COMMENT, KIND_TEXTBOX, KIND_HIGHLIGHT, KIND_PEN,
     KIND_RECT, KIND_ARROW, KIND_CALLOUT, KIND_CLOUD,
@@ -82,7 +83,7 @@ class CommentPanel(QWidget):
         row2.addWidget(self.todo_only)
         self.btn_delete = QPushButton("🗑")
         self.btn_delete.setToolTip("Delete selected comment (Del)")
-        self.btn_delete.setFixedWidth(34)
+        text_scale.sized(self.btn_delete, setFixedWidth=34)
         self.btn_delete.setEnabled(False)
         self.btn_delete.clicked.connect(self._delete_selected)
         row2.addWidget(self.btn_delete)

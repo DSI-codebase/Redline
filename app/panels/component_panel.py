@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QMessageBox, QHeaderView, QAbstractItemView, QProgressBar,
 )
 
+from .. import text_scale
 from ..extraction.component_parser import (
     ComponentParser, dedupe, TYPE_CONFORMING, TYPE_NONCONFORMING,
     FLAG_UNKNOWN_FAMILY,
@@ -125,7 +126,7 @@ class ComponentPanel(QWidget):
                                "text layer.")
         top.addWidget(self.method)
         self.extract_progress = QProgressBar()
-        self.extract_progress.setFixedWidth(200)
+        text_scale.sized(self.extract_progress, setFixedWidth=200)
         self.extract_progress.setVisible(False)
         self.btn_cancel = QPushButton("Cancel")
         self.btn_cancel.setVisible(False)

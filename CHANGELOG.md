@@ -6,6 +6,14 @@ portable zip to the matching GitHub release.
 
 ## Unreleased
 
+- **Text size, from 50% to 300%.** **Settings ▸ General ▸ Text size** is a
+  slider that sets the size of the text in every menu, pane, tab, table and
+  dialog, as a percentage of the system's text size. 100% is the size every
+  earlier release used. A sample line shows the size before you press OK, OK
+  changes every open pane with no restart, and the app opens at that size
+  next time. Widths that hold text grow with it: the zoom box, the PDF Tools
+  rail and options panel, the File view's rail and the find panel. The drawing
+  is unchanged, because the zoom sizes it. The startup splash keeps its size.
 - **A waiver can be given in the Owner role.** The design rule library added
   the role for the customer's or facility owner's own acceptance, which a
   customer's rule pack can ask for. The waiver dialog lists Owner beside

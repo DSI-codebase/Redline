@@ -37,13 +37,14 @@ import sys
 from datetime import datetime
 
 from PySide6.QtCore import Qt, QEvent, QThread, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QFont, QKeySequence, QShortcut
+from PySide6.QtGui import QDesktopServices, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog,
     QLabel, QLineEdit, QMenu, QMessageBox, QPushButton, QStackedWidget,
     QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
+from . import text_scale
 from .model import recent as R
 from .model import workspaces as W
 from .tools.runner import BackgroundTask
@@ -135,9 +136,10 @@ def _list_tree(headers, widths):
 
 def _title_label(text):
     lab = QLabel(text)
-    f = QFont(lab.font())
-    f.setPointSize(f.pointSize() + 10)
-    lab.setFont(f)
+    # ten points over the platform's size, at 100% (app/text_scale.py)
+    f = text_scale.base_font()
+    f.setPointSizeF(f.pointSizeF() + 10)
+    text_scale.set_font(lab, f)
     return lab
 
 
@@ -146,7 +148,7 @@ def _empty_label():
     lab = QLabel("")
     lab.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
     lab.setWordWrap(True)
-    lab.setStyleSheet("color: gray; font-size: 14px; padding-top: 40px;")
+    text_scale.style(lab, "color: gray; font-size: 14px; padding-top: 40px;")
     lab.hide()
     return lab
 
@@ -199,8 +201,8 @@ class FileView(QWidget):
 
         rail = QFrame()
         rail.setObjectName("FileViewRail")
-        rail.setFixedWidth(180)
-        rail.setStyleSheet(
+        text_scale.sized(rail, setFixedWidth=180)
+        text_scale.style(rail,
             "#FileViewRail { background: #2b5797; }"
             "#FileViewRail QPushButton { color: white; border: none;"
             " text-align: left; padding: 10px 18px; font-size: 14px; }"

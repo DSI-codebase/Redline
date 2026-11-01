@@ -10,10 +10,24 @@ one section per tab, in the order they appear.
 
 ## General
 
-Four groups: who you are, what an export defaults to, what is treated as a
-comment, and how pages print.
+Five groups: who you are, how big the text is, what an export defaults to,
+what is treated as a comment, and how pages print.
 
 - **Your name** — stamped as the commenter on every new mark.
+
+### Text size
+- **The slider** sets the size of all the text in menus, panes, tabs, tables
+  and dialogs, from 50% to 300% of your system's text size, in steps of 5%.
+  100% is the size the app has always used.
+- **Reset to 100%** puts the slider back to your system's size.
+- **The sample line** under the slider is drawn at the size the slider shows,
+  so you can judge it before pressing **OK**.
+- **OK** changes every open pane at once, with no restart, and the app opens
+  at that size next time. **Cancel** leaves the text as it was.
+- **The drawing is not affected.** Pages and the marks on them are sized by
+  the zoom ([[Viewer]]). The startup splash keeps its size too.
+- **Table columns keep their widths.** Drag a column's edge in its header to
+  widen it when larger text no longer fits.
 
 ### Export defaults
 - **Labels per wire**, **default mode** (single / per-sheet), **default format**

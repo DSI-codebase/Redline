@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QMessageBox, QHeaderView, QAbstractItemView, QProgressBar,
 )
 
+from .. import text_scale
 from ..extraction.text_extract import collect_tokens
 from ..extraction.wire_parser import (
     WireParser, dedupe, TYPE_CONFORMING, TYPE_FIXED, TYPE_JUMPER,
@@ -168,7 +169,7 @@ class WirePanel(QWidget):
                                "text layer.")
         top.addWidget(self.method)
         self.extract_progress = QProgressBar()
-        self.extract_progress.setFixedWidth(220)
+        text_scale.sized(self.extract_progress, setFixedWidth=220)
         self.extract_progress.setVisible(False)
         self.btn_cancel = QPushButton("Cancel")
         self.btn_cancel.setVisible(False)
