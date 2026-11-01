@@ -29,6 +29,16 @@ rules as v1.8.0.
   lines, and the `licenses` folder beside the app holds each package's own
   license files, copied unchanged. PyMuPDF's license question is still open, as
   the notices say.
+- **An "&" in a name or title shows as "&".** Qt reads a single "&" in a menu
+  entry, a button, a check box or a group title as a keyboard shortcut marker,
+  so it hid the "&" and underlined the next character. A drawing called
+  `R&D wiring.pdf` showed in File ▸ Open Recent as "RD wiring.pdf" with the D
+  underlined. The same happened to workspace and folder names in File ▸ Add to
+  workspace, to a commenter's name on the "All N by" button when changing the
+  commenter, and to rule pack names in Settings. Three titles written into the
+  app had it too: the "Comments & junk filter" and "OCR & AI assist" groups in
+  Settings and the sheet-number wizard's "Finish & split" button. Each now shows
+  its "&". Open Recent keeps its Alt+1 to Alt+0 shortcuts.
 
 ## v1.8.0
 
