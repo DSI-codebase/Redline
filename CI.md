@@ -71,8 +71,10 @@ tests accepted a missing SDK as a pass and never built a client.
   either header.
 
 Each skips only when its library is not installed, and `tools/run_tests.py`
-prints that skip on its own line, named by library. `PyYAML` is imported by
-the rule library alone, so it is reached only when the token is present.
+prints that skip on its own line, named by library. Under `--strict` the skip
+fails the run, because both jobs install `requirements.txt` (see "The design
+rule library is optional, and CI says so" below). `PyYAML` is imported by the
+rule library alone, so it is reached only when the token is present.
 
 To move a floor to version X:
 
@@ -132,6 +134,21 @@ same rule the audit itself follows about coverage.
 Qt gets the same treatment, with one difference: the workflows install it, so a
 Qt skip means a broken runner rather than a choice. `--strict`, which both
 workflows pass, turns those skips into a failed run.
+
+`--strict` holds every library `requirements.txt` declares the same way,
+because every job that passes it installs that file first. A skip whose reason
+names one of them fails the run, and pdf2docx, pytesseract and anthropic each
+have a class that skips without its library. The runner reads the libraries
+from `requirements.txt` on each run, so a library added there is held from
+that commit on. It finds each one's module in the installed metadata (Pillow
+installs `PIL`, python-docx `docx`) and imports it, so each library's banner
+says either that it could not be imported or that it imports and the test's own
+check skipped anyway. A reason that names Qt or the rule library stays with
+those two banners and is not counted again. Until 2026-11-01 `--strict` failed
+only for Qt: with pytesseract and anthropic both shadowed by modules raising
+ImportError, a run of their two test modules printed a skip line for each and
+passed. A `requirements.txt` that cannot be read or declares nothing is refused
+under `--strict` with exit 2, before any test runs.
 
 A reason that names both, such as `needs PySide6 and PyDRC`, counts against
 whichever the runner measures missing, and against both when both are. The

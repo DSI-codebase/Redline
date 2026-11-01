@@ -13,8 +13,15 @@ checked them, and CI should not let those two look alike.
     python tools/run_tests.py [-v] [--strict] [--require-drc] [module ...]
 
 ``--strict`` (used by CI) fails the run when tests were skipped because Qt was
-missing.  The workflows install Qt, so that is a broken runner, not a choice --
-and a run that skipped every GUI test must not report success.
+missing, or skipped for a library ``requirements.txt`` declares.  Every
+workflow that passes it installs ``requirements.txt`` first, so either skip
+is a broken install, not a choice -- and a run that skipped every GUI test, or
+every OCR test, must not report success.  The libraries are read from
+``requirements.txt`` on each run, never from a list kept here, and whether
+each one imports is asked of this interpreter, never read from the skip's
+wording.  A ``requirements.txt`` that cannot be read or declares nothing is
+refused under ``--strict`` (exit 2), because a check against no library
+passes every run.
 
 ``--require-drc`` is the same rule for the optional rule library, and it is
 passed only by the workflow step that has just installed it.  A contributor
@@ -31,12 +38,16 @@ from __future__ import annotations
 
 import collections
 import glob
+import importlib.metadata as metadata
 import os
 import re
 import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REQUIREMENTS = os.path.join(HERE, "requirements.txt")
+# A requirement's name, the text before any extra, marker or version.
+_REQUIREMENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 RAN_RE = re.compile(r"^Ran (\d+) test", re.M)
 # Verbose unittest writes: "test_x (tests.y.Z.test_x) ... skipped 'reason'"
 SKIP_RE = re.compile(r"\.\.\. skipped ['\"](.*?)['\"]")
@@ -129,7 +140,118 @@ def qt_missing() -> bool:
     return not QT_OK
 
 
-def gaps(reasons, absent, qt_absent, *, rule_library_missing) -> list:
+def declared(path=None) -> list:
+    """Each library ``requirements.txt`` declares, spelled as it spells it.
+
+    Read from the file on every run rather than from a list kept here, so a
+    library added there is held by ``--strict`` from that commit on.
+    tests/test_pdf_to_word_imports.py skips without pdf2docx, and the
+    request that produced this named only pytesseract and anthropic. Raises
+    OSError when the file cannot be read, and `main` refuses a strict run
+    then.
+    """
+    names = []
+    with open(path or REQUIREMENTS, encoding="utf-8") as fh:
+        for raw in fh:
+            line = raw.split("#", 1)[0].strip()
+            if not line or line.startswith("-"):     # -r, -c, --index-url
+                continue
+            m = _REQUIREMENT.match(line)
+            if m:
+                names.append(m.group(0))
+    return names
+
+
+def _dist(name) -> str:
+    """A distribution's name as pip compares it (PEP 503)."""
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def import_names(library, top_levels=None) -> list:
+    """The modules to import to ask whether ``library`` loads.
+
+    Asked of the installed distribution's metadata, because the names differ:
+    Pillow installs ``PIL``, python-docx ``docx`` and PyYAML ``yaml``. The
+    module named like the distribution wins when there is one, because a
+    distribution can install more than the library. PyMuPDF 2.0 also installs
+    ``pymupdf4llm``, and PyYAML installs ``_yaml``, whose ``__init__`` raises
+    when PyYAML was built without LibYAML (both read 2026-11-01, at the floors
+    and the newest releases). A private name, or a path such as the
+    ``PySide6/QtCore`` PySide6's metadata yields, is never a candidate. With
+    no metadata at all, the name as pip compares it is tried as a module.
+    """
+    if top_levels is None:
+        top_levels = metadata.packages_distributions()
+    want = _dist(library)
+    mine = sorted(m for m, dists in top_levels.items()
+                  if m.isidentifier() and not m.startswith("_")
+                  and want in {_dist(d) for d in dists})
+    same = [m for m in mine if _dist(m) == want]
+    return same or mine or [want.replace("-", "_")]
+
+
+def declared_libraries(path=None) -> dict:
+    """``{library: [module, ...]}`` for each library `declared` reads."""
+    top_levels = metadata.packages_distributions()
+    return {lib: import_names(lib, top_levels) for lib in declared(path)}
+
+
+def _names(reason, word) -> bool:
+    """Whether ``reason`` names ``word`` whole. "pdf2docx" and "a .docx file"
+    do not name docx, and "PyYAML" does not name yaml."""
+    return re.search(rf"(?<![\w.-]){re.escape(word)}(?![\w-])",
+                     reason, re.I) is not None
+
+
+def named_libraries(reason, libraries) -> list:
+    """The declared libraries a skip reason names, by distribution or module.
+
+    None for a reason `classify` files under Qt or the rule library. PySide6
+    is declared too, and those reasons already have a probe and a banner of
+    their own, so filing them here as well would count each skip twice.
+    """
+    if DRC_REASON.search(reason) or QT_REASON.search(reason):
+        return []
+    return [lib for lib, mods in libraries.items()
+            if any(_names(reason, w) for w in (lib, *mods))]
+
+
+def missing_declared(libraries) -> list:
+    """Which of ``{library: [module, ...]}`` this interpreter cannot import.
+
+    Asked the way `missing_optional` asks, by importing, and never read from
+    the skip's wording. "needs pytesseract, which is not installed" is what a
+    test says whenever its own import failed, and a shadowing module or a
+    broken wheel fails that import as surely as an absent library.
+    """
+    absent = []
+    for lib, mods in libraries.items():
+        for mod in mods:
+            try:
+                __import__(mod)
+            except Exception:
+                absent.append(lib)
+                break
+    return absent
+
+
+def declared_skips(reasons, libraries, absent) -> collections.Counter:
+    """``{library: skips}`` for the skip reasons naming a declared library.
+
+    A reason naming two counts against the ones measured absent, and against
+    every one it names when none is, the rule `classify` follows for a reason
+    naming both Qt and the rule library.
+    """
+    out = collections.Counter()
+    for reason, n in reasons.items():
+        named = named_libraries(reason, libraries)
+        for lib in [lib for lib in named if lib in absent] or named:
+            out[lib] += n
+    return out
+
+
+def gaps(reasons, absent, qt_absent, *, rule_library_missing,
+         libraries=None, declared_absent=()) -> list:
     """``(count, why, hint)`` for each banner: one per cause, each built from
     what was measured missing here rather than from the reason's wording.
 
@@ -139,6 +261,10 @@ def gaps(reasons, absent, qt_absent, *, rule_library_missing) -> list:
     ``bool(absent)`` charged them to ezdxf whenever ezdxf alone was missing:
     17 skips bannered as "ezdxf ... could not be imported" with Qt missing
     and PyDRC importable (2026-10-31).
+
+    ``libraries`` is `declared_libraries`' answer and ``declared_absent`` is
+    `missing_declared`'s. Each declared library a skip names gets its own
+    banner, in requirements.txt's order, saying whether it imports here.
     """
     drc_skipped, qt_skipped = classify(
         reasons, qt_missing=qt_absent,
@@ -163,6 +289,19 @@ def gaps(reasons, absent, qt_absent, *, rule_library_missing) -> list:
         out.append((qt_skipped, "Qt (PySide6) could not be loaded",
                     "On Linux this usually means the Qt system libraries are "
                     "missing; see the Tests workflow."))
+    libraries = libraries or {}
+    counted = declared_skips(reasons, libraries, declared_absent)
+    for lib in libraries:
+        if not counted[lib]:
+            continue
+        if lib in declared_absent:
+            why = f"{lib}, which requirements.txt declares, could not be imported"
+            hint = ("Install it with pip install -r requirements.txt. Every "
+                    "workflow does, so in CI this is a broken install.")
+        else:
+            why = f"their skip check failed, although {lib} imports here"
+            hint = "Run the module alone with -v to see which check skipped."
+        out.append((counted[lib], why, hint))
     return out
 
 
@@ -182,6 +321,19 @@ def main(argv) -> int:
     require_drc = "--require-drc" in argv
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     names = modules(argv)
+
+    # Before any test runs, because a strict run against no library would
+    # pass every skip it is there to catch.
+    try:
+        libraries = declared_libraries()
+        unread = "declares no library"
+    except OSError as e:
+        libraries, unread = {}, f"could not be read ({e})"
+    if strict and not libraries:
+        print(f"--strict: {REQUIREMENTS} {unread}, so a skip for a library "
+              f"it declares cannot be checked. Refusing the run rather than "
+              f"reporting it clean.")
+        return 2
 
     ok, message = drc_status()
     print(f"Design rule library: {message}")
@@ -222,8 +374,17 @@ def main(argv) -> int:
     qt_absent = qt_missing()
     drc_skipped, qt_skipped = classify(reasons, qt_missing=qt_absent,
                                        rule_library_missing=not ok)
+    # Imported only when a skip names them: the answer is needed for the
+    # banner, and a library no test skipped for has nothing to explain.
+    named = {lib for reason in reasons
+             for lib in named_libraries(reason, libraries)}
+    declared_absent = missing_declared(
+        {lib: mods for lib, mods in libraries.items() if lib in named})
+    declared_skipped = declared_skips(reasons, libraries, declared_absent)
     for count, why, hint in gaps(reasons, absent, qt_absent,
-                                 rule_library_missing=not ok):
+                                 rule_library_missing=not ok,
+                                 libraries=libraries,
+                                 declared_absent=declared_absent):
         print()
         print("!" * 72)
         print(f"!! {count} tests were SKIPPED because {why}.")
@@ -236,19 +397,40 @@ def main(argv) -> int:
     # shape that hid for as long as this workflow existed: a loud banner under
     # a green tick. A contributor without the private token still gets a clean
     # run, because the workflow only passes this once the install step ran.
+    #
+    # Every cause is printed before the run fails, so a run that skipped for
+    # two reasons does not report only the first.
+    refused = False
     if require_drc and drc_skipped:
         print(f"\n--require-drc: failing because {drc_skipped} tests were "
               f"skipped for a missing optional library, which this run was "
               f"supposed to provide.")
         if absent:
             print("Absent here: " + ", ".join(m for m, _ in absent))
-        return 1
+        refused = True
     if strict and qt_skipped:
         print(f"\n--strict: failing because {qt_skipped} tests were skipped "
               f"for a missing Qt, which CI is supposed to provide.")
-        return 1
+        refused = True
+    # The same rule for every other library the app declares. pytesseract and
+    # anthropic each skipped their tests with a skip line and a green run
+    # under --strict (measured 2026-11-01 with both shadowed by modules that
+    # raise ImportError), although both workflows install them.
+    if strict and declared_skipped:
+        total = sum(n for reason, n in reasons.items()
+                    if named_libraries(reason, libraries))
+        each = ", ".join(f"{lib} ({declared_skipped[lib]})"
+                         for lib in libraries if declared_skipped[lib])
+        print(f"\n--strict: failing because {total} tests were skipped for "
+              f"a library requirements.txt declares, which every workflow "
+              f"installs: {each}.")
+        if declared_absent:
+            print("Absent here: " + ", ".join(declared_absent))
+        refused = True
     if failed:
         print(f"\nFAILED MODULES: {', '.join(failed)}")
+        return 1
+    if refused:
         return 1
     print("\nAll test modules passed.")
     return 0
