@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from .config import AppConfig
 from .extraction import claude_api, jev_api
+from .qt_text import literal
 
 
 class SettingsDialog(QDialog):
@@ -353,7 +354,7 @@ class SettingsDialog(QDialog):
         v.addWidget(QLabel("Rule packs the check runs:"))
         self.drc_packs = []
         for pack_id, label, tip in sorted(offered):
-            box = QCheckBox(label)
+            box = QCheckBox(literal(label))      # a pack title is the library's
             box.setChecked(pack_id in chosen)
             box.setToolTip(tip)
             box.toggled.connect(self._refill_rules)

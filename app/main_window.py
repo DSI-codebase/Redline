@@ -37,6 +37,7 @@ from .settings_dialog import SettingsDialog
 from . import add_to_workspace, lifecycle, menus, printing, toolbar
 from .model.annotations import Annotation, KIND_CALLOUT, KIND_TEXTBOX
 from .model.recent import drawing_key
+from .qt_text import literal
 from .file_view import FileView
 from .viewer.pdf_view import PdfView
 from .viewer import tools as T
@@ -707,7 +708,7 @@ class MainWindow(QMainWindow):
             box.setIcon(QMessageBox.Question)
             box.setText(f"Change the commenter name?\n\nCurrently “{current}”.")
             one_btn = box.addButton("This mark only", QMessageBox.AcceptRole)
-            all_btn = box.addButton(f"All {len(same)} by “{current}”",
+            all_btn = box.addButton(f"All {len(same)} by “{literal(current)}”",
                                     QMessageBox.AcceptRole)
             box.addButton(QMessageBox.Cancel)
             box.exec()

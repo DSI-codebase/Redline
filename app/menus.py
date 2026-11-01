@@ -30,6 +30,7 @@ import os
 from PySide6.QtGui import QKeySequence
 
 from . import __app_name__, add_to_workspace
+from .qt_text import literal
 
 
 def build(win):
@@ -188,8 +189,9 @@ def rebuild_recent(win):
         empty.setEnabled(False)
         return
     for i, path in enumerate(paths, start=1):
-        # &1..&9 then &0 for quick keyboard access
-        label = f"&{i % 10}  {os.path.basename(path)}"
+        # &1..&9 then &0 for quick keyboard access. The file name is data, so
+        # an "&" in it is doubled and shown rather than read as a second marker
+        label = f"&{i % 10}  {literal(os.path.basename(path))}"
         act = menu.addAction(label)
         act.setToolTip(path)
         act.setStatusTip(path)
