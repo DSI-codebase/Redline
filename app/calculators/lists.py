@@ -3,6 +3,8 @@
 The panel load schedule, the panel SCCR and the enclosure's heat each take a
 list (loads, components) and some facts about the panel, build PyDRC's own
 input types from them, and show every result PyDRC gives, one section each.
+A transformer's overcurrent protection takes no list: it runs Table 450.3(B)'s
+three calculations on one nameplate.
 
 The builders here are the only arithmetic-free code between the form and the
 library, and they hold its rules: a cell that holds something that is not a
@@ -74,7 +76,11 @@ def _refused(title, tier, problems):
 
 def _function(module, name):
     import importlib
-    fn = getattr(importlib.import_module("pydrc.calc." + module), name, None)
+    try:
+        mod = importlib.import_module("pydrc.calc." + module)
+    except ImportError:                # a PyDRC from before the module
+        mod = None
+    fn = getattr(mod, name, None)
     if fn is None:
         import pydrc
         raise specs.Missing(f"PyDRC {getattr(pydrc, '__version__', '?')} has no "
@@ -147,6 +153,49 @@ class _Lookup:
         if self.not_found:
             lines.append("Not in it: " + ", ".join(self.not_found))
         return [(self.HEADING, tuple(lines))]
+
+
+# ---------------------------------------------------------------- transformers
+
+
+
+def transformer_protection(raw) -> List[Tuple[str, object]]:
+    """The rated primary and secondary currents, and the largest primary and
+    secondary devices Table 450.3(B) permits. Whether the transformer has
+    coordinated thermal overload protection is the one yes or no a blank does
+    not refuse: PyDRC reads it as not stated, keeps the table's percentage and
+    says Note 3 was not asked."""
+    from pydrc.calc.result import TIER_CODE
+    title = "Transformer overcurrent protection"
+    b = _Build()
+    kva = b.number(raw.get("kva"), "rating")
+    phases = b.number(raw.get("phases"), "phases", whole=True)
+    primary_v = b.number(raw.get("primary_voltage"), "primary voltage")
+    secondary_v = b.number(raw.get("secondary_voltage"), "secondary voltage")
+    impedance = b.number(raw.get("impedance_pct"), "impedance")
+    thermal = None
+    if b.text(raw.get("thermal_protection")):
+        thermal = b.yes_no(raw.get("thermal_protection"),
+                           "coordinated thermal overload protection")
+    if b.problems:
+        return _refused(title, TIER_CODE, b.problems)
+    method = b.text(raw.get("method"))
+    rated = _function("transformer", "rated_current")
+    primary = rated(kva, primary_v, phases)
+    secondary = rated(kva, secondary_v, phases)
+
+    def amps(r):
+        return r["rated_a"] if r.computed else None
+
+    return [("Rated primary current", primary),
+            ("Rated secondary current", secondary),
+            ("Largest primary device",
+             _function("transformer", "max_primary")(
+                 amps(primary), method, b.text(raw.get("primary_device")) or None,
+                 thermal, impedance)),
+            ("Largest secondary device",
+             _function("transformer", "max_secondary")(
+                 amps(secondary), method, b.text(raw.get("secondary_device")) or None))]
 
 
 # ---------------------------------------------------------------- the load schedule

@@ -1,0 +1,20 @@
+# Every floor requirements.txt declares, as an exact pin. The `floors` job in
+# .github/workflows/tests.yml installs requirements.txt under this file as a
+# pip constraint and runs the suite there, so each `>=` line is a release
+# something installs. Locally, in a new Python 3.11 virtual environment:
+#
+#   pip install -r requirements.txt -c .github/floors.txt
+#
+# One line per requirement, the version written as requirements.txt writes
+# it. tests/test_requirements.py::TestTheFloorsAreExercised fails when a line
+# here and its line there disagree, or when either has one the other lacks.
+# Moving a floor is CI.md's "Every floor is run, not just declared".
+PySide6==6.8.1
+PyMuPDF==1.25.4
+openpyxl==3.1
+python-docx==1.1
+pdf2docx==0.5.8
+pytesseract==0.3.10
+Pillow==10.0
+anthropic==0.40
+PyYAML==6.0

@@ -6,6 +6,15 @@ portable zip to the matching GitHub release.
 
 ## Unreleased
 
+- **Running from source needs PySide6 6.8.1 or later.** `requirements.txt`
+  said 6.6, and two features do not work below 6.8.1. Up to 6.8.0.2 the text
+  size setting does not fully reach a window that is already open. At 300% the
+  rows of a table such as the wire list stay too short for their text, or on
+  6.6.1 and 6.6.2 part of each pane is drawn as it was before the change. On
+  6.6.0 and 6.6.1 printing at the Heavy line weight puts down no more ink than
+  printing at Medium. The installer's build installs the newest PySide6 below
+  6.12, so a shipped installer was not affected. Tests now also run with every
+  library at its declared lowest version on every push.
 - **Running from source needs PyMuPDF 1.25.4 or later.** `requirements.txt`
   said 1.25, and two features do not work below 1.25.4. On 1.25.0 and 1.25.2
   an exported callout's leader has its tip at x = 0, the page's left edge. On
@@ -33,6 +42,17 @@ portable zip to the matching GitHub release.
   *Owner accepts the 480 V tap (ref. RFI-0142)*. A reference never decides
   whether a waiver closes its finding. Waivers recorded by earlier releases
   open with no reference.
+- **A Transformers page on the Calculators tab.** It gives the largest primary
+  and secondary overcurrent devices NEC Table 450.3(B) permits for a
+  transformer of 1000 V or less, and the rated current on each side, from the
+  kVA, the phases, the two voltages and the protection method. Where Note 1
+  depends on it, it asks whether a device is a fuse, a nonadjustable breaker or
+  an adjustable setting. For Note 3 it asks whether the transformer has
+  coordinated thermal overload protection. Left blank, that answer is not
+  stated, and the result says Note 3 was not applied. The table is NEC 2017's,
+  not yet confirmed against NEC 2026, and the result says so. The page needs
+  design rule library 0.24.0 or later, and an older one names its version and
+  says to update.
 
 ## v1.8.1
 

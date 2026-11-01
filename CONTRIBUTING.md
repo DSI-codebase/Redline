@@ -95,6 +95,13 @@ Two things about a local run that are not failures:
   hard-crashes a late module on the headless Windows runner — so a module that
   depends on another having run first will fail in a way that names the wrong
   file.
+- **A test's settings are its process's own.** `tests/__init__.py` points
+  `AppConfig` at a temporary folder before any test runs, so a document a test
+  opens never lands on your File view's Recent list. Build an `AppConfig` for
+  settings in a test. `QSettings("PDFMarkup", "PDFMarkupApp")` built directly
+  is always the real store, on Windows the registry.
+  `tests/test_settings_left_alone.py` reads the real store before and after a
+  run of modules that open documents and fails when anything changed.
 
 ## Releases
 
