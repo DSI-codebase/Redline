@@ -236,21 +236,36 @@ class TestTheStepStillDiscriminates(unittest.TestCase):
 
 
 def _checkout_steps(path):
-    """Each `actions/checkout` step in the workflow, as its own lines."""
-    with open(path, encoding="utf-8") as fh:
-        lines = fh.read().splitlines()
+    """Each `actions/checkout` step in every job of the workflow, as its mapping.
+
+    This matched lines beginning `- uses: actions/checkout@`, so a checkout
+    whose `uses:` was not the step's first key was never found, and the floor
+    below passed on whichever one was. A step is a checkout here when its
+    `uses:` action, `@` ref dropped, is `actions/checkout`, wherever the key
+    sits in the step.
+    """
     steps = []
-    for i, ln in enumerate(lines):
-        if re.match(r"\s*- uses: actions/checkout@", ln):
-            indent = len(ln) - len(ln.lstrip())
-            block = [ln]
-            for nxt in lines[i + 1:]:
-                lead = len(nxt) - len(nxt.lstrip())
-                if nxt.strip() and lead <= indent:
-                    break
-                block.append(nxt)
-            steps.append(block)
+    for job in _workflow.load(path)["jobs"].values():
+        for st in (job or {}).get("steps") or []:
+            uses = st.get("uses") if isinstance(st, dict) else None
+            if isinstance(uses, str) and uses.split("@", 1)[0] == "actions/checkout":
+                steps.append(st)
     return steps
+
+
+def _persists_credentials(step) -> bool:
+    """Whether this checkout leaves the GITHUB_TOKEN in the checkout's git config.
+
+    `actions/checkout` defaults `persist-credentials` to true, and a workflow
+    hands an action its inputs as text, so YAML `false` and the string
+    "false" reach it as the same input. Anything else is read as persisting:
+    the key absent, `true`, or an expression nothing here can evaluate.
+    """
+    inputs = step.get("with")
+    value = inputs.get("persist-credentials") if isinstance(inputs, dict) else None
+    if value is False:
+        return False
+    return not (isinstance(value, str) and value.strip().lower() == "false")
 
 
 class TestTheCheckoutDoesNotOutrankTheToken(unittest.TestCase):
@@ -269,13 +284,11 @@ class TestTheCheckoutDoesNotOutrankTheToken(unittest.TestCase):
         # Floor: a sweep that found no checkout would pass over nothing.
         self.assertGreaterEqual(len(steps), 1,
                                 f"no actions/checkout step found in {WORKFLOW}")
-        for block in steps:
-            code = [ln.strip() for ln in block
-                    if ln.strip() and not ln.strip().startswith("#")]
-            self.assertIn("persist-credentials: false", code,
-                          "the checkout persists the GITHUB_TOKEN again, and it "
-                          "outranks PYDRC_TOKEN for every git call in the "
-                          f"checkout:\n" + "\n".join(block))
+        for step in steps:
+            self.assertFalse(_persists_credentials(step),
+                             "the checkout persists the GITHUB_TOKEN again, and it "
+                             "outranks PYDRC_TOKEN for every git call in the "
+                             f"checkout: {step!r}")
 
 
 class TestTheHarnessPicksAShellThatCanRun(unittest.TestCase):
