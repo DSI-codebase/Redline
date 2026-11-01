@@ -93,6 +93,40 @@ class TestAWaiverNamesItsRole(_Base):
         self.assertNotIn("Not accepted", md)
 
 
+class TestAWaiverCitesItsReference(_Base):
+    """A waiver that names the document it rests on, an RFI answer or a
+    deviation request, prints it after the reason as the rule library's
+    ``describe`` does: `` (ref. <reference>)``. The CSV carries a status and
+    no waiver text, so it carries no reference either."""
+
+    def _doc(self, reference):
+        doc = _doc(waived=True)
+        doc.findings[0].approvers = ["owner"]
+        doc.waivers["k1"] = Waiver(key="k1", reason="Owner accepts the 480 V tap.",
+                                   author="LWH", role="owner",
+                                   created="2026-10-30T09:15:00", reference=reference)
+        from app.audit.findings import apply_waivers
+        apply_waivers(doc.findings, doc.waivers)
+        return doc
+
+    def test_markdown_and_html(self):
+        """Injected: waiver_text dropping the reference (red)."""
+        doc = self._doc("RFI-0142")
+        line = ("Waived by LWH (Owner) on 2026-10-30: "
+                "Owner accepts the 480 V tap (ref. RFI-0142)")
+        md = self._read(export_markdown(doc, self._path("r.md")))
+        self.assertIn(f"  - {line}\n", md)
+        html = self._read(export_html(doc, self._path("r.html")))
+        self.assertIn(f"<div class='ev'>{line}</div>", html)
+
+    def test_no_reference_prints_none(self):
+        doc = self._doc("")
+        for text in (self._read(export_markdown(doc, self._path("r.md"))),
+                     self._read(export_html(doc, self._path("r.html")))):
+            self.assertIn("Owner accepts the 480 V tap.", text)
+            self.assertNotIn("(ref.", text)
+
+
 class TestMarkdown(_Base):
     def test_contains_findings_clauses_and_evidence(self):
         text = self._read(export_markdown(_doc(), self._path("r.md")))

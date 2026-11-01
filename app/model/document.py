@@ -207,13 +207,14 @@ class Document:
         self.sidecar.set_meta("audit_run", run.to_json() if run is not None else "")
 
     def waive_finding(self, key: str, reason: str, author: str = "",
-                      role: str = "") -> None:
+                      role: str = "", reference: str = "") -> None:
         """Record that a finding is acceptable here, and persist it.
 
         Waivers are stored apart from findings so that re-running the audit --
         which replaces every finding -- never discards a human decision. The
         waiver is recorded whatever the role, and closes the finding only when
-        its rule takes that role (``apply_waivers``).
+        its rule takes that role (``apply_waivers``). ``reference`` names the
+        document it rests on and plays no part in that.
         """
         from ..audit.findings import Waiver, apply_waivers
         key = str(key or "")
@@ -224,7 +225,8 @@ class Document:
             if f.key == key:
                 rule_id, subject = f.rule_id, f.subject_id
         waiver = Waiver(key=key, rule_id=rule_id, subject_id=subject,
-                        reason=reason, author=author, role=role)
+                        reason=reason, author=author, role=role,
+                        reference=reference)
         self.waivers[key] = waiver
         self.sidecar.save_waiver(waiver)
         apply_waivers([f for f in self.findings if f.key == key], self.waivers)

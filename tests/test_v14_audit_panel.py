@@ -299,7 +299,25 @@ class TestWaiveDialog(unittest.TestCase):
         self.assertFalse(dlg._ok.isEnabled())
         dlg.reason.setText("Accepted by client")
         self.assertTrue(dlg._ok.isEnabled())
-        self.assertEqual(dlg.values(), ("Accepted by client", "LWH", ""))
+        self.assertEqual(dlg.values(), ("Accepted by client", "LWH", "", ""))
+
+    def test_a_reference_is_optional_and_names_its_document(self):
+        """The rule library's Approval.reference. Optional: OK is enabled
+        without it and the rule's check reads the same with or without it."""
+        from app.dialogs import WaiveDialog
+        f = _findings()[0]
+        f.approvers = ["owner"]
+        dlg = WaiveDialog(f, "LWH", role="owner")
+        dlg.reason.setText("Owner accepts the 480 V tap")
+        self.assertTrue(dlg._ok.isEnabled())
+        before = dlg.problem.text()
+        dlg.reference.setText("  RFI-0142 ")
+        self.assertEqual(dlg.problem.text(), before)
+        self.assertEqual(dlg.values(),
+                         ("Owner accepts the 480 V tap", "LWH", "owner", "RFI-0142"))
+        tip = dlg.reference.toolTip()
+        self.assertIn("RFI answer", tip)
+        self.assertIn("deviation request", tip)
 
     def test_the_dialog_says_before_saving_whether_the_role_closes_it(self):
         """The rule's own check, shown live. Injected: problem_text ignoring
@@ -312,7 +330,7 @@ class TestWaiveDialog(unittest.TestCase):
         texts = " ".join(w.text() for w in dlg.findChildren(QLabel))
         self.assertIn("This rule takes a waiver from: Engineer", texts)
         dlg.reason.setText("Accepted by client")
-        self.assertEqual(dlg.values(), ("Accepted by client", "LWH", "estimator"))
+        self.assertEqual(dlg.values(), ("Accepted by client", "LWH", "estimator", ""))
         self.assertIn("estimator may not approve this rule", dlg.problem.text())
         dlg.role.setCurrentIndex(dlg.role.findData("engineer"))
         self.assertEqual(dlg.problem.text(), "")
@@ -328,6 +346,60 @@ class TestWaiveDialog(unittest.TestCase):
         texts = " ".join(w.text() for w in dlg.findChildren(QLabel))
         self.assertIn("999990", texts)
         self.assertIn("DRC-XREF-WIRE-RECIP-001", texts)
+
+
+@unittest.skipUnless(_QT_OK, "PySide6 not available")
+class TestTheWindowRecordsWhatTheDialogSays(unittest.TestCase):
+    """``MainWindow._waive_finding`` unpacks ``WaiveDialog.values()`` and hands
+    it to the document, and nothing else drives that line, so a field the
+    dialog gains and the window drops would fail when somebody clicks Waive.
+    Driven with the real method and a real document, the dialog answered by a
+    stand-in so no modal opens. Injected: the window dropping the reference
+    (red)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        from app.model.document import Document
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.doc = Document(_drawing(os.path.join(self.tmp, "set.pdf")))
+        self.doc.load()
+        self.addCleanup(self.doc.close)
+        self.doc.set_findings(_findings(), _run())
+
+    def test_the_reference_reaches_the_waiver(self):
+        from types import SimpleNamespace
+        from unittest import mock
+        from PySide6.QtWidgets import QDialog
+        from app import main_window
+
+        class Answered:
+            def __init__(self, finding, author="", parent=None, role=""):
+                pass
+
+            def exec(self):
+                return QDialog.Accepted
+
+            def values(self):
+                return ("Owner accepts the 480 V tap", "LWH", "owner", "RFI-0142")
+
+        roles = []
+        win = SimpleNamespace(
+            document=self.doc,
+            config=SimpleNamespace(author=lambda: "LWH", waiver_role=lambda: "",
+                                   set_waiver_role=roles.append),
+            audit_panel=SimpleNamespace(refresh=lambda: None),
+            _refresh_finding_marks=lambda: None)
+        with mock.patch.object(main_window, "WaiveDialog", Answered):
+            main_window.MainWindow._waive_finding(win, self.doc.findings[0])
+        w = self.doc.waiver_for("k1")
+        self.assertIsNotNone(w)
+        self.assertEqual((w.reason, w.author, w.role, w.reference),
+                         ("Owner accepts the 480 V tap", "LWH", "owner", "RFI-0142"))
+        self.assertEqual(roles, ["owner"])
 
 
 @unittest.skipUnless(_QT_OK, "PySide6 not available")

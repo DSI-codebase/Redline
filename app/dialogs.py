@@ -199,9 +199,20 @@ class WaiveDialog(QDialog):
             self.role.addItem(ROLE_LABELS[r], r)
         at = self.role.findData(role) if role in ROLES else 0
         self.role.setCurrentIndex(max(at, 0))
+        # The rule library's optional Approval.reference. waiver_text prints it
+        # after the reason and judge never reads it, so it cannot decide
+        # whether the finding closes and nothing here reads it but values().
+        self.reference = QLineEdit()
+        self.reference.setPlaceholderText("Optional")
+        self.reference.setToolTip(
+            "The number of the document this waiver rests on, as its issuer "
+            "numbers it: an RFI answer or a deviation request. Optional. It is "
+            "printed after the reason and does not decide whether the waiver "
+            "closes the finding.")
         form.addRow("Reason", self.reason)
         form.addRow("Waived by", self.author)
         form.addRow("Role", self.role)
+        form.addRow("Reference", self.reference)
         lay.addLayout(form)
 
         approvers = list(getattr(finding, "approvers", None) or [])
@@ -238,7 +249,7 @@ class WaiveDialog(QDialog):
         """What keeps this waiver from closing the finding, or "": the rule's
         own check (``findings.judge``), before the waiver is recorded."""
         from .audit.findings import Waiver, judge
-        reason, author, role = self.values()
+        reason, author, role, _reference = self.values()
         why = judge(list(getattr(self._finding, "approvers", None) or []),
                     Waiver(reason=reason or "(reason)", author=author, role=role))
         return (f"Recorded, but the finding stays open: {why}." if why else "")
@@ -247,8 +258,9 @@ class WaiveDialog(QDialog):
         self.problem.setText(self.problem_text())
 
     def values(self) -> tuple:
+        """``(reason, author, role, reference)``, each stripped."""
         return (self.reason.text().strip(), self.author.text().strip(),
-                str(self.role.currentData() or ""))
+                str(self.role.currentData() or ""), self.reference.text().strip())
 
 
 def decided_by_text(decided_by: str, confidence=None) -> str:

@@ -997,11 +997,11 @@ class MainWindow(QMainWindow):
         dlg = WaiveDialog(finding, self.config.author(), self, role=self.config.waiver_role())
         if dlg.exec() != QDialog.Accepted:
             return
-        reason, author, role = dlg.values()
+        reason, author, role, reference = dlg.values()
         if not reason.strip():
             return
         self.config.set_waiver_role(role)
-        self.document.waive_finding(finding.key, reason, author, role)
+        self.document.waive_finding(finding.key, reason, author, role, reference)
         self.audit_panel.refresh()
         self._refresh_finding_marks()
 

@@ -334,6 +334,11 @@ class Waiver:
     subject_id: str = ""
     # One of ROLES, or "" for a waiver recorded before waivers had a role.
     role: str = ""
+    # The document the waiver rests on, as its issuer numbers it: an RFI answer
+    # or a deviation request. The rule library's ``Approval.reference``.
+    # Optional for every role, and ``judge`` never reads it, so it cannot
+    # decide whether a finding closes.
+    reference: str = ""
 
     @property
     def date(self) -> str:
@@ -341,9 +346,14 @@ class Waiver:
         return (self.created or "")[:10]
 
     def to_dict(self) -> dict:
-        return {"key": self.key, "rule_id": self.rule_id, "reason": self.reason,
-                "author": self.author, "created": self.created,
-                "subject_id": self.subject_id, "role": self.role}
+        d = {"key": self.key, "rule_id": self.rule_id, "reason": self.reason,
+             "author": self.author, "created": self.created,
+             "subject_id": self.subject_id, "role": self.role}
+        # Written only when set, as the rule library's ``Approval.to_dict``
+        # does, so a waiver without one stores what it stored before.
+        if self.reference:
+            d["reference"] = self.reference
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "Waiver":
@@ -595,11 +605,20 @@ def sort_findings(findings) -> list:
 
 def waiver_text(waiver) -> str:
     """One waiver as the panel and the reports print it: who, in what role,
-    on what day, and why."""
+    on what day, why, and the document it rests on.
+
+    The reference follows the reason as ``pydrc.engine.approvals.describe``
+    prints it, `` (ref. <reference>)`` after the reason with its closing period
+    dropped, and tests/test_audit.py holds the two to the same text.
+    """
     who = waiver.author or "someone unnamed"
     role = ROLE_LABELS.get(waiver.role, waiver.role) or "no role"
     when = f" on {waiver.date}" if waiver.date else ""
-    return f"Waived by {who} ({role}){when}: {waiver.reason}"
+    reason = waiver.reason
+    reference = (getattr(waiver, "reference", "") or "").strip()
+    if reference:
+        reason = f"{reason.rstrip('.')} (ref. {reference})"
+    return f"Waived by {who} ({role}){when}: {reason}"
 
 
 def status_text(f) -> str:
