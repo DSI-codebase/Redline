@@ -32,9 +32,9 @@ Five gates, in the order a change meets them:
    and before the installer, so a bundle missing a file, or one that cannot
    launch, is never packaged or published (tag builds and manual runs).
 
-The workflow and the spec are read by structure, never by a regex over the
-file: both carry comments explaining these defects that name every string the
-checks look for.
+The workflow is read through ``tests/_workflow.py`` and the spec with ``ast``,
+never by a regex over the file: both carry comments explaining these defects
+that name every string the checks look for.
 """
 
 from __future__ import annotations
@@ -52,6 +52,7 @@ import tempfile
 import unittest
 from unittest import mock
 
+from tests import _workflow
 from tests._qt import QT_OK as _QT_OK, REASON as _QT_REASON
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
@@ -143,31 +144,44 @@ def _self_test_flag() -> str:
     return ""
 
 
-def _steps(path: pathlib.Path) -> list[str]:
-    """The job's steps, one string each, with comment lines dropped.
+def _steps(path: pathlib.Path) -> list[dict]:
+    """The ``build`` job's steps, as ``tests/_workflow.py`` reads them.
 
-    A step starts at a ``- `` at the indentation of the first item under
-    ``steps:``. Lines of a ``run: |`` block are deeper, so a PowerShell line
-    beginning with a dash stays inside its step.
+    This split the file by hand: from the first ``steps:`` line, comment lines
+    dropped, one string per ``- `` at the first item's indent. A needle then
+    matched anywhere in a step's string, its ``name:`` and ``env:`` included,
+    and a condition was any line beginning ``if:``. Each check now asks the
+    field it is about: a command is looked for in the ``run:`` script
+    (``_script``), an action in ``uses:`` (``_action``), and a condition or a
+    ``continue-on-error`` among the step's own keys.
     """
-    lines = [ln for ln in path.read_text(encoding="utf-8").splitlines()
-             if not ln.lstrip().startswith("#")]
-    start = next((i for i, ln in enumerate(lines) if ln.strip() == "steps:"), None)
-    if start is None:
-        return []
-    indent, steps = None, []
-    for ln in lines[start + 1:]:
-        if not ln.strip():
-            continue
-        lead = len(ln) - len(ln.lstrip())
-        if indent is not None and lead < indent:
-            break
-        if ln.lstrip().startswith("- ") and indent in (None, lead):
-            indent = lead
-            steps.append([ln])
-        elif steps:
-            steps[-1].append(ln)
-    return ["\n".join(s) for s in steps]
+    jobs = _workflow.load(str(path))["jobs"]
+    if "build" not in jobs:
+        raise AssertionError(f"no job named 'build' in {path}; it has {sorted(jobs)}")
+    steps = (jobs["build"] or {}).get("steps") or []
+    odd = [i for i, st in enumerate(steps) if not isinstance(st, dict)]
+    if odd:
+        raise AssertionError(f"steps {odd} of the build job in {path} are not mappings")
+    return steps
+
+
+def _script(step: dict) -> str:
+    """The step's ``run:`` script with its comment lines dropped, or ``""``.
+
+    YAML comments never reach it. A ``#`` line inside the script is the
+    script's own comment, in bash and in PowerShell, and the hand reader
+    dropped those too, so a command commented out still does not count as run.
+    """
+    run = step.get("run")
+    if not isinstance(run, str):
+        return ""
+    return "\n".join(ln for ln in run.splitlines() if not ln.lstrip().startswith("#"))
+
+
+def _action(step: dict) -> str:
+    """The action a ``uses:`` step runs, its ``@`` ref dropped, or ``""``."""
+    uses = step.get("uses")
+    return uses.split("@", 1)[0] if isinstance(uses, str) else ""
 
 
 class TestTheSpecLeavesPyMuPDFsAddOnsOut(unittest.TestCase):
@@ -352,10 +366,20 @@ class TestTheSelfTestReportsRatherThanRaises(unittest.TestCase):
 class _Steps:
 
     def _find(self, steps, *needles):
-        hits = [i for i, s in enumerate(steps) if all(n in s for n in needles)]
+        """The index of the one step whose ``run:`` script holds every needle."""
+        hits = [i for i, st in enumerate(steps) if all(n in _script(st) for n in needles)]
         self.assertEqual(len(hits), 1,
-                         f"expected one step containing {needles}, found {len(hits)}")
+                         f"expected one step whose run: script contains {needles}, "
+                         f"found {len(hits)}")
         return hits[0]
+
+    @staticmethod
+    def _packaging(steps):
+        """Each step that packages or publishes: an ``actions/upload-artifact``
+        step, or a script that zips the app or calls ``gh release``."""
+        return [i for i, st in enumerate(steps)
+                if _action(st) == "actions/upload-artifact"
+                or "gh release" in _script(st) or "Compress-Archive" in _script(st)]
 
 
 class TestTheBuildChecksTheBundleAgainstTheInstall(_Steps, unittest.TestCase):
@@ -368,24 +392,23 @@ class TestTheBuildChecksTheBundleAgainstTheInstall(_Steps, unittest.TestCase):
         build = self._find(steps, "pyinstaller packaging/DSI_Redline.spec")
         check = self._find(steps, f"python {rel}")
         installer = self._find(steps, "ISCC.exe")
-        later = [i for i, s in enumerate(steps)
-                 if "upload-artifact" in s or "gh release" in s or "Compress-Archive" in s]
+        later = self._packaging(steps)
         self.assertTrue(later, "the reader found no packaging step")
         self.assertLess(build, check, "the check runs before there is a bundle")
         self.assertLess(check, installer, "the installer is built before the bundle is checked")
         self.assertLess(check, min(later), "something is packaged before the bundle is checked")
-        self.assertIn('--dist "dist/DSI Redline" pydrc', steps[check],
+        self.assertIn('--dist "dist/DSI Redline" pydrc', _script(steps[check]),
                       "the check no longer names the folder PyInstaller writes, or PyDRC")
 
     def test_the_check_can_fail_the_job_and_skips_only_a_build_without_pydrc(self):
         steps = _steps(BUILD)
-        step = steps[self._find(steps, f"python {TOOL.relative_to(REPO).as_posix()}")]
+        check = self._find(steps, f"python {TOOL.relative_to(REPO).as_posix()}")
+        step = steps[check]
         self.assertNotIn("continue-on-error", step)
-        conditions = [ln.strip() for ln in step.splitlines() if ln.strip().startswith("if:")]
-        self.assertEqual(conditions, ["if: env.PYDRC_BUILT != 'none'"],
+        self.assertEqual(step.get("if"), "env.PYDRC_BUILT != 'none'",
                          "the check runs whenever the build installed PyDRC, and only then")
         sets_none = self._find(steps, "PYDRC_BUILT=none")
-        self.assertLess(sets_none, steps.index(step),
+        self.assertLess(sets_none, check,
                         "PYDRC_BUILT is set after the check reads it, so the check never runs")
 
 
@@ -401,8 +424,7 @@ class TestTheBuildLaunchesWhatItBuilt(_Steps, unittest.TestCase):
         build = self._find(steps, "pyinstaller packaging/DSI_Redline.spec")
         smoke = self._find(steps, "DSI Redline.exe", flag)
         installer = self._find(steps, "ISCC.exe")
-        later = [i for i, s in enumerate(steps)
-                 if "upload-artifact" in s or "gh release" in s or "Compress-Archive" in s]
+        later = self._packaging(steps)
         self.assertGreaterEqual(len(later), 4, "the zip, both uploads and the release")
 
         self.assertLess(build, smoke, "the self-test runs before there is an exe")
@@ -416,10 +438,13 @@ class TestTheBuildLaunchesWhatItBuilt(_Steps, unittest.TestCase):
         steps = _steps(BUILD)
         smoke = steps[self._find(steps, "DSI Redline.exe", _self_test_flag())]
         self.assertNotIn("continue-on-error", smoke)
-        self.assertNotIn("if:", smoke, "a condition would let a build skip it")
-        self.assertIn("ExitCode", smoke, "the exit code is never read")
-        self.assertIn("WaitForExit(", smoke,
-                      "no timeout, so an error dialog would hang the job")
+        self.assertNotIn("if", smoke, "a condition would let a build skip it")
+        script = _script(smoke)
+        self.assertIn("ExitCode", script, "the exit code is never read")
+        # An argument, because `$p.WaitForExit()` waits forever and still
+        # contains "WaitForExit(", which is all this asked until 2026-11-01.
+        self.assertRegex(script, r"\.WaitForExit\(\s*[^)\s]",
+                         "no timeout, so an error dialog would hang the job")
 
 
 if __name__ == "__main__":
