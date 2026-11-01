@@ -36,7 +36,8 @@ installed with the app.
 > constraints, so the versions here are what a fresh resolve produced on the
 > date above. A build from a different date may bundle different versions, and
 > a new version can bring a new dependency with it. Re-run the audit when
-> cutting a release rather than trusting this list to be current.
+> cutting a release, by the steps under "How to re-run the audit", rather than
+> trusting this list to be current.
 
 ---
 
@@ -445,6 +446,71 @@ the v1.8.0 tag build did. PyDRC's `dxf` extra brings these two.
 - **The Windows folder itself.** The package list above was measured on a Linux
   build of the same spec and cross-checked against the Windows build's install
   log and hook list. The Windows build's own folder listing was not read.
+
+## How to re-run the audit
+
+`tools/notices_audit.py` does steps 2 and 4 of "How this was produced". It
+traces a finished build to the distributions that reach it and copies their
+license files from the Windows wheels. It needs the build and PyDRC's private
+repository, so it runs on a build machine and not in CI. Run each command from
+the repository root.
+
+1. Make a Python 3.11 virtual environment for the build and activate it.
+2. Install setuptools 65.5.0, the version the Windows runner's Python 3.11.9
+   carries.
+
+   ```bash
+   python -m pip install setuptools==65.5.0
+   ```
+
+   With setuptools 79, httpx2's `from backports.zstd import` makes PyInstaller
+   bundle the copy of `backports` that setuptools vendors, so setuptools ships
+   from a Linux build and not from the Windows one. The audit refuses any other
+   version on a build that is not Windows.
+3. Install the app, the build tools, and PyDRC at the ref that
+   `packaging/pydrc-ref.txt` names.
+
+   ```bash
+   python -m pip install -r requirements.txt -r packaging/requirements-build.txt
+   python -m pip install "pydrc[dxf] @ git+https://github.com/DSI-codebase/PyDRC@<ref>"
+   ```
+
+   PyDRC needs credentials for its repository, as `CI.md` describes. The
+   release build installs it and it brings ezdxf and pyparsing, so the audit
+   refuses a build without it.
+4. Build the spec.
+
+   ```bash
+   pyinstaller packaging/DSI_Redline.spec --noconfirm
+   ```
+
+5. Run the audit with the same interpreter.
+
+   ```bash
+   python tools/notices_audit.py
+   ```
+
+   It reads `build/DSI_Redline/PYZ-00.toc`, `base_library.zip` and
+   `dist/DSI Redline/_internal/`. It prints every installed distribution with
+   its module count, file count and `RECORD` size, marks the ones that ship, and
+   counts the files no distribution claims. Then it downloads the Windows wheel
+   of each package that ships and rewrites every directory under `licenses/`
+   from those wheels, byte for byte. The four texts at the top of `licenses/`
+   are supplied by hand, and it leaves them alone. It exits 2 and writes nothing
+   when the build is incomplete, nothing ships, a wheel is missing, or a wheel
+   holds no license file of its own.
+6. Read `git status licenses/`. A directory added or removed is a package that
+   joined or left the bundle, so add or remove its entry under "The bundled
+   packages" by hand. A changed file means that entry's quoted lines are read
+   again from it.
+7. Run the notices test. It fails on a directory with no entry, an entry with no
+   directory, or a quoted line that is not in that package's own files.
+
+   ```bash
+   python -m unittest tests.test_notices_ship
+   ```
+
+8. Update the date, the version and the counts in "How this was produced".
 
 ## Full license texts
 
