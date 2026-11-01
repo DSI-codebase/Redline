@@ -29,6 +29,12 @@ installed with the app.
 > 4. Each license file was read from that distribution's Windows or
 >    pure-Python wheel and copied byte for byte into
 >    `licenses/<distribution>/`, under the path the wheel gives it.
+> 5. On 2026-11-01 the Windows build of this list was read directly (Build
+>    Windows run 41265620753, commit `c2fa152`). The executable's own archive
+>    and its `_internal/` folder carry all 39 distributions at the versions
+>    below, and PyDRC. They carry no onnxruntime and no setuptools. The
+>    installer's compile log names all 71 files of `licenses/` and this file
+>    among the 484 files it packed.
 >
 > What the audit did not reach is listed under "Not covered here".
 
@@ -441,13 +447,18 @@ the v1.8.0 tag build did. PyDRC's `dxf` extra brings these two.
 - **PyDRC 0.23.1** is DSI's own and is not a third-party package. Its
   `pyproject.toml` declares its license as `Proprietary`. It is in the bundle
   whenever the build installs it, as the v1.8.0 tag build did.
-- **The Python interpreter.** The bundle carries the CPython 3.11 runtime and
-  the libraries the interpreter itself links. It is not a pip distribution, its
-  license file is in the Windows interpreter's own install, and this audit did
-  not read it. It is recorded as **not checked**, not as clean.
-- **The Windows folder itself.** The package list above was measured on a Linux
-  build of the same spec and cross-checked against the Windows build's install
-  log and hook list. The Windows build's own folder listing was not read.
+- **The Python interpreter and the Windows runtime.** The Windows build carries
+  the CPython 3.11 runtime (`python311.dll`, `python3.dll`, its extension
+  modules, and the libraries it links: `libcrypto-3.dll`, `libssl-3.dll`,
+  `libffi-8.dll` and `sqlite3.dll`) and the Microsoft C runtime
+  (`VCRUNTIME140.dll`, `ucrtbase.dll` and the `api-ms-win-*` files). None of
+  them is a pip distribution. Their license files are in the build machine's
+  own installs, which this audit did not read. They are recorded as **not
+  checked**, not as clean.
+- **OpenSSL for Qt.** `libcrypto-3-x64.dll` and `libssl-3-x64.dll`, which Qt's
+  TLS plugin `qopensslbackend.dll` loads, are in no wheel, so PyInstaller took
+  them from the build machine. The build log does not say from where. They are
+  recorded as **not checked**.
 
 ## Full license texts
 
