@@ -7,9 +7,12 @@ makes the dependency optional in the first place ever gets to run. That
 happened once; this keeps it from happening again.
 """
 
+import ast
 import os
 import re
 import unittest
+
+from tests import _workflow
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -38,8 +41,36 @@ class TestRequirements(unittest.TestCase):
         # The app must start with only requirements.txt installed, so nothing
         # imported at module scope may live in the optional file.
         base = " ".join(_lines("requirements.txt")).lower()
-        for dist in ("pyside6", "pymupdf", "pyyaml", "pillow"):
+        for dist in ("pyside6", "pymupdf", "pillow"):
             self.assertIn(dist, base)
+
+    def test_the_suites_workflow_reader_is_covered_by_the_base_requirements(self):
+        """PyYAML is in `requirements.txt` for the suite, not for the app.
+
+        `pyyaml` sat in the tuple above, which names app imports, and no module
+        under `app/` imports `yaml` (measured 2026-11-01). `tests/_workflow.py`
+        does, and the suite reads both workflows through it, so the line is
+        held to that import. Read with `ast`, so a docstring that names yaml
+        cannot stand in for the import. The comment above the line names the
+        module, so when the import goes, this fails and says to rewrite it.
+        """
+        path = os.path.join(HERE, "tests", "_workflow.py")
+        with open(path, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read(), path)
+        imported = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported |= {a.name.split(".")[0] for a in node.names}
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported.add(node.module.split(".")[0])
+        self.assertIn("yaml", imported, (
+            "tests/_workflow.py no longer imports yaml, so the reason the "
+            "comment above PyYAML in requirements.txt gives is gone. Rewrite "
+            "that comment, or drop the line."))
+        self.assertIn("pyyaml", " ".join(_lines("requirements.txt")).lower())
+        with open(os.path.join(HERE, "requirements.txt"), encoding="utf-8") as fh:
+            self.assertIn("tests/_workflow.py", fh.read(),
+                          "requirements.txt no longer says why it carries PyYAML")
 
 
 class TestTheRuleLibrarysAccountIsNotStale(unittest.TestCase):
@@ -283,16 +314,26 @@ class TestTheInterpreterClaimIsExercised(unittest.TestCase):
     README documents as a first-class way to use the app, against a suite that
     heavily exercises PySide6 and PyMuPDF.
 
-    Parsed by hand rather than with PyYAML, which this project does not depend
-    on -- and read with comments stripped, because the comment explaining this
-    defect necessarily names the versions the check is hunting for.
+    This said "Parsed by hand rather than with PyYAML, which this project does
+    not depend on". `requirements.txt` has declared `PyYAML>=6.0` since
+    `d01d62b`, so the reason was false. The hand reading was regexes over the
+    file with comment lines dropped, and it took the first `python-version:`
+    list in the file whatever job held it. It reads through
+    `tests/_workflow.py` now: the matrix of the job named `TEST_JOB`, each
+    `actions/setup-python` step's own `with:`, and `uses:` only where GitHub
+    reads one. The loader discards comments, which is what the old reader
+    stripped them for, because the comment explaining this defect names the
+    versions the check is hunting for. The one raw-text read left is the
+    frozen build's stated reason, because that reason IS a comment.
     """
 
-    def _workflow(self, name):
-        with open(os.path.join(HERE, ".github", "workflows", name),
-                  encoding="utf-8") as fh:
-            return "\n".join(ln for ln in fh.read().splitlines()
-                              if not ln.lstrip().startswith("#"))
+    #: The job that runs the suite across interpreters. Named rather than
+    #: searched for, as `TestThePyMuPDFFloorIsExercised.JOB` is.
+    TEST_JOB = "test"
+
+    def _jobs(self, name):
+        return _workflow.load(
+            os.path.join(HERE, ".github", "workflows", name))["jobs"]
 
     def _declared_minimum(self):
         """The lowest version the documentation promises."""
@@ -307,13 +348,18 @@ class TestTheInterpreterClaimIsExercised(unittest.TestCase):
         return next(iter(found))
 
     def test_the_test_matrix_covers_the_version_the_docs_promise(self):
-        import re
-        text = self._workflow("tests.yml")
-        m = re.search(r"python-version:\s*\[([^\]]+)\]", text)
-        self.assertIsNotNone(
-            m, "tests.yml no longer varies python-version; the docs promise a "
-               "range and a single pin cannot check one")
-        versions = re.findall(r"\d+\.\d+", m.group(1))
+        jobs = self._jobs("tests.yml")
+        self.assertIn(self.TEST_JOB, jobs,
+                      f"tests.yml has no `{self.TEST_JOB}` job; re-aim TEST_JOB")
+        matrix = ((jobs[self.TEST_JOB] or {}).get("strategy") or {}).get("matrix") or {}
+        listed = matrix.get("python-version")
+        self.assertIsInstance(
+            listed, list,
+            f"tests.yml's `{self.TEST_JOB}` job no longer varies python-version; "
+            "the docs promise a range and a single pin cannot check one")
+        # str() of what YAML read, which is what GitHub hands setup-python: an
+        # unquoted 3.10 is the number 3.1 to both, and must not pass as 3.10.
+        versions = [str(v) for v in listed]
         self.assertIn(self._declared_minimum(), versions,
                       "the matrix does not include the minimum the docs promise")
         self.assertGreater(
@@ -322,13 +368,28 @@ class TestTheInterpreterClaimIsExercised(unittest.TestCase):
             "the floor")
 
     def test_the_frozen_build_stays_pinned_and_says_why(self):
-        """The asymmetry is deliberate; without the reason somebody 'fixes' it."""
-        import re
-        raw = open(os.path.join(HERE, ".github", "workflows",
-                                "build-windows.yml"), encoding="utf-8").read()
-        text = self._workflow("build-windows.yml")
-        self.assertRegex(text, r'python-version:\s*"\d+\.\d+"',
-                         "the Windows build no longer pins one interpreter")
+        """The asymmetry is deliberate; without the reason somebody 'fixes' it.
+
+        Every `actions/setup-python` step, with a floor of one: a sweep that
+        found none would agree with a build that sets up no Python at all.
+        """
+        pins = [((st.get("with") or {}).get("python-version"))
+                for job in self._jobs("build-windows.yml").values()
+                for st in (job or {}).get("steps") or []
+                if str(st.get("uses", "")).startswith("actions/setup-python@")]
+        self.assertTrue(pins, "build-windows.yml has no actions/setup-python step")
+        for pin in pins:
+            # A string, so quoted: unquoted, 3.10 reads as the number 3.1.
+            self.assertIsInstance(pin, str,
+                                  f"the Windows build's python-version is {pin!r}; "
+                                  "quote it, or 3.10 reads as 3.1")
+            self.assertRegex(pin, r"^\d+\.\d+$",
+                             f"the Windows build no longer pins one interpreter: "
+                             f"{pin!r}")
+        # Raw text, because the reason is a YAML comment and the loader drops it.
+        with open(os.path.join(HERE, ".github", "workflows", "build-windows.yml"),
+                  encoding="utf-8") as fh:
+            raw = fh.read()
         self.assertIn("not vary run to run", raw,
                       "the pin carries no stated reason, so it reads as the "
                       "oversight the test matrix just corrected")
@@ -351,20 +412,24 @@ class TestTheInterpreterClaimIsExercised(unittest.TestCase):
         `.yaml` as well as `.yml`: a glob that matches neither spelling returns
         nothing, and a sweep over nothing reports no offenders. That is the
         vacuous pass the floor assertion below exists to refuse.
+
+        A job's own `uses:` (a reusable workflow) and each step's, which are
+        the two places GitHub reads one. The loader drops comments, so a
+        commented-out step and a comment naming a stale ref cannot be read as
+        pins, and `uses:` inside a `run:` script is text, not a pin.
         """
         import glob
-        import re
         pins = []
         for path in sorted(
                 glob.glob(os.path.join(HERE, ".github", "workflows", "*.yml"))
                 + glob.glob(os.path.join(HERE, ".github", "workflows", "*.yaml"))):
             name = os.path.basename(path)
-            # `_workflow` drops comment lines, so a commented-out step and a
-            # comment naming a stale ref -- including the ones in this file's
-            # own docstrings -- cannot be read as pins.
-            for line in self._workflow(name).splitlines():
-                for ref in re.findall(r"uses:\s*(\S+)", line):
-                    pins.append((name, ref))
+            for job in _workflow.load(path)["jobs"].values():
+                job = job or {}
+                refs = [job.get("uses")] + [st.get("uses")
+                                            for st in job.get("steps") or []
+                                            if isinstance(st, dict)]
+                pins.extend((name, ref) for ref in refs if ref)
         return pins
 
     def test_every_first_party_action_pin_is_at_or_above_its_minimum(self):

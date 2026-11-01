@@ -21,6 +21,13 @@ pdf2docx>=0.5.8
 pytesseract>=0.3.10
 Pillow>=10.0
 anthropic>=0.40
+# Not for the app: no module under app/ imports yaml (measured 2026-11-01).
+# tests/_workflow.py reads the GitHub workflows with it, and
+# tests/test_requirements.py holds this line to that import. PyDRC declares
+# PyYAML>=6.0 as its only runtime dependency (pyproject.toml at ce8f085), so
+# installing PyDRC installs it whether or not this line is here. The line
+# predates the history: it is already in d01d62b, the commit that brought the
+# code in, and no commit says why it was added.
 PyYAML>=6.0
 
 # Design rule checking lives in PyDRC, a sibling project rather than a PyPI

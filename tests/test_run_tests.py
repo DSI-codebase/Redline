@@ -32,6 +32,8 @@ import types
 import unittest
 from unittest import mock
 
+from tests import _workflow
+
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _spec = importlib.util.spec_from_file_location(
     "run_tests", os.path.join(HERE, "tools", "run_tests.py"))
@@ -42,39 +44,16 @@ _spec.loader.exec_module(run_tests)
 def _run_script(step_name: str) -> str:
     """The `run:` block of the named step in the Tests workflow.
 
-    Hand-parsed rather than via PyYAML, which is not a dependency of this
-    repository. What matters is that it returns the SCRIPT and not the whole
-    file -- see the docstring on the test that needed it.
+    This said "Hand-parsed rather than via PyYAML, which is not a dependency
+    of this repository." `requirements.txt` has declared `PyYAML>=6.0` since
+    `d01d62b`, so the reason was false, and the parser it excused matched the
+    first step of that name in either job. It reads through
+    `tests/_workflow.py` now, which refuses a name two steps share. What
+    matters is unchanged: it returns the SCRIPT and not the whole file -- see
+    the docstring on the test that needed it.
     """
-    wf = os.path.join(HERE, ".github", "workflows", "tests.yml")
-    with open(wf, encoding="utf-8") as fh:
-        lines = fh.read().splitlines()
-    try:
-        i = next(n for n, ln in enumerate(lines)
-                 if ln.strip() == f"- name: {step_name}")
-    except StopIteration:
-        raise AssertionError(f"no step named {step_name!r} in {wf}")
-    out, in_run, indent = [], False, None
-    for ln in lines[i + 1:]:
-        if ln.strip().startswith("- name:"):
-            break
-        if not in_run:
-            if ln.strip().startswith("run:"):
-                in_run = True
-                rest = ln.split("run:", 1)[1].strip()
-                if rest and rest != "|":
-                    out.append(rest)
-            continue
-        if not ln.strip():
-            out.append("")
-            continue
-        lead = len(ln) - len(ln.lstrip())
-        if indent is None:
-            indent = lead
-        if lead < indent:
-            break
-        out.append(ln[indent:])
-    return "\n".join(out)
+    return _workflow.run_script(
+        os.path.join(HERE, ".github", "workflows", "tests.yml"), step_name)
 
 
 class TestClassify(unittest.TestCase):

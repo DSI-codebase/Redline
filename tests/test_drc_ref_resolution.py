@@ -25,41 +25,23 @@ import shutil
 import subprocess
 import unittest
 
+from tests import _workflow
+
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WORKFLOW = os.path.join(HERE, ".github", "workflows", "build-windows.yml")
 STEP = "Install the design rule library (optional)"
 
-# The step's own `run:` block, hand-parsed. PyYAML is not a dependency of this
-# repository -- `tests/test_run_tests.py` carries the same parser for the same
-# reason -- and what matters is that this returns the SCRIPT rather than the
-# whole file: a check over the file text is answered by the comment above the
-# line it is hunting, which is a dead gate this repository has already paid for.
-def _run_script(path: str, step_name: str) -> str:
-    with open(path, encoding="utf-8") as fh:
-        lines = fh.read().splitlines()
-    try:
-        i = next(n for n, ln in enumerate(lines)
-                 if ln.strip() == f"- name: {step_name}")
-    except StopIteration:
-        raise AssertionError(f"no step named {step_name!r} in {path}")
-    out, in_run, indent = [], False, None
-    for ln in lines[i + 1:]:
-        if ln.strip().startswith("- name:"):
-            break
-        if not in_run:
-            if ln.strip().startswith("run:"):
-                in_run = True
-            continue
-        if not ln.strip():
-            out.append("")
-            continue
-        lead = len(ln) - len(ln.lstrip())
-        if indent is None:
-            indent = lead
-        if lead < indent:
-            break
-        out.append(ln[indent:])
-    return "\n".join(out)
+# The step's own `run:` block. This comment said "PyYAML is not a dependency of
+# this repository -- `tests/test_run_tests.py` carries the same parser for the
+# same reason", and `requirements.txt` has declared `PyYAML>=6.0` since
+# `d01d62b`. The parser here also returned an empty script for a one-line
+# `run:`, which is how build-windows.yml writes its "Run tests" step. Both
+# copies read through `tests/_workflow.py` now. What matters is unchanged: this
+# returns the SCRIPT rather than the whole file, because a check over the file
+# text is answered by the comment above the line it is hunting, which is a dead
+# gate this repository has already paid for. `test_notices_audit.py` and
+# `test_release_provenance.py` import it from here.
+_run_script = _workflow.run_script
 
 
 def _code_only(script: str) -> str:
