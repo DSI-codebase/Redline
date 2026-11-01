@@ -89,4 +89,12 @@
 # and ships the rules v1.8.0 shipped, so step 1 needed no new tag. Whether
 # PyDRC `main` has moved past `6360563` was not checked, and the pin makes it
 # irrelevant. Set this back to `main` after the release.
-v0.23.1
+#
+# CHANGED 2026-11-01, from `v0.23.1` back to `main`, after v1.8.1. v1.8.1
+# ships from `c05da68` with `v0.23.1` here: Build Windows run 10 on that
+# commit (41282631374) reads `pydrc 0.23.1 | drc-base@1.38.0,
+# erc-nec-2026@1.2.0 | 636056399f36… (ref v0.23.1)`. PyDRC `main` was
+# `ce8f085` (0.24.0) that day and adds an `owner` approval role, which the
+# commit before this one accepts. The next release sets a tag here first,
+# per the three steps above.
+main
