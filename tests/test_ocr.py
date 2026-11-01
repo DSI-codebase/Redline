@@ -96,15 +96,19 @@ def _forget_the_version():
     remembered._result = remembered
 
 
-def _install_stand_in(test, tsv="", txt=""):
+def _install_stand_in(test, tsv="", txt="", version=None):
     """Point pytesseract at the stand-in until ``test`` ends.
 
-    The stand-in answers with ``tsv`` or ``txt``. Returns a function that
-    lists the stand-in's runs, one dict per OCR call, version checks excluded.
+    The stand-in answers with ``tsv`` or ``txt``, and answers ``--version``
+    with ``version`` when one is given. Returns a function that lists the
+    stand-in's runs, one dict per OCR call, version checks excluded.
     """
     workdir = tempfile.mkdtemp(prefix="redline-tesseract-")
     test.addCleanup(shutil.rmtree, workdir, True)
-    for name, text in (("answer.tsv", tsv), ("answer.txt", txt)):
+    answers = [("answer.tsv", tsv), ("answer.txt", txt)]
+    if version is not None:
+        answers.append(("version.txt", version))
+    for name, text in answers:
         with open(os.path.join(workdir, name), "w", encoding="utf-8",
                   newline="\n") as fh:
             fh.write(text)
@@ -159,6 +163,36 @@ class TestAvailableAsksForTheBinary(unittest.TestCase):
 
         _install_stand_in(self)
         self.assertTrue(ocr.available())
+
+    # pytesseract 0.3.10 and 0.3.13 raise SystemExit, which is not an
+    # Exception, from get_tesseract_version() when --version does not parse
+    # or parses below 3.05 (both read 2026-11-01).
+    def test_a_version_that_does_not_parse_is_unavailable(self):
+        self._assert_unavailable_answering("tesseract v-unknown\n")
+
+    def test_a_version_below_3_05_is_unavailable(self):
+        self._assert_unavailable_answering("tesseract 3.04\n")
+
+    def _assert_unavailable_answering(self, version):
+        _install_stand_in(self, version=version)
+        _forget_the_version()
+        try:
+            reported = ocr.available()
+        except SystemExit as exc:
+            self.fail(f"ocr.available() raised {exc!r} for a binary "
+                      f"answering --version with {version!r}, where it "
+                      "should report OCR unavailable.")
+        self.assertFalse(
+            reported,
+            f"OCR reported available for a binary answering --version with "
+            f"{version!r}. If the stand-in answered 5.3.4 instead, it no "
+            "longer reads version.txt.")
+
+    def test_an_interrupt_is_not_swallowed(self):
+        with mock.patch.object(pytesseract, "get_tesseract_version",
+                               side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                ocr.available()
 
 
 @unittest.skipUnless(_HAVE_PYTESSERACT, _NO_WRAPPER)
