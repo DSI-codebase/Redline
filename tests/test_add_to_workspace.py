@@ -16,8 +16,10 @@ Asserted where each rule acts:
   before copying, keep both / cancel, open the identical one, New folder…, the
   switch to the copy, and the same menu on a File view Recent row.
 
-`AppConfig` is the real per-user QSettings store, so every test that writes it
-puts back exactly the keys it touched.
+`AppConfig` is QSettings, and in a test process that is the process's own
+store (`tests/__init__.py`), not the developer's. It is still one store for
+every test in the module, so every test that writes it puts back exactly the
+keys it touched.
 """
 
 import hashlib
