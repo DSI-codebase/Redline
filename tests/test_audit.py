@@ -137,6 +137,14 @@ class TestAWaiverIsJudgedByItsRole(unittest.TestCase):
         self.assertEqual(Waiver.from_dict(w.to_dict()).role, "ul_rep")
         self.assertEqual(Waiver.from_dict({"key": "k", "reason": "ok"}).role, "")
 
+    def test_every_role_has_a_label(self):
+        """The waiver dialog fills its role list with ROLE_LABELS[r] for each
+        of ROLES, so a role with no label raises when the dialog opens.
+        Injected: the owner role with no label (red)."""
+        from app.audit.findings import ROLES, ROLE_LABELS
+        self.assertGreaterEqual(len(ROLES), 4)
+        self.assertEqual(set(ROLE_LABELS), set(ROLES))
+
     @needs_pydrc
     def test_the_check_is_the_rule_librarys_own_on_every_combination(self):
         """findings.judge is a copy of pydrc.engine.approvals.judge, so a
@@ -149,7 +157,8 @@ class TestAWaiverIsJudgedByItsRole(unittest.TestCase):
         self.assertEqual(tuple(ROLES), tuple(approvals.ROLES))
         compared = 0
         for approvers, role, author, reason, created in product(
-                ((), ("engineer",), ("ul_rep",), ("estimator", "engineer", "ul_rep")),
+                ((), ("engineer",), ("ul_rep",), ("owner",),
+                 ("estimator", "engineer", "ul_rep")),
                 ("",) + ROLES, ("", "LWH"), ("", "ok"), ("", "2026-10-30T09:15:00")):
             ours = judge(list(approvers), Waiver(key="k", role=role, author=author,
                                                  reason=reason, created=created))
@@ -157,7 +166,7 @@ class TestAWaiverIsJudgedByItsRole(unittest.TestCase):
                 fingerprint="k", name=author, role=role, date=created[:10], reason=reason))
             self.assertEqual(ours, theirs, (approvers, role, author, reason, created))
             compared += 1
-        self.assertEqual(compared, 128)        # 4 approver sets x 4 roles x 2 x 2 x 2
+        self.assertEqual(compared, 200)        # 5 approver sets x 5 roles x 2 x 2 x 2
 
 
 class TestAuditRunSummary(unittest.TestCase):
