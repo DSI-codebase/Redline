@@ -235,22 +235,27 @@ class TestTheStepStillDiscriminates(unittest.TestCase):
                         self.code.index("ref_is_sha"))
 
 
+# A hand reader stood here, and its docstring said "Each `actions/checkout`
+# step in the workflow, as its own lines." It found a checkout only on a line
+# matching `- uses: actions/checkout@`, so a step written `- name:` first, with
+# `uses:` below it, was never found, and the floor of one still passed on the
+# first checkout. The test then looked for `persist-credentials: false` as a
+# line of the step, so the setting under the step's `env:` passed and a
+# flow-style `with: { persist-credentials: false }` failed. Measured
+# 2026-11-01 against `yaml.safe_load` on both workflows, they agreed: the same
+# checkouts (1 in build-windows.yml, 2 in tests.yml) with the same `uses:` and
+# the same verdict on each. A second checkout written `- name:` first, and one
+# with the setting under `env:`, were green on the hand reader and are red here.
 def _checkout_steps(path):
-    """Each `actions/checkout` step in the workflow, as its own lines."""
-    with open(path, encoding="utf-8") as fh:
-        lines = fh.read().splitlines()
-    steps = []
-    for i, ln in enumerate(lines):
-        if re.match(r"\s*- uses: actions/checkout@", ln):
-            indent = len(ln) - len(ln.lstrip())
-            block = [ln]
-            for nxt in lines[i + 1:]:
-                lead = len(nxt) - len(nxt.lstrip())
-                if nxt.strip() and lead <= indent:
-                    break
-                block.append(nxt)
-            steps.append(block)
-    return steps
+    """Every `actions/checkout` step in every job, as the step's own mapping.
+
+    Matched on the action with its `@` ref dropped, so any pin or key order
+    is found.
+    """
+    return [st for body in _workflow.load(path)["jobs"].values()
+            for st in (body or {}).get("steps") or []
+            if isinstance(st, dict) and isinstance(st.get("uses"), str)
+            and st["uses"].split("@", 1)[0] == "actions/checkout"]
 
 
 class TestTheCheckoutDoesNotOutrankTheToken(unittest.TestCase):
@@ -269,13 +274,14 @@ class TestTheCheckoutDoesNotOutrankTheToken(unittest.TestCase):
         # Floor: a sweep that found no checkout would pass over nothing.
         self.assertGreaterEqual(len(steps), 1,
                                 f"no actions/checkout step found in {WORKFLOW}")
-        for block in steps:
-            code = [ln.strip() for ln in block
-                    if ln.strip() and not ln.strip().startswith("#")]
-            self.assertIn("persist-credentials: false", code,
-                          "the checkout persists the GITHUB_TOKEN again, and it "
-                          "outranks PYDRC_TOKEN for every git call in the "
-                          f"checkout:\n" + "\n".join(block))
+        for step in steps:
+            # `is False`, so a quoted `"false"`, which loads as a string,
+            # fails here rather than passing as a spelling of the boolean.
+            self.assertIs(
+                (step.get("with") or {}).get("persist-credentials"), False,
+                "the checkout persists the GITHUB_TOKEN again, and it "
+                "outranks PYDRC_TOKEN for every git call in the "
+                f"checkout: {step!r}")
 
 
 class TestTheHarnessPicksAShellThatCanRun(unittest.TestCase):
