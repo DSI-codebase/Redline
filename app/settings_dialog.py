@@ -353,7 +353,8 @@ class SettingsDialog(QDialog):
         v.addWidget(QLabel("Rule packs the check runs:"))
         self.drc_packs = []
         for pack_id, label, tip in sorted(offered):
-            box = QCheckBox(label)
+            # "&&": a single "&" in a pack's ref, title or id is a mnemonic marker
+            box = QCheckBox(label.replace("&", "&&"))
             box.setChecked(pack_id in chosen)
             box.setToolTip(tip)
             box.toggled.connect(self._refill_rules)

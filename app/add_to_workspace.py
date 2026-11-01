@@ -99,16 +99,23 @@ def populate(menu, win, source) -> None:
     others = [w for w in items if current is None or not _same(w, current)]
     target = menu
     if current is not None:
-        menu.addAction(current.display_name).setEnabled(False)     # a heading
+        menu.addAction(_literal(current.display_name)).setEnabled(False)  # a heading
         _folder_actions(menu, win, source, current, home)
         if others:
             menu.addSeparator()
             target = menu.addMenu("Other workspaces")
     for ws in others:
-        label = ws.display_name if ws.available else f"{ws.display_name}   (unavailable)"
+        name = _literal(ws.display_name)
+        label = name if ws.available else f"{name}   (unavailable)"
         sub = target.addMenu(label)
         sub.setEnabled(ws.available)
         _folder_actions(sub, win, source, ws, home)
+
+
+def _literal(name: str) -> str:
+    """``name`` as a menu entry's text. A single "&" is a mnemonic marker, so a
+    workspace or folder called "R&D" is written "R&&D" to show its "&"."""
+    return name.replace("&", "&&")
 
 
 def _same(a, b) -> bool:
@@ -117,18 +124,18 @@ def _same(a, b) -> bool:
 
 def _folder_actions(menu, win, source, ws, home) -> None:
     if _same(ws, home):
-        menu.addAction(f"Already in {ws.display_name}").setEnabled(False)
+        menu.addAction(f"Already in {_literal(ws.display_name)}").setEnabled(False)
         return
     if not ws.available:
         menu.addAction("Folder not found").setEnabled(False)
         return
     quick, others = W.destinations(ws, win.config.quick_folders())
     for rel in quick:
-        menu.addAction(rel, lambda r=rel: add(win, source, ws.root, r))
+        menu.addAction(_literal(rel), lambda r=rel: add(win, source, ws.root, r))
     if others:
         menu.addSeparator()
         for rel in others:
-            menu.addAction(rel, lambda r=rel: add(win, source, ws.root, r))
+            menu.addAction(_literal(rel), lambda r=rel: add(win, source, ws.root, r))
     menu.addSeparator()
     menu.addAction("New folder…", lambda: _new_folder(win, source, ws.root))
 
