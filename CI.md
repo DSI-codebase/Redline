@@ -4,7 +4,7 @@ Two workflows, both under `.github/workflows/`.
 
 | Workflow | Runs on | Does |
 |---|---|---|
-| **Tests** (`tests.yml`) | every push, every pull request | the suite, on Ubuntu and Windows, and once more on Ubuntu at the PyMuPDF floor |
+| **Tests** (`tests.yml`) | every push, every pull request | the suite, on Ubuntu and Windows, and once more on Ubuntu with every library at its declared floor |
 | **Build Windows** (`build-windows.yml`) | manual dispatch, `v*` tags | the suite, then the portable app, a launch of it, a check of the notices against it, the installer, and the release |
 
 ## Running the suite
@@ -32,26 +32,64 @@ crash in the log.
 Qt also needs a display. The runner sets `QT_QPA_PLATFORM=offscreen` itself, so
 there is nothing to remember locally.
 
-## The PyMuPDF floor is run, not just declared
+## Every floor is run, not just declared
 
-A fresh install takes the newest PyMuPDF, so the matrix never meets the floor
-`requirements.txt` declares. That floor said 1.25 while two tests failed there
-(measured 2026-10-31), and no runner noticed. The **`pymupdf-floor`** job
-installs `requirements.txt` with `PyMuPDF==$PYMUPDF_FLOOR` as a pip constraint,
-checks that the installed PyMuPDF is that version, and runs the suite on Ubuntu
-and Python 3.11, with the rule library when the token is present.
+A fresh install takes the newest release of every library, so the matrix never
+meets a floor `requirements.txt` declares. The PyMuPDF floor said 1.25 while
+two tests failed at 1.25.0 (measured 2026-10-31), and the PySide6 floor said
+6.6 while two failed at 6.6.0 (measured 2026-11-01). No runner noticed either.
 
-To move the floor to version X:
+The **`floors`** job installs `requirements.txt` with `.github/floors.txt` as a
+pip constraint. That file pins every floor at once, so the job is a
+lowest-direct resolution: each library `requirements.txt` names is at its
+floor, and everything they pull in is the newest release the floors accept.
+`tools/check_floors.py` then confirms each installed distribution is its pin,
+and the suite runs on Ubuntu and Python 3.11 with `--strict`, and with
+`--require-drc` when the token is present. The rule library is installed under
+the same constraint.
 
-1. Write `PyMuPDF==X` into a file, `floor.txt` here.
-2. In a new virtual environment, run
-   `pip install -r requirements.txt -c floor.txt`.
-3. Run `python tools/run_tests.py` and confirm it reports no failed module.
-4. Change the `PyMuPDF>=` line in `requirements.txt` and `PYMUPDF_FLOOR` in
-   `tests.yml` in the same commit.
+It is one job rather than one per library because the floors are one claim:
+any install inside them works. The corner where every floor is lowest is the
+one install that claim covers and nothing else builds, and it is the only
+place two old releases meet, such as pdf2docx 0.5.8 on PyMuPDF 1.25.4. The
+cost is that a red run names a feature and not a library, which the second
+procedure below answers.
 
-`tests/test_requirements.py::TestThePyMuPDFFloorIsExercised` fails when the two
-disagree.
+A green run is a claim about what the suite reaches, and three floors are
+installed without being exercised (read 2026-11-01). No test imports
+`pytesseract`. The `anthropic` tests accept a missing SDK as a pass and never
+build a client. `PyYAML` is imported by the rule library alone, so it is
+reached only when the token is present.
+
+To move a floor to version X:
+
+1. Write `<library>==X` into a file, `one.txt` here.
+2. In a new Python 3.11 virtual environment, run
+   `pip install -r requirements.txt -c one.txt`.
+3. Run `python tools/run_tests.py --strict` and confirm it reports no failed
+   module.
+4. Change the library's line in `requirements.txt` and its line in
+   `.github/floors.txt` in the same commit. Above the requirement, say what
+   fails below X and the date it was measured.
+5. In another new virtual environment run
+   `pip install -r requirements.txt -c .github/floors.txt` and the suite
+   again, because the new floor now meets every other one.
+
+When the `floors` job fails:
+
+1. For each line of `.github/floors.txt`, write that line alone into a file and
+   run steps 2 and 3 above with it. The library whose run fails is the one.
+2. Bisect that library's releases between its floor and the newest, running
+   only the failing module, for example
+   `python tools/run_tests.py --strict tests.test_v12_print`.
+3. If no single line fails, two floors fail only together. Pin them in pairs
+   the same way.
+
+`tests/test_requirements.py::TestTheFloorsAreExercised` fails when a line in
+one file has no match in the other, or when the two disagree about a version.
+Each QSettings-backed test reads and writes the real per-user store, so give
+each environment run at the same time its own `XDG_CONFIG_HOME`, or one run's
+text size and recent files leak into another's.
 
 ## The design rule library is optional, and CI says so
 

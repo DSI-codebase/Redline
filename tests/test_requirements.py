@@ -423,42 +423,67 @@ class TestTheInterpreterClaimIsExercised(unittest.TestCase):
             "on a current runtime: " + str(undescribed))
 
 
-class TestThePyMuPDFFloorIsExercised(unittest.TestCase):
-    """`requirements.txt` declares a PyMuPDF floor, and a CI job installs it.
+def _dist(name):
+    """A distribution's name as pip compares it (PEP 503)."""
+    return re.sub(r"[-_.]+", "-", name).lower()
 
-    It said `PyMuPDF>=1.25` while the suite failed at 1.25.0 (measured
-    2026-10-31): `test_export_writes_freetext_with_leader` and
-    `test_printing_applies_the_line_weight_floor`, both green at 1.25.4.
-    Nothing ran the floor. A fresh install takes the newest PyMuPDF and
-    pdf2docx 0.5.13 requires 1.26.7, so every runner sat well above it, and
-    only an install that honored the floor met the two failures.
 
-    The `pymupdf-floor` job in `tests.yml` installs `PYMUPDF_FLOOR` as a
-    constraint and runs the suite. This holds that pin to the floor in both
-    directions, the way `TestTheInterpreterClaimIsExercised` holds the matrix
-    to the documented interpreter. Read with comments stripped, because the
-    comments in both files explain the floor and name it, and read **by job**,
-    because a pin set in one job and an install in another is not a floor run.
+class TestTheFloorsAreExercised(unittest.TestCase):
+    """Every floor `requirements.txt` declares is installed by one CI job.
+
+    The Tests matrix installs the newest release of everything, so a `>=`
+    line is a claim no runner meets. `PyMuPDF>=1.25` failed two tests at
+    1.25.0 (measured 2026-10-31) and `PySide6>=6.6` failed two at 6.6.0
+    (measured 2026-11-01), and every run was green above them.
+
+    The `floors` job installs `requirements.txt` under `.github/floors.txt`,
+    which pins every floor at once, confirms the installed versions, and runs
+    the suite. This holds that file to `requirements.txt` in BOTH directions,
+    line by line: a floor with no pin is a claim nothing installs, and a pin
+    with no floor is a version the job installs for no stated reason. The job
+    is read with comment lines dropped, because the comments explain the
+    floors and name them, and read **by job**, because a pin installed in one
+    job and a suite run in another is not a floor run.
     """
 
-    JOB = "pymupdf-floor"
+    JOB = "floors"
+    #: As the job's bash spells it. Read through os.path.join, because the
+    #: suite also runs on Windows.
+    PINS = ".github/floors.txt"
 
-    def _floor(self):
-        """The `>=` bound on the one PyMuPDF line in requirements.txt."""
-        found = []
+    def _declared(self):
+        """``{dist: (name, floor)}``, one per line of requirements.txt."""
+        out = {}
         for line in _lines("requirements.txt"):
-            # The project's name, then a version specifier. pymupdf4llm and
-            # pymupdf-layout are other distributions and do not match.
-            m = re.match(r"pymupdf\s*([<>=!~].*)$", line, re.I)
-            if m:
-                found.append(m.group(1))
-        self.assertEqual(len(found), 1,
-                         f"requirements.txt should name PyMuPDF once, found "
-                         f"{len(found)} specifier(s): {found}")
-        bound = re.search(r">=\s*([0-9][^,\s;]*)", found[0])
-        self.assertIsNotNone(bound, f"the PyMuPDF line has no >= floor: "
-                                    f"{found[0]!r}")
-        return bound.group(1)
+            m = re.match(r"([A-Za-z0-9][A-Za-z0-9._-]*)\s*(\[[^\]]*\])?\s*(.*)$",
+                         line)
+            self.assertIsNotNone(m, f"requirements.txt: unreadable {line!r}")
+            bound = re.search(r">=\s*([0-9][^,\s;]*)", m.group(3))
+            self.assertIsNotNone(
+                bound, f"requirements.txt: {line!r} declares no >= floor, so it "
+                       "claims every release works and the floor job cannot "
+                       "install a lowest one")
+            key = _dist(m.group(1))
+            self.assertNotIn(key, out, f"requirements.txt names {m.group(1)} twice")
+            out[key] = (m.group(1), bound.group(1))
+        # The floor. Both directions below agree with a file that declares
+        # nothing, which is what a rename of requirements.txt degrades to.
+        self.assertGreaterEqual(len(out), 8, f"requirements.txt yielded {out}")
+        return out
+
+    def _pins(self):
+        """``{dist: (name, version)}`` from the job's constraint file."""
+        out = {}
+        for line in _lines(os.path.join(*self.PINS.split("/"))):
+            m = re.match(r"([A-Za-z0-9][A-Za-z0-9._-]*)\s*==\s*(\S+)$", line)
+            self.assertIsNotNone(
+                m, f"{self.PINS}: {line!r} is not `name==version`, and only an "
+                   "exact pin installs a floor")
+            key = _dist(m.group(1))
+            self.assertNotIn(key, out, f"{self.PINS} pins {m.group(1)} twice")
+            out[key] = (m.group(1), m.group(2))
+        self.assertGreaterEqual(len(out), 8, f"{self.PINS} yielded {out}")
+        return out
 
     def _job(self):
         """The floor job's lines, comment lines dropped."""
@@ -470,7 +495,7 @@ class TestThePyMuPDFFloorIsExercised(unittest.TestCase):
                       if ln.rstrip() == f"  {self.JOB}:"), None)
         self.assertIsNotNone(
             start, f"tests.yml has no `{self.JOB}` job, so nothing installs "
-                   "the PyMuPDF floor requirements.txt declares")
+                   "the floors requirements.txt declares")
         body = []
         for ln in lines[start + 1:]:
             if ln.strip() and len(ln) - len(ln.lstrip()) <= 2:
@@ -478,35 +503,48 @@ class TestThePyMuPDFFloorIsExercised(unittest.TestCase):
             body.append(ln)
         return "\n".join(body)
 
-    def test_the_job_pins_the_floor_requirements_txt_declares(self):
-        job = self._job()
-        pins = re.findall(r'^\s+PYMUPDF_FLOOR:\s*"?([^"\s]+)"?\s*$', job, re.M)
-        self.assertEqual(len(pins), 1,
-                         f"the {self.JOB} job should set PYMUPDF_FLOOR once, "
-                         f"found {pins}")
-        floor = self._floor()
-        self.assertEqual(
-            pins[0], floor,
-            f"requirements.txt declares PyMuPDF>={floor} and the {self.JOB} "
-            f"job installs {pins[0]}. Move both in the same commit, and "
-            "re-measure the release you move to.")
+    def test_every_floor_is_pinned_at_the_version_requirements_txt_declares(self):
+        pins = self._pins()
+        for key, (name, floor) in sorted(self._declared().items()):
+            self.assertIn(
+                key, pins, f"requirements.txt declares {name}>={floor} and "
+                           f"{self.PINS} does not pin it, so the floor job "
+                           "installs the newest release and the floor is a "
+                           "claim nothing runs")
+            self.assertEqual(
+                pins[key][1], floor,
+                f"requirements.txt declares {name}>={floor} and {self.PINS} "
+                f"pins {pins[key][1]}. Move both in the same commit, and "
+                "re-measure the release you move to (CI.md).")
 
-    def test_the_job_installs_the_pin_and_runs_the_suite(self):
-        """A pin that nothing installs agrees with the floor and runs nothing.
+    def test_every_pin_is_a_floor_requirements_txt_declares(self):
+        declared = self._declared()
+        for key, (name, version) in sorted(self._pins().items()):
+            self.assertIn(
+                key, declared, f"{self.PINS} pins {name}=={version}, which "
+                               "requirements.txt does not declare. A transitive "
+                               "pin is a version this job chose for no stated "
+                               "reason, and a lowest-direct run leaves those to "
+                               "the resolver.")
 
-        Each one has to BEGIN a line. The job echoes the command it runs, so
-        a substring check passed with the `python tools/run_tests.py` line
-        deleted: the echo above it still held the words (falsified on this
-        test's first draft, 2026-10-31).
+    def test_the_job_installs_the_pins_confirms_them_and_runs_the_suite(self):
+        """A pin file nothing installs agrees with every floor and runs nothing.
+
+        Each command has to BEGIN a line. The job echoes the command it runs,
+        so a substring check passed with the `python tools/run_tests.py` line
+        deleted: the echo above it still held the words (falsified on the
+        PyMuPDF version of this test, 2026-10-31).
         """
         commands = [ln.strip() for ln in self._job().splitlines()]
         for command, why in (
-            ('echo "PyMuPDF==${PYMUPDF_FLOOR}" > ',
-             "the pin is no longer written out as an exact constraint"),
-            ("pip install -r requirements.txt -c ",
-             "requirements.txt is no longer installed under the constraint"),
-            ('test "$installed" = "$PYMUPDF_FLOOR"',
-             "nothing confirms that the installed PyMuPDF is the pin"),
+            (f"pip install -r requirements.txt -c {self.PINS}",
+             "requirements.txt is no longer installed under the pins"),
+            (f'pip install -c {self.PINS} "pydrc[dxf]',
+             "the rule library is no longer installed under the pins, so a "
+             "PyDRC that declares a newer PyYAML would lift that floor without "
+             "a word"),
+            (f"python tools/check_floors.py {self.PINS}",
+             "nothing confirms that the installed versions are the pins"),
             ('ARGS="--strict"',
              "the floor run no longer fails when Qt is missing"),
             ("python tools/run_tests.py $ARGS",
@@ -514,6 +552,92 @@ class TestThePyMuPDFFloorIsExercised(unittest.TestCase):
         ):
             self.assertTrue(any(c.startswith(command) for c in commands),
                             f"{self.JOB}: {why} (no line begins {command!r})")
+
+    def test_the_job_runs_the_interpreter_the_documents_promise(self):
+        """Some floors have no wheel on a newer interpreter: PyYAML 6.0
+        publishes them up to Python 3.11 and Pillow 10.0.0 up to 3.12. The
+        floors are a claim about the minimum the documents promise, so that is
+        where they are installed."""
+        found = set()
+        for doc in ("CONTRIBUTING.md", "README.md"):
+            with open(os.path.join(HERE, doc), encoding="utf-8") as fh:
+                found |= set(re.findall(r"Python \*{0,2}(\d+\.\d+)\+", fh.read()))
+        self.assertEqual(len(found), 1, f"the documents promise {found}")
+        pins = re.findall(r'python-version:\s*"([^"]+)"', self._job())
+        self.assertEqual(pins, [next(iter(found))],
+                         f"the {self.JOB} job runs {pins}, not the "
+                         f"Python {next(iter(found))}+ the documents promise")
+
+
+class TestCheckFloors(unittest.TestCase):
+    """`tools/check_floors.py` is the floor job's oracle, so it is tested here
+    rather than trusted: a check that reported every pin installed over an
+    empty file would let a job that installed nothing pass as a floor run."""
+
+    def setUp(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "check_floors", os.path.join(HERE, "tools", "check_floors.py"))
+        self.tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.tool)
+
+    def _main(self, text):
+        import contextlib
+        import io
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "floors.txt")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(text)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = self.tool.main([path])
+        return code, out.getvalue()
+
+    def test_a_release_compares_as_pep_440_compares_it(self):
+        r = self.tool.release
+        self.assertEqual(r("6.6"), r("6.6.0"))
+        self.assertNotEqual(r("1.25.4"), r("1.25.40"))
+        self.assertNotEqual(r("6.0"), r("6.0.1"))
+        self.assertIsNone(r("6.0.1rc1"), "a pre-release is not the floor")
+
+    def test_three_outcomes_are_told_apart(self):
+        from importlib import metadata
+        installed = {"a": "1.2.0", "b": "2.0"}
+
+        def version_of(name):
+            if name not in installed:
+                raise metadata.PackageNotFoundError(name)
+            return installed[name]
+
+        at, elsewhere, absent = self.tool.check(
+            [("a", "1.2"), ("b", "1.9"), ("c", "3.0")], version_of)
+        self.assertEqual((len(at), len(elsewhere), len(absent)), (1, 1, 1))
+
+    def test_an_empty_file_is_refused_rather_than_reported_clean(self):
+        code, out = self._main("# every pin was deleted\n\n")
+        self.assertEqual(code, 2, out)
+        self.assertIn("names no pin", out)
+
+    def test_a_line_it_cannot_read_is_refused(self):
+        code, out = self._main("PySide6>=6.6\n")
+        self.assertEqual(code, 2, out)
+
+    def test_a_pin_not_installed_fails(self):
+        code, out = self._main("no-such-distribution-here==1.0\n")
+        self.assertEqual(code, 1, out)
+        self.assertIn("1 not installed", out)
+
+    def test_it_reads_every_pin_in_the_job_s_file(self):
+        """The tool and the gate parse the same file separately. This asserts
+        the tool reads every line the gate does, so the job cannot confirm a
+        subset of the pins and report the rest as checked."""
+        rel = os.path.join(*TestTheFloorsAreExercised.PINS.split("/"))
+        with open(os.path.join(HERE, rel), encoding="utf-8") as fh:
+            pins, unreadable = self.tool.read_pins(fh.read())
+        self.assertEqual(unreadable, [])
+        self.assertGreaterEqual(len(pins), 8)
+        self.assertEqual(len(pins), len(_lines(rel)))
 
 
 if __name__ == "__main__":
