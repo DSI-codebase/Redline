@@ -8,7 +8,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 from app.extraction.component_parser import (
     DEFAULT_FAMILY_CODES, ComponentConfig, ComponentParser, reclassify,
@@ -60,10 +60,10 @@ class TestSingleSidecar(unittest.TestCase):
         self.assertFalse(storage.is_marked_pdf("/d/foo.pdf"))
 
     def _make_pdf(self, path):
-        d = fitz.open(); d.new_page(width=400, height=300); d.save(path); d.close()
+        d = pymupdf.open(); d.new_page(width=400, height=300); d.save(path); d.close()
 
     def _annot_count(self, path):
-        d = fitz.open(path)
+        d = pymupdf.open(path)
         n = sum(len(list(pg.annots() or [])) for pg in d)
         d.close()
         return n
@@ -107,7 +107,7 @@ class TestSingleSidecar(unittest.TestCase):
 
 class TestCornerSheet(unittest.TestCase):
     def test_lesser_of_two_corner_numbers(self):
-        d = fitz.open(); pg = d.new_page(width=792, height=612)
+        d = pymupdf.open(); pg = d.new_page(width=792, height=612)
         # two numbers in the bottom-right corner: sheet 902 + total 920
         pg.insert_text((720, 560), "902")
         pg.insert_text((720, 580), "920")
@@ -117,13 +117,13 @@ class TestCornerSheet(unittest.TestCase):
         d.close()
 
     def test_keyword_still_wins(self):
-        d = fitz.open(); pg = d.new_page(width=792, height=612)
+        d = pymupdf.open(); pg = d.new_page(width=792, height=612)
         pg.insert_text((300, 300), "SHEET 261")
         self.assertEqual(read_titleblock_sheet_label(d[0]), "261")
         d.close()
 
     def test_empty_corner_returns_none(self):
-        d = fitz.open(); d.new_page(width=792, height=612)
+        d = pymupdf.open(); d.new_page(width=792, height=612)
         self.assertIsNone(_corner_sheet_label(d[0]))
         d.close()
 

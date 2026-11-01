@@ -7,7 +7,7 @@ what makes a cross-reference checkable at all.
 
 import unittest
 
-import fitz
+import pymupdf
 
 from app.extraction.text_extract import extract_tokens
 from app.extraction.rung import (RungConfig, extract_rungs, gutter_columns,
@@ -36,7 +36,7 @@ def _place(page, display_x, display_y, text):
 
 def _ladder(sheet="300", lines=6, columns=1, extra=()):
     """A sheet with a numbered gutter, drawn the way a real plot draws it."""
-    doc = fitz.open()
+    doc = pymupdf.open()
     page = doc.new_page(width=W, height=H)
     for col in range(columns):
         base = col * 40
@@ -235,7 +235,7 @@ class TestSignalArrows(unittest.TestCase):
 class TestTitleBlock(unittest.TestCase):
     def _page(self, this_sheet, next_sheet):
         """A title block with its labels above their values, as plotted."""
-        doc = fitz.open()
+        doc = pymupdf.open()
         page = doc.new_page(width=W, height=H)
         # Labels in one row, their values in the row just beneath.
         _place(page, 1000.0, 740.0, "THIS SHEET:")
@@ -255,7 +255,7 @@ class TestTitleBlock(unittest.TestCase):
         doc.close()
 
     def test_missing_fields_are_blank_not_guessed(self):
-        doc = fitz.open()
+        doc = pymupdf.open()
         page = doc.new_page(width=W, height=H)
         page.insert_text((60.0, 1080.0), "NO TITLE BLOCK HERE", rotate=270)
         page.set_rotation(270)
@@ -269,7 +269,7 @@ class TestTitleBlock(unittest.TestCase):
         # A naive "value near the label" search picks up wire numbers from the
         # body of the drawing; the search is confined to the title block.
         doc, page = self._page("003", "004")
-        doc2 = fitz.open()
+        doc2 = pymupdf.open()
         page2 = doc2.new_page(width=W, height=H)
         _place(page2, 200.0, 200.0, "THIS SHEET: 999")
         page2.set_rotation(270)

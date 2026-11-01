@@ -9,7 +9,7 @@ directions are tested here.
 
 import unittest
 
-import fitz
+import pymupdf
 
 from app.extraction.text_extract import extract_tokens
 from app.extraction.wire_parser import Token
@@ -28,7 +28,7 @@ IO_ROW = "600030   600070   600110   600150   600190   600230   600270"
 
 
 def _page(lines):
-    doc = fitz.open()
+    doc = pymupdf.open()
     page = doc.new_page(width=1224.0, height=792.0)
     for i, line in enumerate(lines):
         page.insert_text((60.0, 100.0 + i * 100.0), line, fontsize=8)
@@ -132,7 +132,7 @@ class TestTitleBlockMasking(unittest.TestCase):
     """
 
     def _page(self):
-        doc = fitz.open()
+        doc = pymupdf.open()
         page = doc.new_page(width=1224.0, height=792.0)
         page.insert_text((60.0, 400.0), "300140", fontsize=8)       # drawing
         page.insert_text((950.0, 730.0), "THOMASVILLE,NC, 27022", fontsize=6)
@@ -161,7 +161,7 @@ class TestTitleBlockMasking(unittest.TestCase):
     def test_the_ladder_bottom_rows_stay_unmasked(self):
         # A two-column ladder's last lines sit around 0.85 of the page height;
         # the mask must start below them.
-        doc = fitz.open()
+        doc = pymupdf.open()
         page = doc.new_page(width=1224.0, height=792.0)
         page.insert_text((900.0, 792.0 * 0.85), "601740", fontsize=8)
         tokens = extract_tokens(page, 0)

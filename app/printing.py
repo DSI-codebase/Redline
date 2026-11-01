@@ -334,15 +334,15 @@ def min_line_width(px):
     The setting is *global* to MuPDF, so it is always restored — leaking it
     would silently thicken the on-screen viewer as well.
     """
-    import fitz
+    import pymupdf
     if not px or px <= 0:
         yield
         return
     try:
-        fitz.TOOLS.set_graphics_min_line_width(float(px))
+        pymupdf.TOOLS.set_graphics_min_line_width(float(px))
         yield
     finally:
-        fitz.TOOLS.set_graphics_min_line_width(0.0)
+        pymupdf.TOOLS.set_graphics_min_line_width(0.0)
 
 
 def is_preview(painter):
@@ -389,7 +389,7 @@ def paint_page(painter, page, target, dpi=None, min_line_pt=0.0):
     ``PRINT_LINE_WEIGHTS``). It is a floor, not a multiplier: geometry
     already heavier is untouched, and text is never affected.
     """
-    import fitz
+    import pymupdf
     from PySide6.QtGui import QImage, QPainter
     from PySide6.QtCore import QRectF
     r = page.rect
@@ -408,7 +408,7 @@ def paint_page(painter, page, target, dpi=None, min_line_pt=0.0):
             # The floor is scaled to *this* raster so the preview shows the
             # same relative weight the print will have.
             with min_line_width(min_line_pt * pscale):
-                pm = page.get_pixmap(matrix=fitz.Matrix(pscale, pscale),
+                pm = page.get_pixmap(matrix=pymupdf.Matrix(pscale, pscale),
                                      alpha=False, annots=True)
             # samples_mv is a view on the pixmap; copy() owns its pixels, so
             # the image outlives pm without duplicating the buffer twice
@@ -429,7 +429,7 @@ def paint_page(painter, page, target, dpi=None, min_line_pt=0.0):
         s = scale * float(dpi) / float(logical)
     else:
         s = scale                     # raster == logical px
-    mat = fitz.Matrix(s, s)
+    mat = pymupdf.Matrix(s, s)
     origin = (r * mat).irect          # where the whole page starts, scaled
     W = max(1, origin.width)
     H = max(1, origin.height)
@@ -452,8 +452,8 @@ def paint_page(painter, page, target, dpi=None, min_line_pt=0.0):
             bot_px = min(H, y + rows + BAND_MARGIN)
             pm = page.get_pixmap(
                 matrix=mat, alpha=False, annots=True,
-                clip=fitz.Rect(r.x0, r.y0 + top_px / s,
-                               r.x1, r.y0 + bot_px / s))
+                clip=pymupdf.Rect(r.x0, r.y0 + top_px / s,
+                                  r.x1, r.y0 + bot_px / s))
             # samples_mv is a view on the pixmap's own buffer rather than a copy
             # of it, and the single copy() below both trims the band and detaches
             # it — so one band costs one extra bitmap, not three.

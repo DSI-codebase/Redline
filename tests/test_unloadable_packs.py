@@ -125,8 +125,8 @@ class _Settings:
 
 
 def _blank_pdf(path):
-    import fitz
-    doc = fitz.open()
+    import pymupdf
+    doc = pymupdf.open()
     doc.new_page()
     doc.save(path)
     doc.close()

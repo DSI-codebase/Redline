@@ -13,10 +13,10 @@ from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QImage, QPixmap, QColor, QBrush, QPen
 from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsPixmapItem
 
-import fitz
+import pymupdf
 
 
-def pixmap_to_qimage(pix: "fitz.Pixmap") -> QImage:
+def pixmap_to_qimage(pix: "pymupdf.Pixmap") -> QImage:
     """Convert a PyMuPDF pixmap to a (deep-copied) QImage."""
     fmt = QImage.Format_RGBA8888 if pix.alpha else QImage.Format_RGB888
     img = QImage(pix.samples, pix.width, pix.height, pix.stride, fmt)

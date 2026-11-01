@@ -13,7 +13,7 @@ import shutil
 import tempfile
 import unittest
 
-import fitz
+import pymupdf
 
 from app import audit
 from app.audit.findings import AuditRun, UNNUMBERED_NAMED
@@ -94,7 +94,7 @@ class TestTheReportsSayIt(unittest.TestCase):
 
 
 def _drawing(path):
-    doc = fitz.open()
+    doc = pymupdf.open()
     for title, number in (("TITLE PAGE", "EL2507777-000"),
                           ("NOTES", ""),
                           ("24 VDC DISTRIBUTION", "EL2507777-400")):

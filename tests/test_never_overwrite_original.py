@@ -26,7 +26,7 @@ import os
 import tempfile
 import unittest
 
-import fitz
+import pymupdf
 
 from app.model.annotations import Annotation, KIND_RECT
 from app.model.document import Document
@@ -43,7 +43,7 @@ def _sha(path):
 
 
 def _pdf(path, pages=3, label="SHEET"):
-    doc = fitz.open()
+    doc = pymupdf.open()
     for i in range(pages):
         doc.new_page().insert_text((72, 100), f"{label} {i + 1}")
     doc.save(path)
@@ -52,14 +52,14 @@ def _pdf(path, pages=3, label="SHEET"):
 
 
 def _annots(path):
-    doc = fitz.open(path)
+    doc = pymupdf.open(path)
     n = sum(len(list(page.annots() or [])) for page in doc)
     doc.close()
     return n
 
 
 def _pages(path):
-    doc = fitz.open(path)
+    doc = pymupdf.open(path)
     n = doc.page_count
     doc.close()
     return n
@@ -68,7 +68,7 @@ def _pages(path):
 class _Base(unittest.TestCase):
     """Every Document opened here is closed in tearDown.
 
-    Not tidiness -- on Windows an open `fitz.Document` holds a lock, so a
+    Not tidiness -- on Windows an open `pymupdf.Document` holds a lock, so a
     leaked one makes `os.remove` raise `WinError 32` and makes a save onto that
     path raise `cannot remove file ... Permission denied` from inside PyMuPDF.
     Linux allows both, so a leak is INVISIBLE to a local run and fails only on
@@ -106,7 +106,7 @@ class _Base(unittest.TestCase):
             self._docs.remove(doc)
 
     def assertNoOpenHandle(self, path):
-        """No `fitz.Document` this fixture opened is still holding ``path``.
+        """No `pymupdf.Document` this fixture opened is still holding ``path``.
 
         THE POINT OF THIS ASSERTION IS THAT IT RUNS ON LINUX. The consequence
         of a leaked handle is Windows-only -- `os.remove` raises WinError 32,

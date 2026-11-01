@@ -4,7 +4,7 @@ import os
 import tempfile
 import unittest
 
-import fitz
+import pymupdf
 
 from app.model.annotations import (
     Annotation, KIND_HIGHLIGHT, KIND_PEN, KIND_COMMENT, KIND_TEXTBOX, KIND_RECT,
@@ -17,7 +17,7 @@ from app.model.document import Document
 
 
 def _blank_pdf(path):
-    doc = fitz.open()
+    doc = pymupdf.open()
     doc.new_page(width=600, height=400)
     doc.save(path)
     doc.close()
@@ -42,14 +42,14 @@ class TestStorage(unittest.TestCase):
         ]
 
     def test_roundtrip_all_kinds(self):
-        doc = fitz.open(self.src)
+        doc = pymupdf.open(self.src)
         n = write_annotations_to_pdf(doc, self.anns)
         self.assertEqual(n, len(self.anns))
         mp = marked_pdf_path(self.src)
         doc.save(mp)
         doc.close()
 
-        doc2 = fitz.open(mp)
+        doc2 = pymupdf.open(mp)
         loaded = load_pdf_annotations(doc2, DEFAULT_IGNORE_PATTERNS)
         self.assertEqual(len(loaded), len(self.anns))
         by_kind = {a.kind: a for a in loaded}
@@ -58,21 +58,21 @@ class TestStorage(unittest.TestCase):
         self.assertEqual(by_kind[KIND_PEN].author, "Eli")
 
     def test_id_linkage_preserved(self):
-        doc = fitz.open(self.src)
+        doc = pymupdf.open(self.src)
         write_annotations_to_pdf(doc, self.anns)
         mp = marked_pdf_path(self.src)
         doc.save(mp)
         doc.close()
-        loaded = load_pdf_annotations(fitz.open(mp), DEFAULT_IGNORE_PATTERNS)
+        loaded = load_pdf_annotations(pymupdf.open(mp), DEFAULT_IGNORE_PATTERNS)
         self.assertEqual({a.id for a in self.anns}, {a.id for a in loaded})
 
     def test_shx_filter_flags_ignored(self):
-        doc = fitz.open(self.src)
+        doc = pymupdf.open(self.src)
         write_annotations_to_pdf(doc, self.anns)
         mp = marked_pdf_path(self.src)
         doc.save(mp)
         doc.close()
-        loaded = load_pdf_annotations(fitz.open(mp), DEFAULT_IGNORE_PATTERNS)
+        loaded = load_pdf_annotations(pymupdf.open(mp), DEFAULT_IGNORE_PATTERNS)
         shx = [a for a in loaded if "SHX" in a.text]
         self.assertTrue(shx and shx[0].ignored)
         # non-junk not flagged
@@ -108,13 +108,13 @@ class TestStorage(unittest.TestCase):
         round-trip back to the same (visual) coordinates."""
         from app.model.annotations import KIND_RECT, KIND_PEN
         rot_src = os.path.join(self.tmp, "rot.pdf")
-        d = fitz.open()
+        d = pymupdf.open()
         pg = d.new_page(width=792, height=1224)   # portrait
         pg.set_rotation(270)                       # -> visual rect 1224 x 792
         d.save(rot_src)
         d.close()
 
-        chk = fitz.open(rot_src)
+        chk = pymupdf.open(rot_src)
         self.assertEqual(chk[0].rotation, 270)
         self.assertAlmostEqual(chk[0].rect.width, 1224, delta=1)
         chk.close()
@@ -125,13 +125,13 @@ class TestStorage(unittest.TestCase):
             Annotation(page=0, kind=KIND_RECT, rect=rect_v, color=(1, 0, 0), width=1),
             Annotation(page=0, kind=KIND_PEN, points=pts_v, color=(0, 0, 1), width=1),
         ]
-        d = fitz.open(rot_src)
+        d = pymupdf.open(rot_src)
         write_annotations_to_pdf(d, anns)
         mp = marked_pdf_path(rot_src)
         d.save(mp)
         d.close()
 
-        loaded = load_pdf_annotations(fitz.open(mp), DEFAULT_IGNORE_PATTERNS)
+        loaded = load_pdf_annotations(pymupdf.open(mp), DEFAULT_IGNORE_PATTERNS)
         rect = [a for a in loaded if a.kind == KIND_RECT][0].rect
         for got, want in zip(rect, rect_v):
             self.assertAlmostEqual(got, want, delta=2.0)  # delta covers border width
@@ -146,12 +146,12 @@ class TestStorage(unittest.TestCase):
         self.assertTrue(iso.startswith("2026-06-"))
 
     def test_comment_exports_genuine_popup(self):
-        doc = fitz.open(self.src)
+        doc = pymupdf.open(self.src)
         write_annotations_to_pdf(doc, [self.anns[2]])  # the comment
         mp = marked_pdf_path(self.src)
         doc.save(mp)
         doc.close()
-        d = fitz.open(mp)
+        d = pymupdf.open(mp)
         notes = [a for a in d[0].annots() if a.type[1] == "Text"]
         self.assertTrue(notes)
         self.assertEqual(notes[0].info.get("content"), "needs review")

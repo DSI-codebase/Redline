@@ -6,13 +6,13 @@ the split, both going through read_region_text, always agree.
 
 import unittest
 
-import fitz
+import pymupdf
 
 from app.tools import pdf_ops as ops
 
 
 def _doc(rotation, number="305"):
-    d = fitz.open()
+    d = pymupdf.open()
     p = d.new_page(width=612, height=792)
     p.insert_text((480, 760), number)
     if rotation:
@@ -24,7 +24,7 @@ def _viewer_box(page, number):
     """The box the viewer's region-pick emits over `number`: the word's bbox
     (get_text space) mapped into visual coords via rotation_matrix."""
     w = next(w for w in page.get_text("words") if number in w[4])
-    vis = fitz.Rect(*w[:4]) * page.rotation_matrix
+    vis = pymupdf.Rect(*w[:4]) * page.rotation_matrix
     vis.normalize()
     return (vis.x0 - 2, vis.y0 - 2, vis.x1 + 2, vis.y1 + 2)
 
@@ -62,7 +62,7 @@ class TestSheetRegionRead(unittest.TestCase):
         d = _doc(0, number="77")
         box = _viewer_box(d[0], "77")
         self.assertEqual(ops.read_region_text(d[0], tuple(box)).strip(), "77")
-        self.assertEqual(ops.read_region_text(d[0], fitz.Rect(*box)).strip(), "77")
+        self.assertEqual(ops.read_region_text(d[0], pymupdf.Rect(*box)).strip(), "77")
         d.close()
 
 

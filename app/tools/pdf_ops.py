@@ -15,7 +15,7 @@ import sys
 from dataclasses import dataclass
 from typing import Callable, Iterable, Optional
 
-import fitz  # PyMuPDF
+import pymupdf
 
 # The one guard, imported rather than reimplemented. A page tool has no Document
 # and no sidecar, so it can only ask "is this my own input" -- but the ANSWER has
@@ -149,7 +149,7 @@ def region_for_page(regions: Iterable[SheetRegion], page: int) -> Optional[Sheet
     return found
 
 
-def extract_sheet_numbers(doc: "fitz.Document", regions: Iterable[SheetRegion],
+def extract_sheet_numbers(doc: "pymupdf.Document", regions: Iterable[SheetRegion],
                           mode: str = SHEET_FIRST_NUMBER, ocr: bool = False,
                           ai: bool = False, ai_key: str = "",
                           ai_model: str = "claude-opus-4-8",
@@ -184,7 +184,7 @@ def read_region_text(page, rect, ocr: bool = False, ai: bool = False,
                      ai_key: str = "", ai_model: str = "") -> str:
     """Read the raw text inside a title-block box on one page.
 
-    ``rect`` (a ``fitz.Rect`` or an ``(x0, y0, x1, y1)`` tuple) is the viewer's
+    ``rect`` (a ``pymupdf.Rect`` or an ``(x0, y0, x1, y1)`` tuple) is the viewer's
     box in **visual** (rotated) page coordinates — the same space as
     ``page.rect`` and ``get_pixmap(clip=...)``. PyMuPDF's ``get_text(clip=...)``
     wants the clip in the page's *unrotated* coordinate space, so the visual box
@@ -197,7 +197,7 @@ def read_region_text(page, rect, ocr: bool = False, ai: bool = False,
     (which AutoCAD plots almost always are) even though the split read fine.
     Returns the raw string.
     """
-    rect_vis = rect if isinstance(rect, fitz.Rect) else fitz.Rect(*rect)
+    rect_vis = rect if isinstance(rect, pymupdf.Rect) else pymupdf.Rect(*rect)
     text = ""
     try:
         clip = rect_vis * page.derotation_matrix   # get_text wants unrotated coords
@@ -220,7 +220,7 @@ def _ocr_text_in_rect(page, rect, zoom: float = 3.0) -> str:
         import pytesseract
         from PIL import Image
         import io
-        pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), clip=rect, alpha=False)
+        pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), clip=rect, alpha=False)
         img = Image.open(io.BytesIO(pix.tobytes("png")))
         return (pytesseract.image_to_string(img) or "").strip()
     except Exception:
@@ -232,7 +232,7 @@ def _ai_text_in_rect(page, rect, api_key, model) -> str:
         from ..extraction import claude_api
         if not claude_api.available(api_key):
             return ""
-        pix = page.get_pixmap(matrix=fitz.Matrix(3.0, 3.0), clip=rect, alpha=False)
+        pix = page.get_pixmap(matrix=pymupdf.Matrix(3.0, 3.0), clip=rect, alpha=False)
         rows = claude_api.read_text_region(pix, api_key=api_key, model=model)
         return (rows or "").strip()
     except Exception:
@@ -254,7 +254,7 @@ def split_pdf(src: str, out_dir: str, naming: str = "page",
     in ``regions`` are read to get the sheet id; duplicates get a ``_2`` suffix.
     """
     os.makedirs(out_dir, exist_ok=True)
-    doc = fitz.open(src)
+    doc = pymupdf.open(src)
     try:
         base = _base_name(src)
         n = doc.page_count
@@ -285,7 +285,7 @@ def split_pdf(src: str, out_dir: str, naming: str = "page",
                 name = f"{base}-sheet{tag}{suffix}.pdf"
             else:
                 name = f"{base}-page{(i + 1):0{width}d}.pdf"
-            out = fitz.open()
+            out = pymupdf.open()
             out.insert_pdf(doc, from_page=i, to_page=i)
             path = os.path.join(out_dir, name)
             _guard_out(path, src)
@@ -321,12 +321,12 @@ def extract_pages(src: str, out: str, pages, merge: bool = True,
         raise ValueError("No pages selected.")
     # MEASURED to destroy its own source: extract_pages(src, src, [0]) took a
     # four-page drawing to one page and returned normally. It builds a NEW
-    # fitz.Document from the pages it read, so PyMuPDF's own
+    # pymupdf.Document from the pages it read, so PyMuPDF's own
     # "save to original must be incremental" check never fires -- that check
     # only sees a save from the document that opened the file.
     if merge:
         _guard_out(out, src)          # `out` is a FOLDER when merge=False
-    doc = fitz.open(src)
+    doc = pymupdf.open(src)
     try:
         n = doc.page_count
         ordered = [p for p in ordered if 0 <= p < n]
@@ -336,7 +336,7 @@ def extract_pages(src: str, out: str, pages, merge: bool = True,
         width = max(2, len(str(n)))
         total = len(ordered)
         if merge:
-            picked = fitz.open()
+            picked = pymupdf.open()
             for i, p in enumerate(ordered):
                 if cancel is not None and cancel():
                     break
@@ -353,7 +353,7 @@ def extract_pages(src: str, out: str, pages, merge: bool = True,
                 break
             if progress is not None:
                 progress(i + 1, total)
-            one = fitz.open()
+            one = pymupdf.open()
             one.insert_pdf(doc, from_page=p, to_page=p)
             path = os.path.join(out, f"{base}-page{(p + 1):0{width}d}.pdf")
             _guard_out(path, src)
@@ -388,7 +388,7 @@ def split_ranges(src: str, out: str, ranges, merge: bool = False,
         norm.append((a, b))
     if not norm:
         raise ValueError("No ranges defined.")
-    doc = fitz.open(src)
+    doc = pymupdf.open(src)
     try:
         n = doc.page_count
         norm = [(max(0, a), min(n - 1, b)) for a, b in norm if a < n and b >= 0]
@@ -398,7 +398,7 @@ def split_ranges(src: str, out: str, ranges, merge: bool = False,
         width = max(2, len(str(n)))
         total = len(norm)
         if merge:
-            merged = fitz.open()
+            merged = pymupdf.open()
             for i, (a, b) in enumerate(norm):
                 if cancel is not None and cancel():
                     break
@@ -415,7 +415,7 @@ def split_ranges(src: str, out: str, ranges, merge: bool = False,
                 break
             if progress is not None:
                 progress(i + 1, total)
-            part = fitz.open()
+            part = pymupdf.open()
             part.insert_pdf(doc, from_page=a, to_page=b)
             name = (f"{base}-range{(a + 1):0{width}d}-{(b + 1):0{width}d}.pdf"
                     if b > a else f"{base}-page{(a + 1):0{width}d}.pdf")
@@ -456,7 +456,7 @@ def combine_pdfs(items, out_path: str, progress: Optional[Callable] = None,
     # fires. Every input is checked, not just the first: the dialog can add a
     # whole folder, and the output is typed by hand.
     _guard_out(out_path, *files)
-    merged = fitz.open()
+    merged = pymupdf.open()
     try:
         total = len(files)
         for i, f in enumerate(files):
@@ -464,7 +464,7 @@ def combine_pdfs(items, out_path: str, progress: Optional[Callable] = None,
                 break
             if progress is not None:
                 progress(i + 1, total)
-            src = fitz.open(f)
+            src = pymupdf.open(f)
             merged.insert_pdf(src)
             src.close()
         merged.save(out_path)
@@ -479,10 +479,10 @@ def combine_pdfs(items, out_path: str, progress: Optional[Callable] = None,
 def insert_pdf(target: str, insert: str, out_path: str, index: int) -> str:
     """Insert ``insert`` into ``target`` before 0-based ``index`` (0..len)."""
     _guard_out(out_path, target, insert)
-    doc = fitz.open(target)
+    doc = pymupdf.open(target)
     try:
         index = max(0, min(int(index), doc.page_count))
-        ins = fitz.open(insert)
+        ins = pymupdf.open(insert)
         doc.insert_pdf(ins, start_at=index)
         ins.close()
         doc.save(out_path)
@@ -495,11 +495,11 @@ def swap_page(src: str, new_page_pdf: str, out_path: str, index: int) -> str:
     """Replace the page at 0-based ``index`` with the (single) page of
     ``new_page_pdf``."""
     _guard_out(out_path, src, new_page_pdf)
-    doc = fitz.open(src)
+    doc = pymupdf.open(src)
     try:
         if not (0 <= index < doc.page_count):
             raise IndexError("Page index out of range.")
-        new = fitz.open(new_page_pdf)
+        new = pymupdf.open(new_page_pdf)
         if new.page_count != 1:
             new.close()
             raise ValueError("The replacement PDF must have exactly one page.")
@@ -515,7 +515,7 @@ def swap_page(src: str, new_page_pdf: str, out_path: str, index: int) -> str:
 def delete_pages(src: str, out_path: str, spec: str) -> str:
     """Remove the pages named by a 1-based spec like ``"1,3,5-7"``."""
     _guard_out(out_path, src)
-    doc = fitz.open(src)
+    doc = pymupdf.open(src)
     try:
         pages = parse_page_ranges(spec, max_page=doc.page_count)
         if not pages:
@@ -533,7 +533,7 @@ def rotate_pdf(src: str, out_path: str, angle: int, pages=None) -> str:
     """Rotate pages by ``angle`` (added to current rotation). ``pages`` is an
     optional iterable of 0-based indices (default: all)."""
     _guard_out(out_path, src)
-    doc = fitz.open(src)
+    doc = pymupdf.open(src)
     try:
         targets = range(doc.page_count) if pages is None else pages
         for i in targets:
@@ -556,7 +556,7 @@ def rotate_pdf_map(src: str, out_path: str, page_angles: dict,
     the visual rotate tool, where each page can carry its own ↺/↻ preview.
     """
     _guard_out(out_path, src)
-    doc = fitz.open(src)
+    doc = pymupdf.open(src)
     try:
         items = [(int(i), int(a)) for i, a in page_angles.items()
                  if a and 0 <= int(i) < doc.page_count]
@@ -583,7 +583,7 @@ def crop_regions_to_png(src: str, out_dir: str, regions_by_page: dict,
     """Render each region (``{page_index: [rect, ...]}``, rects in page points)
     to a PNG.  Returns the written paths."""
     os.makedirs(out_dir, exist_ok=True)
-    doc = fitz.open(src)
+    doc = pymupdf.open(src)
     try:
         base = _base_name(src)
         written: list = []
@@ -595,8 +595,8 @@ def crop_regions_to_png(src: str, out_dir: str, regions_by_page: dict,
             for ridx, rect in enumerate(regions_by_page[pg], 1):
                 if cancel is not None and cancel():
                     return written
-                pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom),
-                                      clip=fitz.Rect(*rect), alpha=False)
+                pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom),
+                                      clip=pymupdf.Rect(*rect), alpha=False)
                 path = os.path.join(out_dir, f"{base}_pg{pg + 1}_r{ridx}.png")
                 # A .png cannot be a PDF this app protects and cannot be the
                 # source, so this can never fire -- present so the AST gate

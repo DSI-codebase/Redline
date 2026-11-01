@@ -12,7 +12,7 @@ covered a rotated page.
 
 import unittest
 
-import fitz
+import pymupdf
 
 from app.extraction.text_extract import extract_tokens
 from app.extraction.sheet_number import (
@@ -21,7 +21,7 @@ from app.extraction.sheet_number import (
 
 def _rotated_page(rotation, entries, width=792.0, height=1224.0):
     """A page carrying ``(text, x, y)`` in unrotated space, then rotated."""
-    doc = fitz.open()
+    doc = pymupdf.open()
     page = doc.new_page(width=width, height=height)
     for text, x, y in entries:
         page.insert_text((x, y), text)
@@ -46,7 +46,7 @@ class TestTokenCoordinates(unittest.TestCase):
         doc, page = _rotated_page(270, [("TAG", 100.0, 900.0)])
         token = extract_tokens(page, 0)[0]
         raw = [w for w in page.get_text("words") if w[4] == "TAG"][0]
-        want = (fitz.Rect(raw[0], raw[1], raw[2], raw[3]) * page.rotation_matrix).normalize()
+        want = (pymupdf.Rect(raw[0], raw[1], raw[2], raw[3]) * page.rotation_matrix).normalize()
         self.assertAlmostEqual(token.x, want.x0, places=3)
         self.assertAlmostEqual(token.y, want.y0, places=3)
         doc.close()

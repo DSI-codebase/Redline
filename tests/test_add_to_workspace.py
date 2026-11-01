@@ -29,7 +29,7 @@ from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 from app.model import drawing_copy as C
 from app.model import workspaces as W
@@ -47,7 +47,7 @@ _KEYS = ("recent/files", "recent/opened", "recent/pinned", "recent/max",
 
 def _pdf(path, text="E-101"):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    d = fitz.open()
+    d = pymupdf.open()
     d.new_page(width=300, height=200).insert_text((40, 40), text)
     d.save(path)
     d.close()
