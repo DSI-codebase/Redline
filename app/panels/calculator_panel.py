@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFormLayout,
                                QTableWidgetItem, QTreeWidget, QTreeWidgetItem,
                                QVBoxLayout, QWidget)
 
+from .. import text_scale
 from ..calculators import render, specs, status
 
 
@@ -106,7 +107,8 @@ class CalculatorPanel(QWidget):
 
         self.output = QPlainTextEdit()
         self.output.setReadOnly(True)
-        self.output.setFont(QFontDatabase.systemFont(QFontDatabase.FixedFont))
+        text_scale.set_font(self.output,
+                            QFontDatabase.systemFont(QFontDatabase.FixedFont))
         rlay.addWidget(self.output, 3)
         self.split.addWidget(right)
         self.split.setStretchFactor(1, 1)
@@ -297,7 +299,7 @@ class _TableField(QWidget):
         for i, c in enumerate(field.columns):
             if c.hint:
                 self.table.horizontalHeaderItem(i).setToolTip(c.hint)
-        self.table.setMinimumHeight(150)
+        text_scale.sized(self.table, setMinimumHeight=150)
         lay.addWidget(self.table)
         bar = QHBoxLayout()
         self.btn_add = QPushButton("Add row")

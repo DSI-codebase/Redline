@@ -36,6 +36,11 @@ WORKSPACE_RECENT_BOUNDS = (5, 100)
 # the subfolders New workspace… creates (and Add to workspace offers first)
 DEFAULT_QUICK_FOLDERS = ("drawings", "documentation", "notes")
 MAX_RECENT_SEARCHES = 10
+# Settings ▸ General ▸ Text size, as a percentage of the platform's own size
+# (app/text_scale.py), the bounds it is held to and the slider's step.
+DEFAULT_TEXT_SCALE = 100
+TEXT_SCALE_BOUNDS = (50, 300)
+TEXT_SCALE_STEP = 5
 
 # Minimum line weight presets for printing, as (label, PDF points).
 #
@@ -121,6 +126,8 @@ DEFAULTS: dict = {
     # Minimum printed line weight, in PDF points (0 = print widths as drawn).
     # See PRINT_LINE_WEIGHTS for why this defaults on.
     "print/min_line_pt": 0.5,
+    # every piece of UI text, as a percentage of the platform's size
+    "ui/text_scale": DEFAULT_TEXT_SCALE,
     # in-document search (Ctrl+F): option toggles + query history
     "search/case": False,
     "search/word": False,
@@ -448,6 +455,15 @@ class AppConfig:
         except (TypeError, ValueError):
             return 0.0
         return v if 0.0 <= v <= 4.0 else 0.0
+
+    # -- appearance ----------------------------------------------------------
+
+    @property
+    def text_scale(self) -> int:
+        """UI text size as a percentage of the platform's (Settings ▸ General),
+        held to TEXT_SCALE_BOUNDS. Unreadable falls back to 100."""
+        lo, hi = TEXT_SCALE_BOUNDS
+        return max(lo, min(hi, int(self.get("ui/text_scale"))))
 
     # -- derived config objects ---------------------------------------------
 

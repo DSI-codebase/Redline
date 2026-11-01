@@ -34,7 +34,7 @@ from .dialogs import (
     _fill_swatch, _swatch,
 )
 from .settings_dialog import SettingsDialog
-from . import add_to_workspace, lifecycle, menus, printing, toolbar
+from . import add_to_workspace, lifecycle, menus, printing, text_scale, toolbar
 from .model.annotations import Annotation, KIND_CALLOUT, KIND_TEXTBOX
 from .model.recent import drawing_key
 from .file_view import FileView
@@ -149,6 +149,9 @@ class MainWindow(QMainWindow):
         # default bottom position for tabified docks.
         self.setTabPosition(Qt.AllDockWidgetAreas, QTabWidget.North)
         self.config = AppConfig()
+        # Before any pane is built, so each is built at the saved text size
+        # rather than built at 100% and changed. At 100% this does nothing.
+        text_scale.apply(self.config.text_scale)
         self.document = None
         # What the print-preview toolbar can change and a job reads. One
         # object rather than two attributes, because `app/printing.py` is
@@ -577,6 +580,8 @@ class MainWindow(QMainWindow):
         dlg = SettingsDialog(self.config, self)
         if dlg.exec() == QDialog.Accepted:
             dlg.apply()
+            # every open window and pane, without a restart
+            text_scale.apply(self.config.text_scale)
             self.view.config = self.config
             self.ref_view.config = self.config
             # a changed default takes effect on the next print without a restart

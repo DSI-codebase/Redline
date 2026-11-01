@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QButtonGroup, QFileDialog, QMessageBox, QProgressBar, QSizePolicy,
 )
 
-from .. import theme
+from .. import text_scale, theme
 from ..tools import dialogs as dlg
 from ..tools import pdf_ops as ops
 from ..tools.runner import BackgroundTask
@@ -59,7 +59,7 @@ class ToolsPanel(QWidget):
         self.setObjectName("ToolsWorkspace")
         self.setAcceptDrops(True)
         self._build_ui()
-        self.setStyleSheet(theme.workspace_qss() + theme.grid_qss())
+        text_scale.style(self, theme.workspace_qss() + theme.grid_qss())
         self._select_op("extract")
         self._update_enabled()
 
@@ -83,7 +83,7 @@ class ToolsPanel(QWidget):
 
     def _build_file_bar(self):
         bar = QFrame(); bar.setObjectName("FileBar")
-        bar.setFixedHeight(58)
+        text_scale.sized(bar, setFixedHeight=58)
         h = QHBoxLayout(bar)
         h.setContentsMargins(16, 8, 16, 8)
         self.file_name = QLabel("No PDF loaded"); self.file_name.setObjectName("FileName")
@@ -99,7 +99,7 @@ class ToolsPanel(QWidget):
 
     def _build_rail(self):
         rail = QFrame(); rail.setObjectName("Rail")
-        rail.setFixedWidth(196)
+        text_scale.sized(rail, setFixedWidth=196)
         lay = QVBoxLayout(rail)
         lay.setContentsMargins(8, 12, 8, 12)
         lay.setSpacing(2)
@@ -122,7 +122,7 @@ class ToolsPanel(QWidget):
 
     def _build_options(self):
         panel = QFrame(); panel.setObjectName("Options")
-        panel.setFixedWidth(300)
+        text_scale.sized(panel, setFixedWidth=300)
         lay = QVBoxLayout(panel)
         lay.setContentsMargins(16, 16, 16, 16)
         lay.setSpacing(10)
@@ -214,7 +214,8 @@ class ToolsPanel(QWidget):
         b_sel = QPushButton("From selection"); b_sel.clicked.connect(self._add_range_from_selection)
         add_row.addWidget(b_add); add_row.addWidget(b_sel)
         aw = QWidget(); aw.setLayout(add_row); lay.addWidget(aw)
-        self.range_list = QListWidget(); self.range_list.setMaximumHeight(120)
+        self.range_list = QListWidget()
+        text_scale.sized(self.range_list, setMaximumHeight=120)
         lay.addWidget(self.range_list)
         b_del = QPushButton("Remove selected range"); b_del.clicked.connect(self._remove_range)
         lay.addWidget(b_del)

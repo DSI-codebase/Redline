@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem, QVBoxLayout,
 )
 
+from . import text_scale
 from .extraction import sheet_role
 from .model.annotations import (
     Annotation, KIND_CALLOUT, KIND_COMMENT, KIND_TEXTBOX,
@@ -79,7 +80,7 @@ class TextEditDialog(QDialog):
         self.todo.setChecked(ann.is_todo)
         lay.addWidget(self.todo)
         hint = QLabel("Ctrl+Enter or Shift+Enter to save · Esc to cancel")
-        hint.setStyleSheet("color: gray; font-size: 11px;")
+        text_scale.style(hint, "color: gray; font-size: 11px;")
         lay.addWidget(hint)
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         bb.accepted.connect(self.accept)
@@ -509,12 +510,12 @@ class FillDialog(QDialog):
         self.slider.valueChanged.connect(self._on_slider)
         srow.addWidget(self.slider, 1)
         self.pct = QLabel(f"{self.slider.value()}%")
-        self.pct.setFixedWidth(40)
+        text_scale.sized(self.pct, setFixedWidth=40)
         srow.addWidget(self.pct)
         lay.addLayout(srow)
 
         hint = QLabel("0% = transparent · 100% = opaque cover")
-        hint.setStyleSheet("color: gray; font-size: 11px;")
+        text_scale.style(hint, "color: gray; font-size: 11px;")
         lay.addWidget(hint)
 
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)

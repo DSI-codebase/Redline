@@ -17,10 +17,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog,
     QDialogButtonBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel,
-    QLineEdit, QPlainTextEdit, QPushButton, QSpinBox, QTableWidget,
+    QLineEdit, QPlainTextEdit, QPushButton, QSlider, QSpinBox, QTableWidget,
     QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget,
 )
 
+from . import text_scale
 from .config import AppConfig
 from .extraction import claude_api, jev_api
 
@@ -40,6 +41,8 @@ class SettingsDialog(QDialog):
         f = QFormLayout(gb_id)
         self.name = QLineEdit(config.your_name)
         f.addRow("Your name (commenter):", self.name)
+
+        gb_text = self._build_text_size_group()
 
         # wire fields
         gb_w = QGroupBox("Wire number fields")
@@ -79,7 +82,7 @@ class SettingsDialog(QDialog):
         self.cmp_labels_per = QSpinBox(); self.cmp_labels_per.setRange(1, 99)
         self.cmp_labels_per.setValue(config.component_labels_per_device)
         self.cmp_families = QPlainTextEdit(", ".join(config.component_families()))
-        self.cmp_families.setMaximumHeight(90)
+        text_scale.sized(self.cmp_families, setMaximumHeight=90)
         self.cmp_families.setToolTip(
             "Known device family codes (comma- or newline-separated), e.g. "
             "LT, CR, PB. Labels with codes not listed here are still captured "
@@ -112,7 +115,7 @@ class SettingsDialog(QDialog):
         self.show_ignored = QCheckBox("Show ignored (SHX/AutoCAD junk)")
         self.show_ignored.setChecked(bool(config.get("filter/show_ignored")))
         self.ignore = QPlainTextEdit("\n".join(config.ignore_patterns()))
-        self.ignore.setMaximumHeight(90)
+        text_scale.sized(self.ignore, setMaximumHeight=90)
         fc.addRow(self.treat_todo)
         fc.addRow(self.show_ignored)
         fc.addRow("Ignore patterns (one regex/line):", self.ignore)
@@ -239,7 +242,7 @@ class SettingsDialog(QDialog):
                 v.addWidget(b)
             v.addStretch(1)
             return w
-        tabs.addTab(_page(gb_id, gb_e, gb_c, gb_p), "General")
+        tabs.addTab(_page(gb_id, gb_text, gb_e, gb_c, gb_p), "General")
         tabs.addTab(_page(gb_f, gb_ws), "Files")
         tabs.addTab(_page(gb_w), "Wire numbers")
         tabs.addTab(_page(gb_cmp), "Component labels")
@@ -277,6 +280,7 @@ class SettingsDialog(QDialog):
         c.set_ignore_patterns([l.strip() for l in self.ignore.toPlainText().splitlines() if l.strip()])
         c.set("print/min_line_pt",
               float(self.min_line.currentData() or 0.0))
+        c.set("ui/text_scale", self.text_scale.value())
         c.set("recent/max", self.recent_max.value())
         c.set("workspaces/recent_max", self.ws_recent_max.value())
         c.set_quick_folders(self.quick_folders.text().split(","))
@@ -289,6 +293,61 @@ class SettingsDialog(QDialog):
         c.set("jev/api_key", self.jev_key.text().strip())
         self._apply_audit(c)
         c.sync()
+
+    # -- text size -----------------------------------------------------------
+
+    def _build_text_size_group(self):
+        """The slider, its percentage, a reset, and a line of sample text.
+
+        The sample is drawn at the size the slider names, so the size can be
+        judged before OK. The rest of the app changes on OK, like every other
+        setting here, and Cancel leaves it as it was.
+        """
+        from .config import DEFAULT_TEXT_SCALE, TEXT_SCALE_BOUNDS, TEXT_SCALE_STEP
+        gb = QGroupBox("Text size")
+        v = QVBoxLayout(gb)
+        row = QHBoxLayout()
+        self.text_scale = QSlider(Qt.Horizontal)
+        self.text_scale.setRange(*TEXT_SCALE_BOUNDS)
+        self.text_scale.setSingleStep(TEXT_SCALE_STEP)
+        self.text_scale.setPageStep(25)
+        self.text_scale.setTickPosition(QSlider.TicksBelow)
+        self.text_scale.setTickInterval(25)
+        self.text_scale.setToolTip(
+            "The size of the text in menus, panels and dialogs, as a "
+            f"percentage of the system's ({TEXT_SCALE_BOUNDS[0]}% to "
+            f"{TEXT_SCALE_BOUNDS[1]}%). The drawing is sized by the zoom.")
+        self.text_scale_pct = QLabel()
+        self.text_scale_pct.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.text_scale_pct.setMinimumWidth(
+            self.text_scale_pct.fontMetrics().horizontalAdvance(
+                f"{TEXT_SCALE_BOUNDS[1]}%") + 6)
+        self.btn_text_scale_reset = QPushButton(f"Reset to {DEFAULT_TEXT_SCALE}%")
+        self.btn_text_scale_reset.setToolTip("Back to the system's text size")
+        self.btn_text_scale_reset.clicked.connect(
+            lambda: self.text_scale.setValue(DEFAULT_TEXT_SCALE))
+        row.addWidget(self.text_scale, 1)
+        row.addWidget(self.text_scale_pct)
+        row.addWidget(self.btn_text_scale_reset)
+        v.addLayout(row)
+        self.text_scale_sample = QLabel("Sample: Comments, TODO, Wire Numbers")
+        v.addWidget(self.text_scale_sample)
+        self.text_scale.valueChanged.connect(self._on_text_scale)
+        self.text_scale.setValue(self.config.text_scale)
+        self._on_text_scale(self.text_scale.value())
+        return gb
+
+    def _on_text_scale(self, value: int):
+        from .config import TEXT_SCALE_STEP
+        snapped = round(value / TEXT_SCALE_STEP) * TEXT_SCALE_STEP
+        snapped = max(self.text_scale.minimum(),
+                      min(self.text_scale.maximum(), snapped))
+        if snapped != value:
+            self.text_scale.setValue(snapped)   # re-enters with the snapped value
+            return
+        self.text_scale_pct.setText(f"{value}%")
+        self.text_scale_sample.setFont(
+            text_scale.scaled_font(text_scale.base_font(), value / 100.0))
 
     # -- design rules --------------------------------------------------------
 
@@ -381,7 +440,7 @@ class SettingsDialog(QDialog):
         self.drc_table = table
         self._refill_rules()
 
-        table.setMinimumHeight(220)
+        text_scale.sized(table, setMinimumHeight=220)
         v.addWidget(table)
         v.addWidget(QLabel(
             "Findings are advisory: they identify things to confirm against "
