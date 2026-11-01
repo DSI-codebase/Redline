@@ -42,6 +42,19 @@ its anchor matched once:
 Run against a store seeded with a Recent list and an API key, the hook in
 place leaves the file byte-identical. Without it the gate names `recent/files`
 and `recent/opened` as changed, and the key's value is not in the output.
+
+Falsified 2026-11-01 on Windows, with the first injection: `tests/__init__.py`
+emptied on a throwaway branch from main 221f893, which is the file as it was
+before PR #53 (git's empty blob), the edit asserted by a script before the
+push. In Tests run 41344893116 this module was the only one to fail on each of
+the three windows-latest legs, and all three of its tests failed. The store
+test named `\\HKEY_CURRENT_USER\\Software\\PDFMarkup\\PDFMarkupApp` with
+`recent/files`, `recent/opened`, `ui/geometry` and `ui/window_state` changed,
+so the snapshot child reads the registry the defect writes. Changed rather
+than added: the runner is a fresh machine, and every module before this one
+also ran without the hook and had already written those keys when the first
+snapshot was taken. The three ubuntu-latest legs and the floors job failed on
+this module alone too.
 """
 
 from __future__ import annotations
