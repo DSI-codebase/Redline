@@ -29,6 +29,15 @@ rules as v1.8.0.
   lines, and the `licenses` folder beside the app holds each package's own
   license files, copied unchanged. PyMuPDF's license question is still open, as
   the notices say.
+- **An ampersand in a title or a name is shown.** Qt reads a single `&` in a
+  menu item, a button or a group title as a keyboard shortcut marker, so the
+  `&` was hidden and the character after it was underlined. Settings showed
+  "Comments _junk filter" and "OCR _AI assist", and a drawing named
+  `Pump & Valve.pdf` showed in **File ▸ Open Recent** as "Pump _Valve.pdf". The
+  same happened to workspace and folder names in **Add to workspace**, to a
+  commenter's name on the **Change commenter** button, to a rule pack's title
+  in Settings, and to the sheet-number wizard's **Finish & split** button. Each
+  now shows its `&`.
 
 ## v1.8.0
 
