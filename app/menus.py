@@ -188,8 +188,11 @@ def rebuild_recent(win):
         empty.setEnabled(False)
         return
     for i, path in enumerate(paths, start=1):
-        # &1..&9 then &0 for quick keyboard access
-        label = f"&{i % 10}  {os.path.basename(path)}"
+        # &1..&9 then &0 for quick keyboard access. The name's own "&" is
+        # doubled: a single one is a mnemonic marker, and "R&D.pdf" painted
+        # as "RD.pdf" with the D underlined.
+        name = os.path.basename(path).replace("&", "&&")
+        label = f"&{i % 10}  {name}"
         act = menu.addAction(label)
         act.setToolTip(path)
         act.setStatusTip(path)
