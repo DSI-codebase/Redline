@@ -504,6 +504,12 @@ class TestThePyMuPDFFloorIsExercised(unittest.TestCase):
     to the documented interpreter. Read with comments stripped, because the
     comments in both files explain the floor and name it, and read **by job**,
     because a pin set in one job and an install in another is not a floor run.
+
+    `_job` found the job by its two-space indent and returned every
+    non-comment line until the next one, keys and scripts alike. It reads
+    through `tests/_workflow.py` now, and the comments go because the loader
+    drops them. Measured 2026-11-01 on tests.yml, the two readings agreed: the
+    same one pin, and the same line beginning each of the five commands.
     """
 
     JOB = "pymupdf-floor"
@@ -526,29 +532,31 @@ class TestThePyMuPDFFloorIsExercised(unittest.TestCase):
         return bound.group(1)
 
     def _job(self):
-        """The floor job's lines, comment lines dropped."""
-        path = os.path.join(HERE, ".github", "workflows", "tests.yml")
-        with open(path, encoding="utf-8") as fh:
-            lines = [ln for ln in fh.read().splitlines()
-                     if not ln.lstrip().startswith("#")]
-        start = next((i for i, ln in enumerate(lines)
-                      if ln.rstrip() == f"  {self.JOB}:"), None)
-        self.assertIsNotNone(
-            start, f"tests.yml has no `{self.JOB}` job, so nothing installs "
-                   "the PyMuPDF floor requirements.txt declares")
-        body = []
-        for ln in lines[start + 1:]:
-            if ln.strip() and len(ln) - len(ln.lstrip()) <= 2:
-                break  # the next job, or the end of `jobs:`
-            body.append(ln)
-        return "\n".join(body)
+        """The floor job as GitHub reads it."""
+        jobs = _workflow.load(
+            os.path.join(HERE, ".github", "workflows", "tests.yml"))["jobs"]
+        self.assertIn(
+            self.JOB, jobs, f"tests.yml has no `{self.JOB}` job, so nothing "
+                            "installs the PyMuPDF floor requirements.txt declares")
+        return jobs[self.JOB] or {}
+
+    @staticmethod
+    def _steps(job):
+        return [st for st in job.get("steps") or [] if isinstance(st, dict)]
 
     def test_the_job_pins_the_floor_requirements_txt_declares(self):
+        """The job's `env:` or one of its steps' `env:`, set once."""
         job = self._job()
-        pins = re.findall(r'^\s+PYMUPDF_FLOOR:\s*"?([^"\s]+)"?\s*$', job, re.M)
+        envs = [job.get("env") or {}] + [st.get("env") or {}
+                                         for st in self._steps(job)]
+        pins = [env["PYMUPDF_FLOOR"] for env in envs if "PYMUPDF_FLOOR" in env]
         self.assertEqual(len(pins), 1,
                          f"the {self.JOB} job should set PYMUPDF_FLOOR once, "
                          f"found {pins}")
+        # A string, so quoted: unquoted, 1.30 reads as the number 1.3.
+        self.assertIsInstance(pins[0], str,
+                              f"PYMUPDF_FLOOR is {pins[0]!r}; quote it, or "
+                              "1.30 reads as 1.3")
         floor = self._floor()
         self.assertEqual(
             pins[0], floor,
@@ -562,9 +570,12 @@ class TestThePyMuPDFFloorIsExercised(unittest.TestCase):
         Each one has to BEGIN a line. The job echoes the command it runs, so
         a substring check passed with the `python tools/run_tests.py` line
         deleted: the echo above it still held the words (falsified on this
-        test's first draft, 2026-10-31).
+        test's first draft, 2026-10-31). A line is one of a `run:` script's,
+        in a step of this job.
         """
-        commands = [ln.strip() for ln in self._job().splitlines()]
+        commands = [ln.strip() for st in self._steps(self._job())
+                    if isinstance(st.get("run"), str)
+                    for ln in st["run"].splitlines()]
         for command, why in (
             ('echo "PyMuPDF==${PYMUPDF_FLOOR}" > ',
              "the pin is no longer written out as an exact constraint"),

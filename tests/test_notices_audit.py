@@ -31,6 +31,7 @@ from unittest import mock
 # PATH, which runs nothing). Imported rather than copied, so both harnesses
 # drive the same shell.
 from tests.test_drc_ref_resolution import BASH, _code_only, _run_script
+from tests import _workflow
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WORKFLOW = os.path.join(HERE, ".github", "workflows", "build-windows.yml")
@@ -579,26 +580,21 @@ class TestTheRepositoryIsWhatTheToolWrites(unittest.TestCase):
 
 # ------------------------------------------------- the Build Windows step
 
-def _step_names(path: str) -> list[str]:
-    """Each named step in the workflow, in order, comment lines dropped. The
-    same `- name:` spelling `_run_script` finds a step by."""
-    with open(path, encoding="utf-8") as fh:
-        lines = [ln.strip() for ln in fh.read().splitlines()
-                 if not ln.lstrip().startswith("#")]
-    return [ln[len("- name: "):] for ln in lines if ln.startswith("- name: ")]
+# The job that builds the bundle the check reads. Named rather than searched
+# for, as `TestThePyMuPDFFloorIsExercised.JOB` in test_requirements.py is.
+BUILD_JOB = "build"
 
-
-def _step_header(path: str, step_name: str) -> str:
-    """The step's own keys, from its `- name:` line to its `run:` line."""
-    with open(path, encoding="utf-8") as fh:
-        lines = fh.read().splitlines()
-    start = next(i for i, ln in enumerate(lines) if ln.strip() == f"- name: {step_name}")
-    out = []
-    for ln in lines[start:]:
-        out.append(ln)
-        if ln.strip().startswith("run:"):
-            break
-    return "\n".join(out)
+# Two hand readers stood here. `_step_names` took every `- name:` line in the
+# file, across jobs, and its docstring said "The same `- name:` spelling
+# `_run_script` finds a step by." `_run_script` finds a step by its `name:` key
+# through `tests/_workflow.py`, so that was no longer true. `_step_header` took
+# the lines from a step's `- name:` to its `run:`. Measured 2026-11-01 against
+# `yaml.safe_load` on build-windows.yml, they agreed: the same 13 named steps
+# in the same order, and the same keys beside the check's `run:`. Each had a
+# blind spot nothing had hit. The list skipped unnamed steps, so an unnamed
+# `- uses:` between the check and the installer passed. The header stopped at
+# `run:`, so a `continue-on-error:` written after the script passed. Both
+# injections were green on the hand readers and are red here (2026-11-01).
 
 
 class TestTheBuildChecksTheNotices(unittest.TestCase):
@@ -607,10 +603,21 @@ class TestTheBuildChecksTheNotices(unittest.TestCase):
     def setUp(self) -> None:
         self.code = _code_only(_run_script(WORKFLOW, NOTICES_STEP))
 
+    def _steps(self) -> list[dict]:
+        """The build job's `steps:`, in the order the runner takes them."""
+        jobs = _workflow.load(WORKFLOW)["jobs"]
+        self.assertIn(BUILD_JOB, jobs, f"build-windows.yml has no {BUILD_JOB!r} job")
+        return [st for st in (jobs[BUILD_JOB] or {}).get("steps") or []
+                if isinstance(st, dict)]
+
     def test_it_runs_after_the_self_test_and_before_anything_is_packaged(self) -> None:
-        names = _step_names(WORKFLOW)
+        """Every step counts, named or not: `None` stands for an unnamed one,
+        so an unnamed `- uses:` between two named steps sits between them."""
+        names = [st.get("name") for st in self._steps()]
         self.assertGreaterEqual(len(names), 10, f"read {len(names)} steps, so the reader missed the job")
-        self.assertEqual(names.count(NOTICES_STEP), 1)
+        self.assertEqual(names.count(NOTICES_STEP), 1,
+                         f"the check is not one step of the {BUILD_JOB!r} job, "
+                         "which builds the bundle it reads")
         selftest, inno = "Launch the built app (self-test)", "Build installer (Inno Setup)"
         self.assertIn("--self-test", _run_script(WORKFLOW, selftest), f"{selftest!r} moved")
         self.assertIn("ISCC.exe", _run_script(WORKFLOW, inno), f"{inno!r} moved")
@@ -619,17 +626,19 @@ class TestTheBuildChecksTheNotices(unittest.TestCase):
                          "built app has been started")
         self.assertEqual(names[at + 1], inno, "something runs between the check and "
                          "the installer")
-        later = [n for n in names if n.startswith(("Package", "Upload", "Publish"))]
+        later = [n for n in names if n and n.startswith(("Package", "Upload", "Publish"))]
         self.assertEqual(len(later), 4, f"the zip, both uploads and the release: {later}")
         self.assertTrue(all(names.index(n) > at for n in later),
                         "something is packaged or published before the check")
 
     def test_a_tag_build_can_fail_on_it_and_nothing_skips_it(self) -> None:
-        header = _step_header(WORKFLOW, NOTICES_STEP)
-        self.assertNotIn("continue-on-error", header)
-        self.assertNotIn("if:", header, "a condition would skip the step with no line in the log")
-        self.assertIn("shell: bash", header)
-        self.assertRegex(header, r"IS_TAG: \$\{\{ startsWith\(github\.ref, 'refs/tags/'\) \}\}",
+        """The step's keys, wherever in the step they are written."""
+        step = _workflow.step(WORKFLOW, NOTICES_STEP, job=BUILD_JOB)
+        self.assertNotIn("continue-on-error", step)
+        self.assertNotIn("if", step, "a condition would skip the step with no line in the log")
+        self.assertEqual(step.get("shell"), "bash")
+        self.assertEqual((step.get("env") or {}).get("IS_TAG"),
+                         "${{ startsWith(github.ref, 'refs/tags/') }}",
                          "the step no longer knows whether this is a tag build")
         self.assertIn("exit 1", self.code)
 

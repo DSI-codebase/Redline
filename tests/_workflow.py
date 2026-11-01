@@ -1,4 +1,4 @@
-"""The GitHub workflows, read with PyYAML. One reader, asked by every test.
+"""The GitHub workflows, read with PyYAML.
 
 Three tests read the workflows by hand, and each excused it with a sentence
 saying PyYAML is not a dependency here. `requirements.txt` has declared
