@@ -127,8 +127,9 @@ An installer that cannot say which rules it ships is one nobody can reproduce.
 tag, or a commit SHA. Whatever it names is resolved to a **commit SHA** and that
 SHA is what gets installed, so a branch cannot move underneath a build in
 progress and two runs of one tag cannot quietly differ. The build log prints the
-library version, the rule pack version, and the commit; the release notes carry
-the same line.
+library version, each rule pack the app runs when Settings names none (asked of
+the app's `default_packs()`, so the line follows PyDRC's default), and the
+commit; the release notes carry the same line.
 
 The file sits at `main` during development so the app tracks the rule library.
 Cutting a release is therefore three steps in this order:
