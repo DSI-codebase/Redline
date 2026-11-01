@@ -24,6 +24,8 @@ from __future__ import annotations
 import ast
 import pathlib
 import re
+import shutil
+import subprocess
 import unittest
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
@@ -229,6 +231,34 @@ class TestTheNoticesAreBundled(unittest.TestCase):
                 with self.subTest(entry=name, line=line):
                     self.assertIn(_collapse(line), corpus,
                                   f"{name}: this quote is not in licenses/{name}/")
+
+    def test_a_checkout_keeps_every_licence_text_byte_for_byte(self) -> None:
+        """`git check-attr` says `text: unset` for every file under licenses/.
+
+        Measured on the 2026-11-01 Windows build (Build Windows run
+        41265620753): with no .gitattributes, the runner's checkout converted
+        LF to CRLF, and 38 of the 71 files inside the installer differed from
+        the wheels they were copied from by their line endings alone. The
+        notices say the texts are copied byte for byte and quote two sha256
+        values, so the checkout must not rewrite them.
+
+        Asked of git rather than of the .gitattributes spelling, because a
+        pattern can look right and miss the nested folders (`licenses/*.txt`
+        covers the four top-level texts and none of the 67 below them).
+        """
+        if shutil.which("git") is None or not (REPO / ".git").exists():
+            self.fail("this needs git and a checkout. The release build and CI "
+                      "both run from one, so a run without them is not this check")
+        files = sorted(_shipped_files())
+        self.assertGreaterEqual(len(files), 4, "licenses/ is nearly empty")
+        out = subprocess.run(["git", "check-attr", "text", "--", *files],
+                             cwd=LICENSES, capture_output=True, text=True, check=True).stdout
+        verdicts = dict(line.rsplit(": text: ", 1) for line in out.splitlines())
+        self.assertEqual(len(verdicts), len(files), f"git answered for {len(verdicts)} "
+                         f"of {len(files)} files")
+        converted = sorted(f for f, v in verdicts.items() if v != "unset")
+        self.assertFalse(converted, f"a checkout may rewrite line endings in "
+                                    f"{len(converted)} licence files, e.g. {converted[:3]}")
 
     def test_the_notices_carry_no_semicolon_and_no_dash(self) -> None:
         """The notices are a deliverable, and a deliverable carries no semicolon
