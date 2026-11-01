@@ -27,7 +27,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-import fitz
+import pymupdf
 
 
 MAX_MATCHES = 1000       # hard cap so ".*" cannot hang the UI
@@ -94,11 +94,11 @@ def _trim_context(line: str, start: int, end: int) -> tuple:
 
 
 class DocumentSearch:
-    """Searches one open ``fitz`` document, caching a per-page char index."""
+    """Searches one open ``pymupdf`` document, caching a per-page char index."""
 
     def __init__(self, fitz_doc):
         self.doc = fitz_doc
-        self._lines: dict = {}     # pno -> [(line_text, [fitz.Rect per char])]
+        self._lines: dict = {}     # pno -> [(line_text, [pymupdf.Rect per char])]
 
     def invalidate(self) -> None:
         self._lines.clear()
@@ -123,7 +123,7 @@ class DocumentSearch:
                 for span in line.get("spans", []):
                     for ch in span.get("chars", []):
                         text_parts.append(ch.get("c", ""))
-                        chars.append(fitz.Rect(ch.get("bbox")))
+                        chars.append(pymupdf.Rect(ch.get("bbox")))
                 text = "".join(text_parts)
                 if text.strip():
                     lines.append((text, chars))
@@ -173,7 +173,7 @@ class DocumentSearch:
             rects = []
         out = []
         for r in rects:
-            before, after = self._context_for(pno, fitz.Rect(r))
+            before, after = self._context_for(pno, pymupdf.Rect(r))
             out.append(Match(page=pno, rect=(r.x0, r.y0, r.x1, r.y1),
                              text=q, before=before, after=after))
         return out
@@ -205,7 +205,7 @@ class DocumentSearch:
                                  text=m.group(0), before=before, after=after))
         return out
 
-    def _context_for(self, pno: int, rect: fitz.Rect) -> tuple:
+    def _context_for(self, pno: int, rect: pymupdf.Rect) -> tuple:
         """Locate the index line containing ``rect`` and split it around the
         matched characters."""
         cy = (rect.y0 + rect.y1) / 2.0

@@ -13,6 +13,55 @@ portable zip to the matching GitHub release.
   more ink than printing as drawn. 1.25.1 was not tried. The installer's build
   installs the newest PyMuPDF, so a shipped installer was not affected. Tests
   now also run at the declared floor on every push.
+- **A waiver can be given in the Owner role.** The design rule library added
+  the role for the customer's or facility owner's own acceptance, which a
+  customer's rule pack can ask for. The waiver dialog lists Owner beside
+  Estimator, Engineer and UL rep, and a waiver in that role closes a finding
+  whose rule takes it.
+
+## v1.8.1
+
+Design rule checking in this release is PyDRC `v0.23.1` (`6360563`), the same
+rules as v1.8.0.
+
+- **The installed app starts again.** v1.8.0 stopped on launch with
+  `FileNotFoundError` naming `layout_rf2.4.1+imf1.yaml`. Its build picked up
+  PyMuPDF 2.0, which loads a page layout model when the PDF engine starts, and
+  the model's files were not in the installer. DSI Redline does not use that
+  model, so the build leaves it out, as every build before v1.8.0 did. That
+  also keeps 51 MB of model files and the ONNX runtime out of the installer.
+- **The Windows build starts the app it built before it packages it.** It runs
+  `DSI Redline.exe --self-test <report>`, which opens the window, closes it and
+  writes `ok` or the error to the report. A build that cannot start now fails
+  before the installer is made, so it is never published.
+- **The calculators work in the installed app.** The installer carried PyDRC's
+  rule packs and none of the tables its calculators read, so every calculation
+  stopped with "The calculator stopped with an error: no NEC 2026 table ..."
+  and the size, wire type and device lists offered no choices. The part
+  ratings file the Panel page reads was missing too. The installer now carries
+  all of them.
+  Before it packages the app, the Windows build compares the app it built with
+  the installed PyDRC, file by file, and fails on any file the app is missing.
+- **A later PyMuPDF release will not stop the app from starting.** PyMuPDF 2.0
+  deprecates `fitz`, the module name DSI Redline used for it, and says a future
+  release removes that name. The app now imports `pymupdf`, which PyMuPDF has
+  supported since 1.24.3, so nothing changes in how it works today.
+- **The third-party notices name every package the installer carries.**
+  `THIRD-PARTY-NOTICES.md` named ten, and the installer carries 39, most of them
+  installed by those ten. Each is listed with its license and its copyright
+  lines, and the `licenses` folder beside the app holds each package's own
+  license files, copied unchanged. PyMuPDF's license question is still open, as
+  the notices say.
+- **An "&" in a name or title shows as "&".** Qt reads a single "&" in a menu
+  entry, a button, a check box or a group title as a keyboard shortcut marker,
+  so it hid the "&" and underlined the next character. A drawing called
+  `R&D wiring.pdf` showed in File ▸ Open Recent as "RD wiring.pdf" with the D
+  underlined. The same happened to workspace and folder names in File ▸ Add to
+  workspace, to a commenter's name on the "All N by" button when changing the
+  commenter, and to rule pack names in Settings. Three titles written into the
+  app had it too: the "Comments & junk filter" and "OCR & AI assist" groups in
+  Settings and the sheet-number wizard's "Finish & split" button. Each now shows
+  its "&". Open Recent keeps its Alt+1 to Alt+0 shortcuts.
 
 ## v1.8.0
 

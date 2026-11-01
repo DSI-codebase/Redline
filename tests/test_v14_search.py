@@ -7,7 +7,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 from tests._qt import QT_OK as _QT_OK, REASON as _QT_REASON
 
@@ -26,7 +26,7 @@ if _QT_OK:
 
 def _make_pdf(dirpath, name="s.pdf", pages=1, lines=None):
     p = os.path.join(dirpath, name)
-    d = fitz.open()
+    d = pymupdf.open()
     for _ in range(pages):
         pg = d.new_page(width=612, height=792)
         y = 100
@@ -47,7 +47,7 @@ class TestEngine(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
-        self.doc = fitz.open(_make_pdf(self.tmp))
+        self.doc = pymupdf.open(_make_pdf(self.tmp))
         self.eng = DocumentSearch(self.doc)
 
     def tearDown(self):
@@ -97,7 +97,7 @@ class TestEngine(unittest.TestCase):
         self.assertIn("VIA", m.after)
 
     def test_matches_are_page_ordered(self):
-        doc = fitz.open(_make_pdf(self.tmp, "multi.pdf", pages=3))
+        doc = pymupdf.open(_make_pdf(self.tmp, "multi.pdf", pages=3))
         try:
             r = DocumentSearch(doc).search("apple", SearchOptions())
             pages = [m.page for m in r.matches]
@@ -106,7 +106,7 @@ class TestEngine(unittest.TestCase):
             doc.close()
 
     def test_cap(self):
-        doc = fitz.open()
+        doc = pymupdf.open()
         pg = doc.new_page(width=612, height=792)
         for i in range(60):
             pg.insert_text((40, 30 + i * 12), "zz " * 30)

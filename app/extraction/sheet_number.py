@@ -131,7 +131,7 @@ def _words(page) -> list:
     an unrotated ``x`` above 792, so it was searching a region that did not
     exist and returned nothing on every page.
     """
-    import fitz
+    import pymupdf
     try:
         raw = page.get_text("words") or []
         rot = page.rotation_matrix
@@ -140,7 +140,7 @@ def _words(page) -> list:
     out = []
     for w in raw:
         try:
-            r = (fitz.Rect(w[0], w[1], w[2], w[3]) * rot).normalize()
+            r = (pymupdf.Rect(w[0], w[1], w[2], w[3]) * rot).normalize()
             out.append((r.x0, r.y0, r.x1, r.y1, w[4]))
         except Exception:
             continue

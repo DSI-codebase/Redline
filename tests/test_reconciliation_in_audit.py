@@ -14,7 +14,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-import fitz
+import pymupdf
 
 from app import audit
 from app.audit.findings import AuditRun
@@ -119,7 +119,7 @@ class TestTheReportsCarryTheTable(unittest.TestCase):
 
 
 def _drawing(path):
-    doc = fitz.open()
+    doc = pymupdf.open()
     for title, number, body in (
         ("TITLE PAGE", "EL2507777-000", ()),
         ("24 VDC DISTRIBUTION", "EL2507777-400", ("400010", "PB-40010")),

@@ -15,9 +15,10 @@ This folder builds a Windows **executable** and an **installer**.
 ## Easiest: let CI build it
 
 Push a tag (e.g. `vX.Y.Z`) or run **Actions ▸ Build Windows ▸ Run workflow**.
-The job runs the tests, builds the app, builds the installer, and uploads two
-artifacts: **DSI-Redline-portable** (the app folder) and
-**DSI-Redline-installer** (the `Setup.exe`). No local Windows machine needed.
+The job runs the tests, builds the app, starts it once (`--self-test`), builds
+the installer, and uploads two artifacts: **DSI-Redline-portable** (the app
+folder) and **DSI-Redline-installer** (the `Setup.exe`). No local Windows
+machine needed.
 
 ## Build locally on Windows
 
@@ -29,6 +30,13 @@ packaging\build_windows.bat
 
 :: then build the installer
 "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging\installer.iss
+```
+
+Check the built app starts before you share it. This writes `ok`, or the
+error that stopped it, to `report.txt`, and exits 0 or 1:
+
+```bat
+"dist\DSI Redline\DSI Redline.exe" --self-test report.txt
 ```
 
 Outputs:

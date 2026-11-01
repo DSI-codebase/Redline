@@ -15,7 +15,7 @@ from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 from app.model.document import Document
 from app.model.annotations import Annotation, KIND_RECT
@@ -30,7 +30,7 @@ except Exception:                                          # pragma: no cover
 
 
 def _blank_pdf(path, pages=3):
-    d = fitz.open()
+    d = pymupdf.open()
     for i in range(pages):
         d.new_page(width=792, height=612).insert_text((72, 72), f"SHEET {200+i}")
     d.save(path)
@@ -104,8 +104,8 @@ class TestDirtyTracking(unittest.TestCase):
 
     def test_a_colleagues_annotations_do_not_dirty_the_file(self):
         """Marks already living in the PDF are not unsaved work."""
-        d = fitz.open(self.src)
-        d[0].add_rect_annot(fitz.Rect(20, 20, 90, 60)).update()
+        d = pymupdf.open(self.src)
+        d[0].add_rect_annot(pymupdf.Rect(20, 20, 90, 60)).update()
         foreign = os.path.join(self.tmp, "from_them.pdf")
         d.save(foreign)
         d.close()

@@ -6,7 +6,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 from app.model.annotations import Annotation, KIND_CLOUD
 from app.model.storage import write_annotations_to_pdf, marked_pdf_path
@@ -67,7 +67,7 @@ class TestCloudPath(unittest.TestCase):
 
 class TestCloudExport(unittest.TestCase):
     def _blank(self, path):
-        d = fitz.open(); d.new_page(width=400, height=300); d.save(path); d.close()
+        d = pymupdf.open(); d.new_page(width=400, height=300); d.save(path); d.close()
 
     def test_export_polygon_with_cloud_effect(self):
         tmp = tempfile.mkdtemp()
@@ -75,12 +75,12 @@ class TestCloudExport(unittest.TestCase):
         self._blank(src)
         ann = Annotation(page=0, kind=KIND_CLOUD, color=(1, 0, 0), width=1.5,
                          points=[(50, 50), (150, 40), (160, 120), (60, 130)])
-        d = fitz.open(src)
+        d = pymupdf.open(src)
         self.assertEqual(write_annotations_to_pdf(d, [ann]), 1)
         mp = marked_pdf_path(src)
         d.save(mp)
         d.close()
-        d2 = fitz.open(mp)
+        d2 = pymupdf.open(mp)
         got = [(a.type[1], d2.xref_get_key(a.xref, "BE")) for a in d2[0].annots()]
         d2.close()
         self.assertEqual(len(got), 1)
@@ -93,7 +93,7 @@ class TestCloudExport(unittest.TestCase):
         tmp = tempfile.mkdtemp()
         src = os.path.join(tmp, "d.pdf")
         self._blank(src)
-        d = fitz.open(src)
+        d = pymupdf.open(src)
         n = write_annotations_to_pdf(d, [Annotation(page=0, kind=KIND_CLOUD,
                                                     points=[(10, 10), (20, 20)])])
         d.close()
@@ -124,7 +124,7 @@ class TestCloudInteraction(unittest.TestCase):
         from app.main_window import MainWindow
         tmp = tempfile.mkdtemp()
         src = os.path.join(tmp, "d.pdf")
-        d = fitz.open(); d.new_page(width=400, height=300); d.save(src); d.close()
+        d = pymupdf.open(); d.new_page(width=400, height=300); d.save(src); d.close()
         win = MainWindow(); win.load_document(src)
         win.view.tool.current = T.TOOL_CLOUD
         return win
@@ -193,7 +193,7 @@ class TestCloudInteraction(unittest.TestCase):
         self.assertEqual([a for a in v.store.all() if a.kind == KIND_CLOUD], [])
 
     def test_opening_new_doc_clears_polygon_state(self):
-        import tempfile, fitz
+        import tempfile, pymupdf
         win = self._win()
         v = win.view
         page = v._page_items[0]
@@ -205,7 +205,7 @@ class TestCloudInteraction(unittest.TestCase):
         # open a different document without cancelling first
         tmp = tempfile.mkdtemp()
         src2 = os.path.join(tmp, "d2.pdf")
-        d = fitz.open(); d.new_page(width=400, height=300); d.save(src2); d.close()
+        d = pymupdf.open(); d.new_page(width=400, height=300); d.save(src2); d.close()
         from app.model.document import Document
         doc2 = Document(src2); doc2.load()
         v.set_document(doc2, v.config)

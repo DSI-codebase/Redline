@@ -350,6 +350,36 @@ class RotateDialog(_ToolDialog):
         return os.path.dirname(result)
 
 
+def pdf2docx_problem():
+    """Why PDF→Word cannot load pdf2docx here, as the user should read it, or None.
+
+    pdf2docx being absent is one cause, and the only one that "pip install
+    pdf2docx" fixes. An installed pdf2docx whose own import fails is told which
+    module failed, never to install the package it already has. This used to
+    say "needs the 'pdf2docx' package" for every exception, so a PyMuPDF
+    without its `fitz` alias would have sent a user with pdf2docx installed to
+    install it again.
+
+    The message never says ``pip install <module>`` for the other cases,
+    because a module name is not always its distribution's: ``cv2`` comes from
+    opencv, and ``fitz`` on PyPI is an unrelated package that breaks PyMuPDF.
+    """
+    try:
+        ops.import_pdf2docx()
+    except ImportError as exc:
+        if exc.name == "pdf2docx":
+            return "PDF→Word needs the 'pdf2docx' package (pip install pdf2docx)."
+        if exc.name:
+            return (f"PDF→Word could not load pdf2docx because importing "
+                    f"'{exc.name}' failed: {exc}")
+        return f"PDF→Word could not load pdf2docx: {type(exc).__name__}: {exc}"
+    except Exception as exc:
+        # Not every failure inside an import is an ImportError: a module's own
+        # top-level code can raise anything, and the user still reads why.
+        return f"PDF→Word could not load pdf2docx: {type(exc).__name__}: {exc}"
+    return None
+
+
 class ConvertDialog(_ToolDialog):
     def build(self):
         self.src = self.add_open_pdf("PDF:", self.default_pdf)
@@ -359,10 +389,9 @@ class ConvertDialog(_ToolDialog):
         src, out = self.src.text().strip(), self.out.text().strip()
         if not (src and out):
             raise ValueError("Choose a PDF and an output .docx path.")
-        try:
-            import pdf2docx  # noqa: F401
-        except Exception:
-            raise ValueError("PDF→Word needs the 'pdf2docx' package (pip install pdf2docx).")
+        problem = pdf2docx_problem()
+        if problem:
+            raise ValueError(problem)
         return lambda p, c: ops.pdf_to_docx(src, out)
 
     def success_message(self, result):

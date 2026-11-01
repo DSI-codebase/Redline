@@ -12,7 +12,7 @@ import shutil
 import tempfile
 import unittest
 
-import fitz
+import pymupdf
 
 from app import audit
 from app.audit.adapter import AdapterOptions, build_model, parse_drawing_index
@@ -45,7 +45,7 @@ def _sheet(doc, title, drawing_number, body=()):
 
 def _drawing(path):
     """A small set: a schematic whose wire claims a sheet that is not there."""
-    doc = fitz.open()
+    doc = pymupdf.open()
     _sheet(doc, "TITLE PAGE", "EL2507777-000")
     _sheet(doc, "24 VDC DISTRIBUTION", "EL2507777-400",
            body=["400010", "400020", "PB-40010"])
@@ -137,6 +137,14 @@ class TestAWaiverIsJudgedByItsRole(unittest.TestCase):
         self.assertEqual(Waiver.from_dict(w.to_dict()).role, "ul_rep")
         self.assertEqual(Waiver.from_dict({"key": "k", "reason": "ok"}).role, "")
 
+    def test_every_role_has_a_label(self):
+        """The waiver dialog fills its role list with ROLE_LABELS[r] for each
+        of ROLES, so a role with no label raises when the dialog opens.
+        Injected: the owner role with no label (red)."""
+        from app.audit.findings import ROLES, ROLE_LABELS
+        self.assertGreaterEqual(len(ROLES), 4)
+        self.assertEqual(set(ROLE_LABELS), set(ROLES))
+
     @needs_pydrc
     def test_the_check_is_the_rule_librarys_own_on_every_combination(self):
         """findings.judge is a copy of pydrc.engine.approvals.judge, so a
@@ -149,7 +157,8 @@ class TestAWaiverIsJudgedByItsRole(unittest.TestCase):
         self.assertEqual(tuple(ROLES), tuple(approvals.ROLES))
         compared = 0
         for approvers, role, author, reason, created in product(
-                ((), ("engineer",), ("ul_rep",), ("estimator", "engineer", "ul_rep")),
+                ((), ("engineer",), ("ul_rep",), ("owner",),
+                 ("estimator", "engineer", "ul_rep")),
                 ("",) + ROLES, ("", "LWH"), ("", "ok"), ("", "2026-10-30T09:15:00")):
             ours = judge(list(approvers), Waiver(key="k", role=role, author=author,
                                                  reason=reason, created=created))
@@ -157,7 +166,7 @@ class TestAWaiverIsJudgedByItsRole(unittest.TestCase):
                 fingerprint="k", name=author, role=role, date=created[:10], reason=reason))
             self.assertEqual(ours, theirs, (approvers, role, author, reason, created))
             compared += 1
-        self.assertEqual(compared, 128)        # 4 approver sets x 4 roles x 2 x 2 x 2
+        self.assertEqual(compared, 200)        # 5 approver sets x 5 roles x 2 x 2 x 2
 
 
 class TestAuditRunSummary(unittest.TestCase):
@@ -209,7 +218,7 @@ class TestDrawingIndex(unittest.TestCase):
         # ranges. Measured 2026-10-04 on a real one, the parser read 1 row of 5.
         # The page is synthetic (tests/_el_sheets.py) and read the way the
         # adapter reads it.
-        doc = fitz.open()
+        doc = pymupdf.open()
         try:
             page = el.new_page(doc)
             el.title_block(page, "TITLE PAGE", "000", "001")
@@ -238,12 +247,12 @@ class TestElGenerationSet(unittest.TestCase):
     def _make(self, index_rows=el.EL_INDEX_ROWS):
         from app.extraction.sheet_number import resolve_document
         from app.extraction.sheet_role import detect_document_roles
-        doc = fitz.open()
+        doc = pymupdf.open()
         tags = el.build_set(doc, index_rows)
         path = os.path.join(self.tmp, "el-set.pdf")
         doc.save(path)
         doc.close()
-        doc = fitz.open(path)
+        doc = pymupdf.open(path)
         try:
             res = resolve_document(doc)
             labels = {k: v.label for k, v in res.items() if v.resolved}
@@ -303,7 +312,7 @@ class TestAdapter(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.src = _drawing(os.path.join(self.tmp, "set.pdf"))
-        self.doc = fitz.open(self.src)
+        self.doc = pymupdf.open(self.src)
         from app.extraction.sheet_number import resolve_document
         from app.extraction.sheet_role import detect_document_roles
         res = resolve_document(self.doc)
@@ -357,7 +366,7 @@ class TestRunner(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.src = _drawing(os.path.join(self.tmp, "set.pdf"))
-        doc = fitz.open(self.src)
+        doc = pymupdf.open(self.src)
         from app.extraction.sheet_number import resolve_document
         from app.extraction.sheet_role import detect_document_roles
         res = resolve_document(doc)

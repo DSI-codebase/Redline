@@ -251,7 +251,7 @@ def run_audit(pdf_path: str, sheet_labels: dict, sheet_sources: dict,
     never mutates anything the caller owns.
     """
     try:
-        import fitz
+        import pymupdf
         import pydrc.checks                     # noqa: F401  (registers checks)
         from pydrc.engine.evaluator import run as run_rules
         from pydrc.packs import loader
@@ -266,7 +266,7 @@ def run_audit(pdf_path: str, sheet_labels: dict, sheet_sources: dict,
     if failed:
         raise loader.PackError("\n\n".join(message for _id, message in failed))
 
-    doc = fitz.open(pdf_path)
+    doc = pymupdf.open(pdf_path)
     try:
         built = build_model(doc, sheet_labels, sheet_sources, sheet_roles,
                             options or AdapterOptions(), project,

@@ -10,7 +10,7 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 try:
-    import fitz
+    import pymupdf
     from PySide6.QtWidgets import QApplication
     _QT_OK = True
 except Exception:  # pragma: no cover
@@ -18,7 +18,7 @@ except Exception:  # pragma: no cover
 
 
 def _landscape_pdf(path, pages=2):
-    d = fitz.open()
+    d = pymupdf.open()
     for _ in range(pages):
         d.new_page(width=800, height=600)
     d.save(path)

@@ -5,7 +5,7 @@ Two workflows, both under `.github/workflows/`.
 | Workflow | Runs on | Does |
 |---|---|---|
 | **Tests** (`tests.yml`) | every push, every pull request | the suite, on Ubuntu and Windows, and once more on Ubuntu at the PyMuPDF floor |
-| **Build Windows** (`build-windows.yml`) | manual dispatch, `v*` tags | the suite, then the portable app, the installer, and the release |
+| **Build Windows** (`build-windows.yml`) | manual dispatch, `v*` tags | the suite, then the portable app, a launch of it, the installer, and the release |
 
 ## Running the suite
 
@@ -118,6 +118,46 @@ GitHub Release with the installer and the portable zip attached. A release built
 without `PYDRC_TOKEN` ships without design rule checking; the workflow logs a
 warning saying so rather than producing a quietly reduced build.
 
+### The built app is started before it is packaged
+
+The suite runs from source, and a source install is not the bundle. v1.8.0
+passed the suite and stopped on launch: PyMuPDF 2.0 loads a layout model at
+`import fitz` from data files that a source install has and the PyInstaller
+analysis did not collect. Nothing between the build and the release had ever
+started the app.
+
+So **Build Windows** runs `DSI Redline.exe --self-test <report>` right after
+PyInstaller and before Inno Setup. `main.py`'s `self_test` runs the whole
+launch (QApplication, splash, the `app.main_window` import, the window), closes
+it, and writes `ok` or the traceback to the report, because a windowed exe has
+no stdout. Exit 1 fails the job before anything is packaged or published. An
+exception raised before `main()` runs escapes the handler and opens a message
+box, so the step also stops the app at 180 s and fails. Locally:
+
+```
+"dist\DSI Redline\DSI Redline.exe" --self-test report.txt
+```
+
+A launch reads no calculator table, so the self-test passed a v1.8.1 build
+whose spec collected PyDRC's YAML and none of its JSON: the bundle had the rule
+packs and not the 28 calculator tables or the part ratings file, and every calculator
+stopped with "no NEC 2026 table". So **Build Windows** also runs, after
+PyInstaller and before Inno Setup:
+
+```
+python tools/bundle_check.py --dist "dist/DSI Redline" pydrc
+```
+
+It lists every file in the installed PyDRC that is not a module and fails,
+naming each one, when `_internal/pydrc/` lacks it. It exits 2 rather than
+passing when PyDRC is not installed or has no data files, and the step runs
+only when `PYDRC_BUILT` is not `none`, because a build without `PYDRC_TOKEN`
+has no PyDRC to compare and has already warned so.
+
+`tests/test_frozen_build.py` holds both steps' positions, the spec's
+`excludes`, and the spec's `includes` against the installed PyDRC's files, on
+every push. The steps themselves run only where the exe exists.
+
 ### Which rules a release contains
 
 An installer that cannot say which rules it ships is one nobody can reproduce.
@@ -137,7 +177,9 @@ Cutting a release is therefore three steps in this order:
 3. Tag the app (`v1.5.0`).
 
 Tagging the app before step 2 produces a release whose notes name a moving
-branch, which is the one thing the pin exists to prevent. **Build Windows** also
+branch, which is the one thing the pin exists to prevent. Between steps 2 and 3,
+re-run the notices audit (next section), so the build it reads installs the
+PyDRC the release will. **Build Windows** also
 takes a `pydrc_ref` input when run manually, which overrides the file for that
 one run — useful for testing a rule change against the app without committing a
 pin.
@@ -148,3 +190,46 @@ and the tag pushed after. The second path is the common one and it is how
 `v1.5.0` shipped with an empty body: the workflow only wrote notes when it
 created the release itself. It now fills in the line either way, appending to
 whatever a human wrote rather than replacing it.
+
+### The notices name what the build ships
+
+`THIRD-PARTY-NOTICES.md` and `licenses/` ship inside the installer, and they
+must name every distribution the bundle carries. `requirements.txt` cannot say
+which those are: the 2026-09-01 notices named ten packages and the v1.8.1
+bundle carried 39, most of them installed by those ten. `tools/notices_audit.py`
+reads the build instead. Run it between steps 2 and 3 above:
+
+1. In a fresh virtual environment on Python 3.11, install what **Build Windows**
+   installs, PyDRC at the ref `packaging/pydrc-ref.txt` names, and setuptools
+   at the Windows runner's version:
+   ```
+   pip install -r requirements.txt -r packaging/requirements-build.txt "setuptools==65.5.0"
+   pip install "pydrc[dxf] @ git+https://github.com/DSI-codebase/PyDRC@<ref>"
+   ```
+   A newer setuptools vendors `backports`, and httpx2's `from backports.zstd
+   import` then pulls all of setuptools into a bundle the Windows build does
+   not carry. `shipped` prints a NOTE when it sees setuptools in the list.
+2. `pyinstaller packaging/DSI_Redline.spec --noconfirm`
+3. `python tools/notices_audit.py shipped --build build/DSI_Redline --dist "dist/DSI Redline" --write build/shipped.txt`,
+   under the interpreter that built the bundle. It prints every installed
+   distribution with its three counts, then the files no distribution claims.
+   On Linux those are host libraries and `libpython`. Read anything else.
+4. `python tools/notices_audit.py fetch build/shipped.txt --dest build/wheels`
+   downloads each one's Windows wheel, because a wheel's license file can
+   differ by platform.
+5. `python tools/notices_audit.py copy build/shipped.txt --wheels build/wheels --check`
+   exits 0 when `licenses/` already matches and 1 listing each difference.
+   Without `--check` it rewrites the per-distribution folders, and `--prune`
+   also removes the folder of a package that no longer ships. The top-level
+   texts are the project's own and are never touched.
+6. `python tools/notices_audit.py holders build/shipped.txt --wheels build/wheels`
+   prints each package's license string and the lines that look like copyright
+   statements. Update the entries in `THIRD-PARTY-NOTICES.md` from it, reading
+   each line in its file, because it is a candidate list.
+7. `python tools/run_tests.py tests.test_notices_ship tests.test_notices_audit`.
+   The first holds each quoted line to the file it came from, the table to the
+   folders, and the prose to the no-semicolon rule.
+
+Every subcommand exits 2 rather than writing an empty answer: a missing input,
+a build with no PYZ table of contents, no installed distribution read, nothing
+shipping, or a wheel that is missing or holds no license file.

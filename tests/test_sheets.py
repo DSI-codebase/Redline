@@ -5,7 +5,7 @@ import os
 import tempfile
 import unittest
 
-import fitz
+import pymupdf
 
 from app.extraction.text_extract import read_titleblock_sheet_label
 from app.extraction import sheet_number, sheet_role
@@ -16,7 +16,7 @@ from app.export.todo_export import _grouped, GROUP_PAGE, GROUP_SHEET, GROUP_NONE
 
 def _make_pdf(path, sheet_texts):
     """One landscape page per entry; entry is the title-block text (or None)."""
-    doc = fitz.open()
+    doc = pymupdf.open()
     for txt in sheet_texts:
         page = doc.new_page(width=792, height=612)   # landscape
         if txt:
@@ -32,7 +32,7 @@ class TestTitleblockLabel(unittest.TestCase):
     def test_preserves_leading_zeros(self):
         p = os.path.join(self.tmp, "a.pdf")
         _make_pdf(p, ["SHEET 000", "SHEET 261"])
-        doc = fitz.open(p)
+        doc = pymupdf.open(p)
         self.assertEqual(read_titleblock_sheet_label(doc[0]), "000")
         self.assertEqual(read_titleblock_sheet_label(doc[1]), "261")
         doc.close()
@@ -40,7 +40,7 @@ class TestTitleblockLabel(unittest.TestCase):
     def test_none_when_absent(self):
         p = os.path.join(self.tmp, "b.pdf")
         _make_pdf(p, ["no sheet here"])
-        doc = fitz.open(p)
+        doc = pymupdf.open(p)
         self.assertIsNone(read_titleblock_sheet_label(doc[0]))
         doc.close()
 
@@ -112,7 +112,7 @@ class TestSheetProvenance(unittest.TestCase):
         self.src = os.path.join(self.tmp, "draw.pdf")
 
     def _drawing_number_pdf(self, path, numbers):
-        doc = fitz.open()
+        doc = pymupdf.open()
         for n in numbers:
             page = doc.new_page(width=792, height=1224)
             page.insert_text((40.0, 1000.0), f"EL2507777-{n}", rotate=270)
@@ -145,7 +145,7 @@ class TestSheetProvenance(unittest.TestCase):
         again.close()
 
     def test_unresolved_page_reports_zero_confidence(self):
-        doc = fitz.open()
+        doc = pymupdf.open()
         doc.new_page(width=792, height=1224).insert_text((60, 60), "no numbering")
         doc.save(self.src)
         doc.close()
@@ -179,7 +179,7 @@ class TestSheetRoles(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.src = os.path.join(self.tmp, "roles.pdf")
-        doc = fitz.open()
+        doc = pymupdf.open()
         for title in ("TITLE PAGE", "BACK PANEL LAYOUT", "24 VDC DISTRIBUTION"):
             page = doc.new_page(width=792, height=1224)
             page.insert_text((40.0, 1000.0), title, rotate=270)

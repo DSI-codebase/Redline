@@ -39,10 +39,19 @@ try:
         try:
             __import__(_opt)
             hiddenimports += collect_submodules(_opt)
-            # Rule packs are YAML data files, not modules. PyDRC finds its
-            # built-ins relative to its own package directory, and
-            # collect_data_files reproduces that layout in the frozen build.
-            datas += collect_data_files(_opt, includes=["**/*.yaml"])
+            # PyDRC's data files are not modules: the rule packs and vendor
+            # catalogs are YAML, and the calculators' code tables and the part
+            # ratings file are JSON. PyDRC finds each one relative to its own
+            # package directory, and collect_data_files reproduces that layout
+            # in the frozen build. This collected YAML alone until v1.8.1, so
+            # PyDRC v0.23.1's bundle carried its 9 YAML files and none of its
+            # 29 JSON files, and every calculator stopped with
+            # "no NEC 2026 table ...". The other two
+            # packages carry no file of either kind (measured 2026-11-01 with
+            # anthropic 2.3.0 and pdf2docx 0.5.13). tools/bundle_check.py, run
+            # by build-windows.yml, compares the bundle with the installed
+            # PyDRC file by file.
+            datas += collect_data_files(_opt, includes=["**/*.yaml", "**/*.json"])
         except Exception:
             pass
     # PyDRC imports PyYAML lazily from inside its pack loader, so the analysis
@@ -53,6 +62,23 @@ except Exception:
 
 icon_path = os.path.join(ROOT, "app", "assets", "app.ico")  # brand icon
 
+# PyMuPDF's optional add-ons stay OUT of the frozen build. From PyMuPDF 2.0 the
+# wheel carries `pymupdf.layout` and requires `pymupdf4llm`, and
+# `import pymupdf` imports both, each inside `try/except ImportError` in
+# pymupdf/__init__.py. The app imports `pymupdf` rather than the deprecated
+# `fitz` shim, and the shim runs that same __init__, so the rename changed
+# nothing here. The layout package then loads an ONNX model from YAML
+# and .onnx files beside its own modules, which the analysis does not collect
+# (no hook for them in hooks-contrib 2026.9), so v1.8.0 died on launch with
+# FileNotFoundError on layout_rf2.4.1+imf1.yaml.
+# Redline calls neither (no find_tables, get_layout or to_markdown), so a
+# module that is absent is the state PyMuPDF already handles, and it is the
+# state every PyMuPDF 1.x build ran in. Collecting the models instead would
+# ship onnxruntime (69 MB on Linux) and 51 MB of models to load at every
+# launch for nothing. The self-test step in build-windows.yml is what catches
+# this class of defect, a bundle missing a file the source install has.
+excludes = ["tkinter", "pymupdf.layout", "pymupdf4llm"]
+
 a = Analysis(
     [os.path.join(ROOT, "main.py")],
     pathex=[ROOT],
@@ -62,7 +88,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter"],
+    excludes=excludes,
     noarchive=False,
 )
 

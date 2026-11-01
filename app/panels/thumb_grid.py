@@ -4,7 +4,7 @@ A :class:`QListWidget` in icon mode that shows every page of a PDF as a
 thumbnail and lets the user pick pages visually (click, shift-range, ctrl-add)
 instead of typing a page spec.  Thumbnails render lazily so large sets stay
 responsive; the selection is two-way synced with a page-spec text box by the
-workspace.  Opens its own lightweight :class:`fitz.Document` from a path so it
+workspace.  Opens its own lightweight :class:`pymupdf.Document` from a path so it
 is independent of the annotate viewer.
 """
 
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-import fitz
+import pymupdf
 
 from PySide6.QtCore import Qt, Signal, QSize, QTimer
 from PySide6.QtGui import QImage, QPixmap, QIcon, QTransform
@@ -39,7 +39,7 @@ class ThumbnailGrid(QListWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("ThumbGrid")
-        self.doc: Optional[fitz.Document] = None
+        self.doc: Optional[pymupdf.Document] = None
         self._base_pix: dict = {}      # row -> base QPixmap (page visual orient.)
         self._overrides: dict = {}     # page -> extra rotation (deg)
         self._syncing = False
@@ -64,7 +64,7 @@ class ThumbnailGrid(QListWidget):
         """Load ``path`` and (re)build the thumbnail list."""
         self.close_doc()
         try:
-            self.doc = fitz.open(path)
+            self.doc = pymupdf.open(path)
         except Exception:
             self.doc = None
         self._base_pix = {}
@@ -112,7 +112,7 @@ class ThumbnailGrid(QListWidget):
                 # cap height too so tall pages don't overflow the icon box
                 zoom = min(zoom, self.THUMB_H / max(1.0, pr.height))
                 pix = self.doc[page].get_pixmap(
-                    matrix=fitz.Matrix(max(0.05, zoom), max(0.05, zoom)), alpha=False)
+                    matrix=pymupdf.Matrix(max(0.05, zoom), max(0.05, zoom)), alpha=False)
                 self._base_pix[row] = _pixmap_to_qpixmap(pix)
                 self._apply_icon(row)
             except Exception:
