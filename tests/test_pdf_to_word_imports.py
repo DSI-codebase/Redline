@@ -19,11 +19,13 @@ fresh `pip install -r requirements.txt`:
 `app.tools.dialogs.pdf2docx_problem` reports the ImportError's own `name`.
 
 The blocker is the one `tests/test_qt_absent_degrades.py` uses for PySide6,
-raising what importlib raises for an absent module. It goes in AFTER the app's
-modules have loaded, and evicts what they cached, because Redline's own modules
-still `import fitz` at module scope at this commit and would not load under it.
-From that point on `import fitz` finds nothing, which is the state a PyMuPDF
-without the alias leaves.
+raising what importlib raises for an absent module. Every scenario installs it
+BEFORE any of Redline's modules load, so the app itself starts with `fitz`
+refused, which is the state a PyMuPDF without the alias leaves. That has held
+since 2026-11-01, when the app's own imports moved to `pymupdf`
+(`tests/test_pymupdf_import.py`). Before then the blocker went in after the app
+had loaded and evicted what it cached, and under that order a module-scope
+`import fitz` put back into `app/tools/` passed every test here.
 """
 
 from __future__ import annotations
@@ -73,12 +75,17 @@ _PRELUDE = textwrap.dedent("""
 """)
 
 _DIALOG = textwrap.dedent("""
-    from PySide6.QtWidgets import QApplication
-    qapp = QApplication.instance() or QApplication([])
-    import app.tools.dialogs as dlg
+    def _dialogs():
+        # The app loads at the first call rather than at the top of the
+        # script, so a scenario's block() is in place before Redline imports.
+        global qapp
+        from PySide6.QtWidgets import QApplication
+        qapp = QApplication.instance() or QApplication([])
+        import app.tools.dialogs as dlg
+        return dlg
 
     def dialog(src="in.pdf", out="out.docx"):
-        d = dlg.ConvertDialog("PDF → Word", None, src)
+        d = _dialogs().ConvertDialog("PDF → Word", None, src)
         d.out.setText(out)
         return d
 
@@ -90,7 +97,7 @@ _DIALOG = textwrap.dedent("""
             @staticmethod
             def warning(parent, title, text):
                 seen.append(text)
-        dlg.QMessageBox = _Box
+        _dialogs().QMessageBox = _Box
         d._on_run()
         return seen
 """)
@@ -117,7 +124,7 @@ class TestTheDefectReproduces(unittest.TestCase):
 
     def test_fitz_really_is_unimportable_under_the_blocker(self):
         got = _run("""
-            import fitz  # loads here, as the app's own modules load it
+            import fitz  # cached first, so block() has an entry to evict
             block("fitz")
             try:
                 import fitz
@@ -181,8 +188,8 @@ class TestTheMessageNamesWhatFailed(unittest.TestCase):
         is the state on any change that drops it.
         """
         got = _run("""
-            dlg.ops._fitz_aliases = lambda: {}
             block("fitz")
+            _dialogs().ops._fitz_aliases = lambda: {}
             report(seen=shown_message(dialog()))
         """, qt=True)
         self.assertEqual(len(got["seen"]), 1, got)
