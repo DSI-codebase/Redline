@@ -37,6 +37,9 @@ installed with the app.
 > date above. A build from a different date may bundle different versions, and
 > a new version can bring a new dependency with it. Re-run the audit when
 > cutting a release rather than trusting this list to be current.
+> `tools/notices_audit.py` does steps 2 and 4 above and checks `licenses/`
+> against the wheels, and `CI.md` gives the order under "The notices name
+> what the build ships".
 
 ---
 
