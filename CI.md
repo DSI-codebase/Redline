@@ -55,11 +55,24 @@ place two old releases meet, such as pdf2docx 0.5.8 on PyMuPDF 1.25.4. The
 cost is that a red run names a feature and not a library, which the second
 procedure below answers.
 
-A green run is a claim about what the suite reaches, and three floors are
-installed without being exercised (read 2026-11-01). No test imports
-`pytesseract`. The `anthropic` tests accept a missing SDK as a pass and never
-build a client. `PyYAML` is imported by the rule library alone, so it is
-reached only when the token is present.
+A green run is a claim about what the suite reaches, so a floor counts only
+when a test calls into the library. Until 2026-11-01 two floors were installed
+without being exercised: no test imported `pytesseract`, and the `anthropic`
+tests accepted a missing SDK as a pass and never built a client.
+
+- `tests/test_ocr.py` runs the app's `image_to_data` and `image_to_string`
+  calls through pytesseract against `tests/_tesseract_stand_in.py`, a script
+  pytesseract starts as its Tesseract binary. No runner needs Tesseract.
+- `tests/test_claude_api.py` builds the client exactly as the app builds it
+  and answers the SDK's HTTP transport in-process. No request leaves the
+  runner. The SDK moved from `httpx` at 0.40 to `httpx2` at 2.3.0, and 2.3.0
+  sends the key as `Authorization: Bearer` where 0.40 sent `x-api-key` (read
+  2026-11-01), so the test asks the SDK which package to patch and accepts
+  either header.
+
+Each skips only when its library is not installed, and `tools/run_tests.py`
+prints that skip on its own line, named by library. `PyYAML` is imported by
+the rule library alone, so it is reached only when the token is present.
 
 To move a floor to version X:
 
