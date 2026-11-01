@@ -32,12 +32,13 @@ PySide6>=6.8.1,<6.12
 PyMuPDF>=1.25.4
 # Each line below passed the suite at its floor on 2026-11-01 on Python 3.11,
 # alone with everything else at its newest release, and with every floor in
-# this file at once. This said "The suite barely reaches three of them: no
-# test imports pytesseract, the anthropic tests never build a client, and only
-# the rule library imports PyYAML." tests/_workflow.py imports PyYAML too, so
-# the suite reaches it with or without the rule library. It barely reaches
-# two: no test imports pytesseract, and the anthropic tests never build a
-# client. CI.md says so where the floors job is described.
+# this file at once. tests/test_ocr.py reaches pytesseract through a stand-in
+# for the Tesseract binary, and tests/test_claude_api.py reaches anthropic
+# through the real client with its HTTP transport answered in-process. This
+# said "Only the rule library imports PyYAML, so the suite reaches it only when
+# that library is installed." tests/_workflow.py imports PyYAML too, so the
+# suite reaches it with or without the rule library. CI.md says so where the
+# floors job is described.
 openpyxl>=3.1
 python-docx>=1.1
 pdf2docx>=0.5.8

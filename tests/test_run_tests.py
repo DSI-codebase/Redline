@@ -16,6 +16,12 @@ The third and fourth are why `classify` is no longer the last word. It reads a
 reason string and a compound reason forces it to pick; `missing_optional()`
 and `qt_missing()` ask the interpreter, which cannot be wrong about what it can
 import, and `classify` picks by what they measured.
+
+`--strict` also let every other library through. With pytesseract and
+anthropic shadowed by modules raising ImportError, `--strict tests.test_ocr
+tests.test_claude_api` skipped every test that reaches either and exited 0
+(2026-11-01), although both workflows install both. TestStrictHoldsTheDeclaredLibraries is that rule,
+read from requirements.txt rather than from a list.
 """
 
 import contextlib
@@ -318,6 +324,228 @@ class TestMainMeasuresTheRuleLibraryWithAudit(unittest.TestCase):
         self.assertEqual(code, 1)
 
 
+_PYTESSERACT = "needs pytesseract, which is not installed"
+_ANTHROPIC = "needs the anthropic SDK, which is not installed"
+_BANNER = re.compile(r"^!! (\d+) tests were SKIPPED because (.*)\.$", re.M)
+
+
+def _main_in_process(reasons, flags=(), planted=None, qt_ok=True):
+    """``(exit code, output, children started)`` from `run_tests.main` with
+    each unittest child replaced by one reporting ``{reason: count}`` skips.
+
+    The probes run as written, against ``planted`` modules in
+    ``sys.modules`` (None makes the import raise) and a ``tests._qt`` whose
+    ``QT_OK`` is ``qt_ok``.
+    """
+    started = []
+
+    def child(cmd, **_):
+        started.append(cmd)
+        out = "".join(
+            f"test_{i} (tests.test_x.C.test_{i}) ... skipped '{reason}'\n"
+            for reason, n in reasons.items() for i in range(n))
+        skipped = sum(reasons.values())
+        out += f"\nRan {skipped + 2} tests in 0.1s\n\nOK (skipped={skipped})\n"
+        return subprocess.CompletedProcess(cmd, 0, "", out)
+
+    qt = types.ModuleType("tests._qt")
+    qt.QT_OK = qt_ok
+    planted = {"tests._qt": qt, **(planted or {})}
+    saved = {name: sys.modules.get(name, KeyError) for name in planted}
+    buf = io.StringIO()
+    try:
+        sys.modules.update(planted)
+        with mock.patch.dict(os.environ), \
+                mock.patch.object(run_tests.subprocess, "run",
+                                  side_effect=child), \
+                contextlib.redirect_stdout(buf):
+            code = run_tests.main(["tests.test_x", *flags])
+    finally:
+        for name, module in saved.items():
+            if module is KeyError:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
+    return code, buf.getvalue(), started
+
+
+class TestTheDeclaredLibraries(unittest.TestCase):
+    """What `--strict` holds: the libraries requirements.txt declares, each
+    asked of the interpreter by its module name."""
+
+    def test_the_set_is_requirements_txt_read_independently(self):
+        """The oracle is the file, split here by other means."""
+        with open(os.path.join(HERE, "requirements.txt"), encoding="utf-8") as fh:
+            lines = [ln.strip() for ln in fh
+                     if ln.strip() and not ln.lstrip().startswith("#")]
+        expected = [re.split(r"[\s\[<>=!~;]", ln, maxsplit=1)[0] for ln in lines]
+        self.assertGreaterEqual(len(expected), 8, f"requirements.txt yielded {expected}")
+        self.assertEqual(run_tests.declared(), expected)
+        for lib in ("pytesseract", "anthropic", "pdf2docx"):
+            with self.subTest(lib):
+                self.assertIn(lib, expected)
+
+    def test_a_requirement_is_its_name_and_nothing_else(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        path = os.path.join(tmp, "requirements.txt")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("# a comment\n-c floors.txt\n\n"
+                     "Foo.Bar[extra]>=1.0 ; python_version >= '3.11'\n"
+                     "baz==2  # trailing comment\n")
+        self.assertEqual(run_tests.declared(path), ["Foo.Bar", "baz"])
+
+    def test_the_module_is_asked_of_the_metadata(self):
+        """Shaped as packages_distributions() answered at the floors and the
+        newest releases, 2026-11-01. Injected: every public module a
+        distribution installs, rather than the one named like it (red:
+        PyMuPDF imported fitz and pymupdf4llm too)."""
+        top_levels = {
+            "PIL": ["Pillow"], "docx": ["python-docx"],
+            "yaml": ["PyYAML"], "_yaml": ["PyYAML"],
+            "fitz": ["PyMuPDF"], "pymupdf": ["PyMuPDF"],
+            "pymupdf4llm": ["PyMuPDF"],
+            "PySide6": ["PySide6_Essentials", "PySide6"],
+            "PySide6/QtCore": ["PySide6"],
+        }
+        for lib, mods in (("Pillow", ["PIL"]), ("python-docx", ["docx"]),
+                          ("PyYAML", ["yaml"]), ("PyMuPDF", ["pymupdf"]),
+                          ("PySide6", ["PySide6"]),
+                          ("pytesseract", ["pytesseract"])):   # no metadata
+            with self.subTest(lib):
+                self.assertEqual(run_tests.import_names(lib, top_levels), mods)
+
+    def test_a_reason_names_a_library_whole(self):
+        libraries = {"PySide6": ["PySide6"], "python-docx": ["docx"],
+                     "pdf2docx": ["pdf2docx"], "PyYAML": ["yaml"],
+                     "anthropic": ["anthropic"], "pytesseract": ["pytesseract"]}
+        for reason, named in (
+                ("pdf2docx is not installed, so there is no import of it to "
+                 "break", ["pdf2docx"]),
+                ("writes a .docx file", []),
+                ("needs docx", ["python-docx"]),
+                ("needs PyYAML", ["PyYAML"]),
+                (_ANTHROPIC, ["anthropic"]),
+                (_PYTESSERACT, ["pytesseract"]),
+                # Qt's and the rule library's, each with its own probe.
+                ("PySide6 not available", []),
+                ("needs PySide6 and PyDRC", []),
+                ("needs a display", [])):
+            with self.subTest(reason):
+                self.assertEqual(run_tests.named_libraries(reason, libraries),
+                                 named)
+
+    def test_absent_means_the_import_raised(self):
+        saved = sys.modules.get("redline_shadowed", KeyError)
+        sys.modules["redline_shadowed"] = None          # import raises
+        try:
+            absent = run_tests.missing_declared({
+                "present": ["json"], "shadowed": ["redline_shadowed"],
+                "uninstalled": ["redline_no_such_module"]})
+        finally:
+            if saved is KeyError:
+                sys.modules.pop("redline_shadowed", None)
+            else:
+                sys.modules["redline_shadowed"] = saved
+        self.assertEqual(absent, ["shadowed", "uninstalled"])
+
+
+class TestStrictHoldsTheDeclaredLibraries(unittest.TestCase):
+    """`--strict` fails a run that skipped for a library requirements.txt
+    declares, with a banner per library built from what was measured."""
+
+    ABSENT = {"pytesseract": None, "anthropic": None}
+
+    def test_strict_fails_when_a_declared_library_skipped(self):
+        """Injected: the old ``--strict``, which failed for Qt skips alone
+        (red: exit 0, both banners printed, no failure line)."""
+        code, out, _ = _main_in_process(
+            {_PYTESSERACT: 6, _ANTHROPIC: 3}, ["--strict"], self.ABSENT)
+        self.assertEqual(_BANNER.findall(out), [
+            ("6", "pytesseract, which requirements.txt declares, could not "
+                  "be imported"),
+            ("3", "anthropic, which requirements.txt declares, could not "
+                  "be imported"),
+        ])
+        self.assertIn("--strict: failing because 9 tests were skipped for a "
+                      "library requirements.txt declares", out)
+        self.assertIn("Absent here: pytesseract, anthropic", out)
+        self.assertEqual(code, 1)
+
+    def test_without_strict_it_is_a_banner_and_a_pass(self):
+        """A contributor's local run is unchanged: loud, and green."""
+        code, out, _ = _main_in_process(
+            {_PYTESSERACT: 6, _ANTHROPIC: 3}, [], self.ABSENT)
+        self.assertEqual(len(_BANNER.findall(out)), 2, out)
+        self.assertNotIn("--strict: failing", out)
+        self.assertEqual(code, 0)
+
+    def test_a_library_that_imports_is_not_called_absent(self):
+        """The reason says "not installed" and the interpreter disagrees, so
+        the banner says it imports, and the run still fails. Injected: every
+        library a reason names counted absent (red: "could not be
+        imported")."""
+        present = types.ModuleType("pytesseract")
+        code, out, _ = _main_in_process(
+            {_PYTESSERACT: 2}, ["--strict"], {"pytesseract": present})
+        self.assertEqual(_BANNER.findall(out), [
+            ("2", "their skip check failed, although pytesseract imports here")])
+        self.assertNotIn("Absent here", out)
+        self.assertEqual(code, 1)
+
+    def test_a_qt_skip_is_counted_once(self):
+        """PySide6 is declared too. Injected: `named_libraries` without the
+        Qt and rule-library exclusion (red: a PySide6 banner took the four Qt
+        skips a second time)."""
+        code, out, _ = _main_in_process(
+            {"PySide6 not available": 4, _PYTESSERACT: 2}, ["--strict"],
+            self.ABSENT, qt_ok=False)
+        self.assertEqual(_BANNER.findall(out), [
+            ("4", "Qt (PySide6) could not be loaded"),
+            ("2", "pytesseract, which requirements.txt declares, could not "
+                  "be imported"),
+        ])
+        self.assertIn("--strict: failing because 4 tests were skipped for a "
+                      "missing Qt", out)
+        self.assertIn("--strict: failing because 2 tests were skipped for a "
+                      "library requirements.txt declares", out)
+        self.assertEqual(code, 1)
+
+    def test_the_set_is_read_from_the_file_each_run(self):
+        """A library no list names is held as soon as requirements.txt
+        declares it. Injected: `declared` returning ["pytesseract",
+        "anthropic"] (red: exit 0)."""
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        path = os.path.join(tmp, "requirements.txt")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("redline-only-in-this-test>=1.0\n")
+        with mock.patch.object(run_tests, "REQUIREMENTS", path):
+            code, out, _ = _main_in_process(
+                {"needs redline_only_in_this_test": 1}, ["--strict"])
+        self.assertEqual(_BANNER.findall(out), [
+            ("1", "redline-only-in-this-test, which requirements.txt "
+                  "declares, could not be imported")])
+        self.assertEqual(code, 1)
+
+    def test_strict_refuses_a_requirements_txt_that_declares_nothing(self):
+        """Before any child starts, so nothing is reported clean. Injected:
+        the refusal removed (red: exit 0 and a child started)."""
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        empty = os.path.join(tmp, "requirements.txt")
+        with open(empty, "w", encoding="utf-8") as fh:
+            fh.write("# nothing declared\n")
+        for path in (empty, os.path.join(tmp, "absent.txt")):
+            with self.subTest(os.path.basename(path)):
+                with mock.patch.object(run_tests, "REQUIREMENTS", path):
+                    code, out, started = _main_in_process(
+                        {_PYTESSERACT: 1}, ["--strict"], self.ABSENT)
+                self.assertEqual(code, 2, out)
+                self.assertEqual(started, [])
+                self.assertIn("Refusing the run", out)
+
+
 # Refuses PySide6 and nothing else, the blocker tests/test_qt_absent_degrades.py
 # uses. A sitecustomize on PYTHONPATH, because the runner starts a process per
 # module and each one must be blocked too.
@@ -383,6 +611,82 @@ class TestTheRunnerWithQtMissing(unittest.TestCase):
         self.assertEqual(self.result.returncode, 1, self.result.stdout)
         self.assertIn("--strict: failing because", self.result.stdout)
         self.assertNotIn("--require-drc: failing", self.result.stdout)
+
+
+# Shadows pytesseract and anthropic with an import that raises, the shape
+# measured 2026-11-01. A sitecustomize on PYTHONPATH, because each module the
+# runner starts must be shadowed too.
+_SHADOWED = ("pytesseract", "anthropic")
+_SHADOW = textwrap.dedent(f"""
+    import sys
+    class _Shadow:
+        def find_spec(self, name, path=None, target=None):
+            if name.split(".")[0] in {_SHADOWED!r}:
+                raise ImportError(name + " shadowed by test_run_tests")
+    sys.meta_path.insert(0, _Shadow())
+""")
+
+
+class TestTheRunnerWithTheDeclaredLibrariesShadowed(unittest.TestCase):
+    """The measurement itself, through the whole runner: ``--strict
+    tests.test_claude_api tests.test_ocr`` with both libraries shadowed
+    exited 0 with a skip line for each."""
+
+    MODULES = ("tests.test_claude_api", "tests.test_ocr")
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dir = tempfile.mkdtemp()
+        with open(os.path.join(cls.dir, "sitecustomize.py"), "w",
+                  encoding="utf-8") as fh:
+            fh.write(_SHADOW)
+        env = dict(os.environ)
+        env["PYTHONPATH"] = os.pathsep.join(
+            p for p in (cls.dir, env.get("PYTHONPATH")) if p)
+        cls.probes = {
+            lib: subprocess.run([sys.executable, "-c", f"import {lib}"],
+                                env=env, capture_output=True, text=True)
+            for lib in _SHADOWED}
+        cls.result = subprocess.run(
+            [sys.executable, os.path.join(HERE, "tools", "run_tests.py"),
+             "--strict", *cls.MODULES],
+            cwd=HERE, env=env, capture_output=True, text=True, timeout=600)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.dir, ignore_errors=True)
+
+    def _skipped(self, reason):
+        m = re.search(rf"^\s+(\d+)  {re.escape(reason)}$",
+                      self.result.stdout, re.M)
+        return int(m.group(1)) if m else 0
+
+    def test_the_shadow_holds_and_both_libraries_skipped(self):
+        """Else the assertions below are about a run that skipped nothing."""
+        for lib, probe in self.probes.items():
+            with self.subTest(lib):
+                self.assertNotEqual(probe.returncode, 0, probe.stdout)
+        for reason in (_PYTESSERACT, _ANTHROPIC):
+            with self.subTest(reason):
+                self.assertGreater(self._skipped(reason), 0, self.result.stdout)
+
+    def test_each_library_has_its_own_banner_with_its_own_count(self):
+        banners = {why: int(n) for n, why in _BANNER.findall(self.result.stdout)}
+        for lib, reason in (("pytesseract", _PYTESSERACT),
+                            ("anthropic", _ANTHROPIC)):
+            with self.subTest(lib):
+                why = f"{lib}, which requirements.txt declares, could not be imported"
+                self.assertEqual(banners.get(why), self._skipped(reason),
+                                 self.result.stdout)
+
+    def test_strict_fails_the_run(self):
+        """Injected: the old ``--strict``, which failed for Qt skips alone
+        (red: exit 0)."""
+        out = self.result.stdout
+        self.assertEqual(self.result.returncode, 1, out)
+        self.assertIn("tests were skipped for a library requirements.txt "
+                      "declares", out)
+        self.assertIn("Absent here: pytesseract, anthropic", out)
 
 
 if __name__ == "__main__":

@@ -6,6 +6,13 @@ portable zip to the matching GitHub release.
 
 ## Unreleased
 
+- **OCR reports itself unavailable for a Tesseract it cannot use.** With a
+  Tesseract older than 3.05, or one whose `tesseract --version` output
+  pytesseract cannot read, the check that decides whether OCR is available
+  raised `SystemExit`, which `except Exception` does not catch, instead of
+  answering no. Every feature that uses OCR asks that check first. It now
+  answers no, as it does when Tesseract is not installed, and the feature
+  carries on without OCR.
 - **Running from source needs PySide6 6.8.1 or later.** `requirements.txt`
   said 6.6, and two features do not work below 6.8.1. Up to 6.8.0.2 the text
   size setting does not fully reach a window that is already open. At 300% the
