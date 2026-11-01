@@ -1,4 +1,15 @@
-"""The GitHub workflows, read with PyYAML.
+"""Every step check in tests/ reads the GitHub workflows here, with PyYAML.
+
+Not every test. Two in `tests/test_requirements.py` read the raw text on
+purpose, and neither asks about a step:
+`test_the_workflows_do_not_write_the_account_down_at_all` searches each whole
+file for a written-down account, and
+`test_the_frozen_build_stays_pinned_and_says_why` reads the pin's reason,
+which is a YAML comment this loader drops. Measured 2026-11-01 by an AST sweep
+of tests/ and by an `open` audit hook over a full suite run with 0 skipped:
+those two are the only reads of a workflow that do not come through here. No
+test holds that, so a new hand reader would make the first line false without
+failing anything.
 
 Three tests read the workflows by hand, and each excused it with a sentence
 saying PyYAML is not a dependency here. `requirements.txt` has declared
