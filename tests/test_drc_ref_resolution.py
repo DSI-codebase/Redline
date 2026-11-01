@@ -96,7 +96,7 @@ _MARKER = "BASH-CAN-RUN-A-SCRIPT"
 
 
 def _bash_candidates():
-    """Every bash worth trying, most-faithful first.
+    r"""Every bash worth trying, most-faithful first.
 
     Git bash is not a fallback here, it is the SHELL THE STEP IS ACTUALLY RUN
     WITH: the workflow declares `shell: bash`, and on `windows-latest` Actions
@@ -115,7 +115,7 @@ def _bash_candidates():
 
 
 def _usable_bash(candidates=None):
-    """The first bash that can actually RUN something, not merely be found.
+    r"""The first bash that can actually RUN something, not merely be found.
 
     `shutil.which("bash")` was the whole test, and on `windows-latest` it
     finds `C:\Windows\System32\bash.exe` -- the WSL launcher, present on
