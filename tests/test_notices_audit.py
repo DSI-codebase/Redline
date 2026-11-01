@@ -35,12 +35,21 @@ import io
 import os
 import pathlib
 import shutil
+import subprocess
 import tempfile
 import unittest
 import zipfile
 from unittest import mock
 
+# The workflow-step harness: the `run:` block reader and the probe that finds a
+# bash which can actually run a script (`windows-latest` puts WSL's launcher on
+# PATH, which runs nothing). Shared rather than copied, so the two harnesses
+# drive the same shell.
+from tests.test_drc_ref_resolution import BASH, _code_only, _run_script
+
 REPO = pathlib.Path(__file__).resolve().parent.parent
+WORKFLOW = REPO / ".github" / "workflows" / "build-windows.yml"
+NOTICES_STEP = "Check the notices against the bundle"
 _spec = importlib.util.spec_from_file_location(
     "notices_audit", REPO / "tools" / "notices_audit.py")
 na = importlib.util.module_from_spec(_spec)
@@ -58,6 +67,8 @@ GAMMA_COPYING = b"gamma COPYING\n"
 GAMMA_AUTHORS = b"gamma AUTHORS\n"
 EPSILON_LICENSE = b"epsilon LICENSE\n"
 PYI_COPYING = b"PyInstaller COPYING.txt\n"
+CONTRIB_LICENSE = b"hooks-contrib LICENSE\n"
+GAMMA_SUPPLIED = b"the text gamma's wheel does not carry, supplied by hand\n"
 
 
 class _Build:
@@ -73,6 +84,7 @@ class _Build:
         self.wheels = root / "wheels"
         self.licenses = root / "licenses"
         self.toc: list[tuple[str, str]] = []
+        self.pkg: list[tuple[str, str, str]] = []
         self.base_library = ["codecs.pyc", "encodings/__init__.pyc"]
 
     def install(self, name, version, files, site=None):
@@ -91,6 +103,9 @@ class _Build:
     def in_pyz(self, name, path):
         self.toc.append((name, str(path)))
 
+    def in_pkg(self, name, path, typecode="PYSOURCE"):
+        self.pkg.append((name, str(path), typecode))
+
     def in_internal(self, rel, body=b"\x7fELF"):
         path = self.internal / rel
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -102,13 +117,21 @@ class _Build:
             for name, body in members.items():
                 z.writestr(name, body)
 
-    def finish(self, toc=True, base_library=True, internal=True, executable=True):
+    def finish(self, toc=True, pkg=True, base_library=True, internal=True, executable=True):
         out = self.work / na.SPEC_NAME
         out.mkdir(parents=True, exist_ok=True)
         if toc:
             literal = (str(out / "PYZ-00.pyz"),
                        [(n, p, "PYMODULE") for n, p in self.toc])
             (out / "PYZ-00.toc").write_text(repr(literal), encoding="utf-8")
+        if pkg:
+            # The real one's shape: eleven fields, the entries third, and two
+            # entries that are not code (an option and the PYZ itself).
+            entries = [("pyi-contents-directory _internal", "", "OPTION"),
+                       ("PYZ-00.pyz", str(out / "PYZ-00.pyz"), "PYZ"), *self.pkg]
+            literal = (str(out / f"{na.APP_NAME}.pkg"), {"PYSOURCE": True}, entries,
+                       "libpython3.11.so.1.0", True, False, False, [], None, None, None)
+            (out / "PKG-00.toc").write_text(repr(literal), encoding="utf-8")
         if base_library:
             with zipfile.ZipFile(out / "base_library.zip", "w") as z:
                 for member in self.base_library:
@@ -132,7 +155,7 @@ def _meta(name, version, mv="2.4", license_files=()):
     return ("\n".join(lines) + "\n").encode("utf-8")
 
 
-def standard(root: pathlib.Path, *, rth_utils=True) -> _Build:
+def standard(root: pathlib.Path, *, pyinstaller_code=True) -> _Build:
     """The build every test starts from. Its SHIPS set is SHIPS below."""
     b = _Build(root)
 
@@ -180,10 +203,12 @@ def standard(root: pathlib.Path, *, rth_utils=True) -> _Build:
     })
 
     rth = "PyInstaller/fake-modules/_pyi_rth_utils/__init__.py"
+    boot = "PyInstaller/loader/pyiboot01_bootstrap.py"
     b.install("pyinstaller", "6.22.3", {
-        rth: b"", "PyInstaller/bootloader/Windows-64bit-intel/run.exe": b"MZ"})
-    if rth_utils:
+        rth: b"", boot: b"", "PyInstaller/bootloader/Windows-64bit-intel/run.exe": b"MZ"})
+    if pyinstaller_code:
         b.in_pyz("_pyi_rth_utils", b.site / rth)
+        b.in_pkg("pyiboot01_bootstrap", b.site / boot)
     b.wheel("pyinstaller-6.22.3-py3-none-win_amd64.whl", {
         "PyInstaller/__init__.py": b"",
         "pyinstaller-6.22.3.dist-info/METADATA": _meta("pyinstaller", "6.22.3", "2.4", ["COPYING.txt"]),
@@ -194,6 +219,28 @@ def standard(root: pathlib.Path, *, rth_utils=True) -> _Build:
                                   "pydrc/packs/base.yaml": b"rules: []\n"})
     b.in_pyz("pydrc", b.site / "pydrc" / "__init__.py")
     b.in_internal("pydrc/packs/base.yaml", b"rules: []\n")
+
+    # A run-time hook from another distribution, in the executable's archive
+    # and nowhere else. It is the code a reader of the PYZ alone never sees.
+    hook = "_pyinstaller_hooks_contrib/rthooks/pyi_rth_thing.py"
+    b.install("pyinstaller-hooks-contrib", "2026.9", {hook: b""})
+    b.in_pkg("pyi_rth_thing", b.site / hook)
+    b.wheel("pyinstaller_hooks_contrib-2026.9-py3-none-any.whl", {
+        hook: b"",
+        "pyinstaller_hooks_contrib-2026.9.dist-info/METADATA":
+            _meta("pyinstaller-hooks-contrib", "2026.9"),
+        "pyinstaller_hooks_contrib-2026.9.dist-info/licenses/LICENSE": CONTRIB_LICENSE,
+    })
+    # And what else that archive holds: the app's own entry point and a
+    # standard-library module PyInstaller compiled into localpycs/.
+    main = root / "app" / "main.py"
+    main.parent.mkdir(parents=True)
+    main.write_bytes(b"")
+    b.in_pkg("main", main)
+    local = b.work / na.SPEC_NAME / "localpycs" / "struct.pyc"
+    local.parent.mkdir(parents=True)
+    local.write_bytes(b"pyc")
+    b.in_pkg("struct", local, "PYMODULE")
 
     b.install("delta", "4.0", {"delta/__init__.py": b""})
     b.install("setuptools", na.RUNNER_SETUPTOOLS, {"setuptools/__init__.py": b""})
@@ -212,7 +259,7 @@ def standard(root: pathlib.Path, *, rth_utils=True) -> _Build:
     return b
 
 
-SHIPS = {"alpha", "beta", "gamma", "epsilon", "pyinstaller", "pydrc"}
+SHIPS = {"alpha", "beta", "gamma", "epsilon", "pyinstaller", "pyinstaller-hooks-contrib", "pydrc"}
 
 WRITTEN = {
     "alpha": {"LICENSE": ALPHA_LICENSE, "sub/COPYING": ALPHA_SUB,
@@ -221,6 +268,7 @@ WRITTEN = {
     "gamma": {"AUTHORS.rst": GAMMA_AUTHORS, "COPYING": GAMMA_COPYING},
     "epsilon": {"LICENSE": EPSILON_LICENSE},
     "pyinstaller": {"COPYING.txt": PYI_COPYING},
+    "pyinstaller-hooks-contrib": {"LICENSE": CONTRIB_LICENSE},
 }
 
 
@@ -234,12 +282,15 @@ class _TempBuild(unittest.TestCase):
         self.root = pathlib.Path(tempfile.mkdtemp(prefix="notices-audit-"))
         self.addCleanup(shutil.rmtree, self.root, True)
 
-    def rows(self, b: _Build):
+    def code(self, b: _Build) -> dict[str, str]:
         toc, _ = na.read_pyz_toc(b.work / na.SPEC_NAME / "PYZ-00.toc")
+        return {**toc, **na.read_pkg_toc(b.work / na.SPEC_NAME / "PKG-00.toc")}
+
+    def rows(self, b: _Build):
         base = na.read_base_library(b.work / na.SPEC_NAME / "base_library.zip")
         bundle, _ = na.read_bundle(b.internal)
         dists = na.installed([str(b.site), str(b.elsewhere)])
-        rows = na.measure(dists, toc, base, bundle, na.executables_beside(b.internal))
+        rows = na.measure(dists, self.code(b), base, bundle, na.executables_beside(b.internal))
         return {r.name: r for r in rows}, bundle
 
 
@@ -263,8 +314,38 @@ class TestTheShippingSet(_TempBuild):
         self.assertEqual(got["gamma"], (0, 1, 4), "gamma.libs/ by basename")
         self.assertEqual(got["epsilon"], (1, 0, 3), "a module in base_library.zip")
         self.assertEqual(got["pydrc"], (1, 1, 4))
-        self.assertEqual(got["pyinstaller"], (1, 1, 4), "_pyi_rth_utils, then the bootloader")
+        self.assertEqual(got["pyinstaller"], (2, 1, 5),
+                         "_pyi_rth_utils and the bootstrap, then the bootloader")
+        self.assertEqual(got["pyinstaller-hooks-contrib"], (1, 0, 3),
+                         "a run-time hook in the executable's archive")
         self.assertEqual(got["delta"], (0, 0, 3))
+
+    def test_a_run_time_hook_from_another_distribution_ships_it(self):
+        """The hook is in PKG-00.toc and nowhere else: not in the PYZ, not
+        under `_internal/`. A reader of the PYZ alone reports its distribution
+        as not shipping while its code runs before the app does."""
+        b = standard(self.root).finish()
+        pyz, _ = na.read_pyz_toc(b.work / na.SPEC_NAME / "PYZ-00.toc")
+        self.assertNotIn("pyi_rth_thing", pyz.values(), "the fixture leaks the hook into the PYZ")
+        rows, _ = self.rows(b)
+        self.assertTrue(rows["pyinstaller-hooks-contrib"].ships)
+
+    def test_the_archive_is_read_by_shape_and_only_its_code_counts(self):
+        b = standard(self.root).finish()
+        pkg = na.read_pkg_toc(b.work / na.SPEC_NAME / "PKG-00.toc")
+        self.assertEqual(sorted(pkg.values()),
+                         ["main", "pyi_rth_thing", "pyiboot01_bootstrap", "struct"],
+                         "the option and the PYZ entry are not code")
+
+    def test_the_modules_no_distribution_claims_are_grouped_by_root(self):
+        """`json` from the standard library, `main.py` from the app, and the
+        `struct` PyInstaller compiled into localpycs/."""
+        b = standard(self.root).finish()
+        rows, _ = self.rows(b)
+        self.assertEqual(na.unclaimed_modules(list(rows.values()), self.code(b)), {
+            os.path.realpath(self.root / "stdlib"): 1,
+            os.path.realpath(self.root / "app"): 1,
+            os.path.realpath(b.work / na.SPEC_NAME / "localpycs"): 1})
 
     def test_a_module_is_matched_by_its_real_path_not_its_name(self):
         """`decoy` installs `alpha/__init__.py` too, from another directory.
@@ -274,9 +355,9 @@ class TestTheShippingSet(_TempBuild):
         self.assertFalse(rows["decoy"].ships)
 
     def test_pyinstaller_ships_on_its_bootloader_alone(self):
-        """A build with no runtime hook has no `_pyi_rth_utils` in the PYZ,
-        and its executable is still PyInstaller's bootloader."""
-        rows, _ = self.rows(standard(self.root, rth_utils=False).finish())
+        """With none of PyInstaller's code found in either toc, its executable
+        is still PyInstaller's bootloader."""
+        rows, _ = self.rows(standard(self.root, pyinstaller_code=False).finish())
         self.assertEqual((rows["pyinstaller"].modules, rows["pyinstaller"].files), (0, 1))
         self.assertTrue(rows["pyinstaller"].ships)
 
@@ -415,6 +496,16 @@ class TestTheRefusals(_TempBuild):
         self.b.finish(toc=False)
         self.assertRefused("no PYZ toc")
 
+    def test_no_pkg_toc(self):
+        self.b.finish(pkg=False)
+        self.assertRefused("no PKG toc")
+
+    def test_an_archive_that_lists_no_script_with_a_file(self):
+        """Its option and its PYZ entry parse, and neither is code."""
+        self.b.pkg = []
+        self.b.finish()
+        self.assertRefused("lists no script with a file")
+
     def test_a_toc_that_lists_no_module_with_a_file(self):
         """It parses, so it is not absent, and it measures nothing."""
         self.b.toc = [("ns_package", "-")]
@@ -456,6 +547,7 @@ class TestTheRefusals(_TempBuild):
         stdlib.parent.mkdir(parents=True)
         stdlib.write_bytes(b"")
         b.in_pyz("json", stdlib)
+        b.in_pkg("main", stdlib)
         b.in_internal("docs/a.md", b"# a\n")
         b.licenses = self.b.licenses
         self.b = b.finish()
@@ -483,6 +575,46 @@ class TestTheRefusals(_TempBuild):
             "gamma-3.0.dist-info/METADATA": _meta("gamma", "3.0", "2.1")})
         self.b.finish()
         self.assertRefused("vendored only")
+
+    def _empty_gamma(self):
+        """gamma's wheel, holding nothing but its METADATA."""
+        self.b.wheel("gamma-3.0-cp311-cp311-win_amd64.whl", {
+            "gamma/__init__.py": b"",
+            "gamma-3.0.dist-info/METADATA": _meta("gamma", "3.0", "2.1")})
+
+    def test_a_listed_package_with_an_empty_wheel_is_supplied_by_hand(self):
+        """The name is matched as pip matches it, so `Gamma` lists `gamma`."""
+        self._empty_gamma()
+        (self.b.licenses / "GAMMA-3.0.txt").write_bytes(GAMMA_SUPPLIED)
+        self.b.finish()
+        with mock.patch.dict(na.SUPPLIED_BY_HAND, {"Gamma": ("GAMMA-3.0.txt", "test")}):
+            code, out, err = self.main()
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("supplied by hand as licenses/GAMMA-3.0.txt", out)
+        self.assertIn("1 supplied by hand", out)
+        self.assertFalse((self.b.licenses / "gamma").exists(),
+                         "a directory was written for a wheel that holds nothing")
+        self.assertEqual((self.b.licenses / "GAMMA-3.0.txt").read_bytes(), GAMMA_SUPPLIED,
+                         "the text supplied by hand was touched")
+
+    def test_a_listed_text_that_is_not_there(self):
+        self._empty_gamma()
+        self.b.finish()
+        with mock.patch.dict(na.SUPPLIED_BY_HAND, {"gamma": ("GAMMA-3.0.txt", "test")}):
+            self.assertRefused("names a text that is not there")
+
+    def test_a_listed_package_whose_wheel_ships_a_license_again(self):
+        """The entry would do nothing, so it is refused rather than kept."""
+        (self.b.licenses / "GAMMA-3.0.txt").write_bytes(GAMMA_SUPPLIED)
+        self.before = _tree(self.b.licenses)
+        self.b.finish()
+        with mock.patch.dict(na.SUPPLIED_BY_HAND, {"gamma": ("GAMMA-3.0.txt", "test")}):
+            self.assertRefused("now ship a license file")
+
+    def test_a_listed_package_that_no_longer_ships(self):
+        self.b.finish()
+        with mock.patch.dict(na.SUPPLIED_BY_HAND, {"delta": ("DELTA.txt", "test")}):
+            self.assertRefused("SUPPLIED_BY_HAND names delta, which does not ship")
 
     def test_the_wrong_setuptools_off_windows(self):
         b = self.b
@@ -544,6 +676,185 @@ class TestTheRefusals(_TempBuild):
         self.assertIn("--no-deps", argv)
         self.assertIn("--only-binary=:all:", argv)
         self.assertNotIn("pydrc==0.23.1", sum(calls, []), "DSI's own was downloaded")
+
+
+def _steps(path: pathlib.Path) -> list[str]:
+    """The job's steps in order, one string each, comment lines dropped.
+
+    The reader `tests/test_frozen_build.py` uses, carried here because that
+    module imports the Qt probe and this one needs no Qt.
+    """
+    lines = [ln for ln in path.read_text(encoding="utf-8").splitlines()
+             if not ln.lstrip().startswith("#")]
+    start = next((i for i, ln in enumerate(lines) if ln.strip() == "steps:"), None)
+    if start is None:
+        return []
+    indent, steps = None, []
+    for ln in lines[start + 1:]:
+        if not ln.strip():
+            continue
+        lead = len(ln) - len(ln.lstrip())
+        if indent is not None and lead < indent:
+            break
+        if ln.lstrip().startswith("- ") and indent in (None, lead):
+            indent = lead
+            steps.append([ln])
+        elif steps:
+            steps[-1].append(ln)
+    return ["\n".join(s) for s in steps]
+
+
+class TestTheBuildChecksTheNotices(unittest.TestCase):
+    """Build Windows runs the audit against the bundle it just built."""
+
+    def _find(self, steps, needle):
+        hits = [i for i, s in enumerate(steps) if needle in s]
+        self.assertEqual(len(hits), 1, f"expected one step containing {needle!r}, found {len(hits)}")
+        return hits[0]
+
+    def test_the_check_runs_after_the_build_and_before_anything_is_packaged(self):
+        steps = _steps(WORKFLOW)
+        self.assertGreaterEqual(len(steps), 8, f"found {len(steps)} steps, so the reader missed the job")
+        build = self._find(steps, "pyinstaller packaging/DSI_Redline.spec")
+        check = self._find(steps, "python tools/notices_audit.py")
+        installer = self._find(steps, "ISCC.exe")
+        later = [i for i, s in enumerate(steps)
+                 if "upload-artifact" in s or "gh release" in s or "Compress-Archive" in s]
+        self.assertGreaterEqual(len(later), 4, "the zip, both uploads and the release")
+        self.assertLess(build, check, "the notices are checked before there is a bundle")
+        self.assertLess(check, installer, "the installer is built before the notices are checked")
+        self.assertLess(check, min(later), "something is packaged or published first")
+
+    def test_a_tag_build_can_fail_on_it(self):
+        steps = _steps(WORKFLOW)
+        step = steps[self._find(steps, "python tools/notices_audit.py")]
+        self.assertNotIn("continue-on-error", step)
+        self.assertNotIn("if:", step, "a condition would let a build skip it silently")
+        self.assertIn("startsWith(github.ref, 'refs/tags/')", step,
+                      "the step no longer knows whether this is a tag build")
+        code = _code_only(_run_script(str(WORKFLOW), NOTICES_STEP))
+        self.assertIn("git status --porcelain -- licenses/", code,
+                      "the comparison must see untracked and deleted files too")
+        self.assertIn("exit 1", code)
+
+    def test_licenses_are_never_converted_on_checkout(self):
+        """Asked of git, not of `.gitattributes`' text: the attribute that
+        counts is the one git resolves for the file."""
+        git = shutil.which("git")
+        if git is None or not (REPO / ".git").exists():
+            self.skipTest("git, or this checkout's .git, is not available here")
+        r = subprocess.run([git, "check-attr", "text", "--",
+                            "licenses/numpy/LICENSE.txt", "THIRD-PARTY-NOTICES.md"],
+                           cwd=REPO, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        got = dict(line.split(": text: ") for line in r.stdout.splitlines())
+        self.assertEqual(got["licenses/numpy/LICENSE.txt"], "unset",
+                         "a checkout may convert line endings under licenses/, so "
+                         "the installer would not carry the wheels' bytes")
+        self.assertNotEqual(got["THIRD-PARTY-NOTICES.md"], "unset",
+                            "the rule reaches beyond licenses/")
+
+
+# `python` is a shell FUNCTION standing in for the audit, for the reason the
+# PyDRC harness gives: no directory, no execute bit and no PATH edit, so it
+# runs the same under Git bash. git is the real one, in a real repository,
+# because what the step asks of git is the thing under test.
+_AUDIT_STUB = """
+python() {
+  if [ "$1" = "tools/notices_audit.py" ]; then
+    echo "AUDIT-RAN"
+    case "$AUDIT_WRITES" in
+      modify) printf 'changed\\n' >> licenses/numpy/LICENSE.txt ;;
+      add) mkdir -p licenses/newpkg && printf 'new\\n' > licenses/newpkg/LICENSE ;;
+      remove) rm -rf licenses/numpy ;;
+    esac
+    return "${AUDIT_RC:-0}"
+  fi
+  echo "UNEXPECTED: python $*" >&2
+  return 99
+}
+"""
+
+
+@unittest.skipUnless(BASH and shutil.which("git"),
+                     "no bash that can run a script, or no git, was found here")
+class TestDrivingTheNoticesStep(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="notices-step-")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        lic = os.path.join(self.tmp, "licenses", "numpy")
+        os.makedirs(lic)
+        with open(os.path.join(lic, "LICENSE.txt"), "w", encoding="utf-8", newline="\n") as fh:
+            fh.write("BSD\n")
+        for argv in (["init", "-q"], ["config", "core.autocrlf", "false"],
+                     ["add", "licenses"],
+                     ["-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                      "commit", "-q", "-m", "licenses"]):
+            subprocess.run(["git", *argv], cwd=self.tmp, check=True, capture_output=True)
+
+    def drive(self, *, token="tok", tag=True, audit_rc=0, writes=""):
+        script = _run_script(str(WORKFLOW), NOTICES_STEP)
+        self.assertNotIn("${{", script, "an Actions expression bash cannot read is in the script")
+        path = os.path.join(self.tmp, "step.sh")
+        with open(path, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(_AUDIT_STUB + script)
+        env = dict(os.environ, PYDRC_TOKEN=token, IS_TAG="true" if tag else "false",
+                   AUDIT_RC=str(audit_rc), AUDIT_WRITES=writes)
+        # The flags Actions runs `shell: bash` with, so `-e` and `pipefail`
+        # behave here as they do on the runner.
+        r = subprocess.run([BASH, "--noprofile", "--norc", "-eo", "pipefail", path],
+                           cwd=self.tmp, env=env,
+                           capture_output=True, text=True, errors="replace")
+        out = r.stdout + r.stderr
+        # Every path through the step prints one of these, so output with none
+        # of them means the shell never ran the script.
+        self.assertTrue(any(m in out for m in ("::warning::", "::error::", "Notices: licenses/")),
+                        f"{BASH} did not run the step. Output was:\n{out!r}")
+        self.assertNotIn("UNEXPECTED", out)
+        return r.returncode, out
+
+    def test_without_the_token_it_says_the_notices_were_not_checked(self):
+        rc, out = self.drive(token="")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("NOT checked", out)
+        self.assertNotIn("AUDIT-RAN", out)
+
+    def test_a_bundle_that_matches_passes(self):
+        rc, out = self.drive()
+        self.assertEqual(rc, 0, out)
+        self.assertIn("AUDIT-RAN", out)
+        self.assertIn("matches", out)
+
+    def test_a_changed_file_fails_a_tag_build_and_is_named(self):
+        rc, out = self.drive(writes="modify")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("::error::", out)
+        self.assertIn("licenses/numpy/LICENSE.txt", out)
+
+    def test_a_package_that_joined_fails_a_tag_build(self):
+        """Untracked: what `git diff` alone would never show."""
+        rc, out = self.drive(writes="add")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("licenses/newpkg/", out)
+
+    def test_a_package_that_left_fails_a_tag_build(self):
+        rc, out = self.drive(writes="remove")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("licenses/numpy/LICENSE.txt", out)
+
+    def test_a_refusal_fails_a_tag_build(self):
+        rc, out = self.drive(audit_rc=2)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("exited 2", out)
+
+    def test_a_manual_run_warns_and_goes_on(self):
+        for kwargs in ({"writes": "modify"}, {"audit_rc": 2}):
+            with self.subTest(**kwargs):
+                rc, out = self.drive(tag=False, **kwargs)
+                self.assertEqual(rc, 0, out)
+                self.assertIn("::warning::", out)
+                self.assertIn("not a tag build", out)
 
 
 if __name__ == "__main__":

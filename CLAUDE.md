@@ -102,10 +102,11 @@ An installer that cannot say which rules it contains is one nobody can reproduce
 `packaging/pydrc-ref.txt` names the PyDRC ref, whatever it names is **resolved to
 a commit SHA** before installing, and that SHA lands in the build log and the
 release notes — so a branch cannot move underneath a build and two runs of one
-tag cannot quietly differ. Cutting a release is three steps **in this order**:
-tag PyDRC; set `packaging/pydrc-ref.txt` to that tag here and commit it; tag the
-app. Tagging the app before step 2 produces a release whose notes name a moving
-branch, which is the one thing the pin exists to prevent.
+tag cannot quietly differ. Cutting a release is four steps **in this order**:
+tag PyDRC; set `packaging/pydrc-ref.txt` to that tag and commit it; run
+`tools/notices_audit.py` on a build of that pin and commit what it changes, as
+Build Windows fails a tag otherwise; tag the app. Tagging before step 2 puts a
+moving branch in the release notes, the one thing the pin exists to prevent.
 
 The version is declared in **three** places — `app/__init__.py`,
 `packaging/installer.iss` and a `CHANGELOG.md` section — and

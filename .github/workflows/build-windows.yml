@@ -208,6 +208,46 @@ jobs:
             exit 1
           }
 
+      # THIRD-PARTY-NOTICES.md and licenses/ ship inside the bundle, so they are
+      # checked against the bundle just built, before anything is packaged or
+      # published. tools/notices_audit.py traces it to the distributions it
+      # carries and rewrites licenses/ from their Windows wheels, and git status
+      # says whether that changed anything: a package joined, left or moved
+      # since the notices were written. .gitattributes keeps licenses/ byte for
+      # byte on this checkout, so the comparison is with the committed bytes.
+      # A tag build fails on a difference, and a manual run warns, so a test
+      # build is not blocked by notices. Without PYDRC_TOKEN it cannot run at
+      # all, because the audit measures the release set and refuses a build
+      # without PyDRC, and the log says the notices were not checked.
+      # The exit code is kept with `|| audit_rc=$?`, never through a pipe.
+      - name: Check the notices against the bundle
+        shell: bash
+        env:
+          IS_TAG: ${{ startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          if [ -z "$PYDRC_TOKEN" ]; then
+            echo "::warning::THIRD-PARTY-NOTICES.md was NOT checked against this bundle. The audit measures the release set, which includes PyDRC, and this build has no PYDRC_TOKEN."
+            exit 0
+          fi
+          audit_rc=0
+          python tools/notices_audit.py || audit_rc=$?
+          changed=$(git status --porcelain -- licenses/)
+          if [ "$audit_rc" -eq 0 ] && [ -z "$changed" ]; then
+            echo "Notices: licenses/ matches the packages this bundle carries."
+            exit 0
+          fi
+          if [ "$audit_rc" -ne 0 ]; then
+            msg="tools/notices_audit.py exited $audit_rc, so the notices were not checked against this bundle. Its reason is above."
+          else
+            printf '%s\n' "$changed"
+            msg="licenses/ does not match the packages this bundle carries (the paths above). Run the audit as THIRD-PARTY-NOTICES.md describes under How to re-run the audit, update the entries it names, and commit both before tagging."
+          fi
+          if [ "$IS_TAG" = "true" ]; then
+            echo "::error::$msg"
+            exit 1
+          fi
+          echo "::warning::$msg This is not a tag build, so it does not fail."
+
       - name: Build installer (Inno Setup)
         run: |
           choco install innosetup --no-progress -y

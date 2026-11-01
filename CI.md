@@ -5,7 +5,7 @@ Two workflows, both under `.github/workflows/`.
 | Workflow | Runs on | Does |
 |---|---|---|
 | **Tests** (`tests.yml`) | every push, every pull request | the suite, on Ubuntu and Windows |
-| **Build Windows** (`build-windows.yml`) | manual dispatch, `v*` tags | the suite, then the portable app, a launch of it, the installer, and the release |
+| **Build Windows** (`build-windows.yml`) | manual dispatch, `v*` tags | the suite, then the portable app, a launch of it, a check of the notices against it, the installer, and the release |
 
 ## Running the suite
 
@@ -120,6 +120,37 @@ box, so the step also stops the app at 180 s and fails. Locally:
 `tests/test_frozen_build.py` holds the step's position and the spec's
 `excludes` on every push. The step itself runs only where the exe exists.
 
+### The notices are checked against the bundle
+
+`THIRD-PARTY-NOTICES.md` and `licenses/` ship inside the bundle, and
+`requirements.txt` uses `>=`, so the packages a build carries can change on the
+day of a release with no commit here. The notices resolved on 2026-09-01 named
+ten packages, and v1.8.0 was tagged against them while carrying 42 distributions
+(measured afterwards, in the 2026-10-31 audit).
+
+So **Build Windows** runs `tools/notices_audit.py` after the self-test and
+before Inno Setup. The tool traces the bundle to the distributions in it and
+rewrites `licenses/` from their Windows wheels, and the step asks
+`git status --porcelain -- licenses/` whether that changed anything, which sees
+a package that joined (untracked), left (deleted) or moved (modified). The
+outcome depends on the run:
+
+| run | the audit changes `licenses/` or refuses | it matches |
+|---|---|---|
+| `v*` tag, `PYDRC_TOKEN` set | the job fails before anything is packaged | passes |
+| manual, `PYDRC_TOKEN` set | a warning, and the build goes on | passes |
+| no `PYDRC_TOKEN` | not checked, and a warning says so | not checked |
+
+Without the token the audit cannot run, because it measures the release set and
+refuses a build without PyDRC. `.gitattributes` marks `licenses/**` as `-text`
+so no checkout converts line endings there: 32 of its 71 files carry CR bytes
+(2026-11-01), and the comparison is with the committed bytes. A failure is fixed
+by running the audit as the notices describe, updating the entries it names,
+committing both, and tagging again.
+
+`tests/test_notices_audit.py` holds the step's position, and drives its real
+`run:` block with the audit stubbed and git real, on every push.
+
 ### Which rules a release contains
 
 An installer that cannot say which rules it ships is one nobody can reproduce.
@@ -131,11 +162,18 @@ library version, the rule pack version, and the commit; the release notes carry
 the same line.
 
 The file sits at `main` during development so the app tracks the rule library.
-Cutting a release is therefore three steps in this order:
+Cutting a release is therefore four steps in this order:
 
 1. Tag PyDRC (`v0.2.0`).
 2. In this repository, set `packaging/pydrc-ref.txt` to that tag and commit it.
-3. Tag the app (`v1.5.0`).
+3. Build the app with that PyDRC, run `tools/notices_audit.py`, and commit what
+   it changes in `licenses/` and `THIRD-PARTY-NOTICES.md`. The steps are under
+   "How to re-run the audit" in that file. It comes after step 2 because the
+   pin decides which PyDRC, and so which ezdxf and pyparsing, the bundle carries.
+4. Tag the app (`v1.5.0`).
+
+Step 3 is also checked: a tag build fails when the audit would change
+`licenses/` (below).
 
 Tagging the app before step 2 produces a release whose notes name a moving
 branch, which is the one thing the pin exists to prevent. **Build Windows** also

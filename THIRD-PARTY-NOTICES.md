@@ -445,15 +445,23 @@ the v1.8.0 tag build did. PyDRC's `dxf` extra brings these two.
   not read it. It is recorded as **not checked**, not as clean.
 - **The Windows folder itself.** The package list above was measured on a Linux
   build of the same spec and cross-checked against the Windows build's install
-  log and hook list. The Windows build's own folder listing was not read.
+  log and hook list. The Windows build's own folder listing was not read. From
+  the next Build Windows run with the PyDRC token, the workflow reads it, as
+  "How to re-run the audit" describes.
 
 ## How to re-run the audit
 
 `tools/notices_audit.py` does steps 2 and 4 of "How this was produced". It
 traces a finished build to the distributions that reach it and copies their
 license files from the Windows wheels. It needs the build and PyDRC's private
-repository, so it runs on a build machine and not in CI. Run each command from
-the repository root.
+repository, so the Tests workflow cannot run it. The Build Windows workflow
+can, and does: after every build that installs PyDRC it runs the audit against
+the bundle it just built and compares `licenses/` with what is committed. A tag
+build fails on any difference, and a manual run warns. A build without the
+PyDRC token logs that the notices were not checked.
+
+So the steps below are for updating the notices before a release, and for
+reading what a failed check found. Run each command from the repository root.
 
 1. Make a Python 3.11 virtual environment for the build and activate it.
 2. Install setuptools 65.5.0, the version the Windows runner's Python 3.11.9
@@ -498,7 +506,11 @@ the repository root.
    from those wheels, byte for byte. The four texts at the top of `licenses/`
    are supplied by hand, and it leaves them alone. It exits 2 and writes nothing
    when the build is incomplete, nothing ships, a wheel is missing, or a wheel
-   holds no license file of its own.
+   holds no license file of its own. For a package whose wheel ships none,
+   supply its text at the top of `licenses/`, give it a row in the table below,
+   and name both in `SUPPLIED_BY_HAND` in the tool. The audit then reports that
+   package as supplied by hand, and refuses the entry once the package ships a
+   license file again or leaves the bundle.
 6. Read `git status licenses/`. A directory added or removed is a package that
    joined or left the bundle, so add or remove its entry under "The bundled
    packages" by hand. A changed file means that entry's quoted lines are read

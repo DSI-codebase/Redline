@@ -22,14 +22,48 @@ is checkable locally and the half that gets deleted by accident.
 from __future__ import annotations
 
 import ast
+import importlib.util
 import pathlib
 import re
+import tempfile
 import unittest
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 SPEC = REPO / "packaging" / "DSI_Redline.spec"
 NOTICES = REPO / "THIRD-PARTY-NOTICES.md"
 LICENSES = REPO / "licenses"
+
+# The audit's list of packages whose wheel ships no license file, and the text
+# at the top of licenses/ that covers each. Read from the tool rather than
+# written here again, so the two cannot disagree about which packages have no
+# directory of their own.
+_spec = importlib.util.spec_from_file_location(
+    "notices_audit", REPO / "tools" / "notices_audit.py")
+_audit = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_audit)
+
+
+def _supplied_text(name: str, licenses: pathlib.Path, supplied: dict) -> pathlib.Path | None:
+    """The hand-supplied text that covers ``name``, when the audit lists it and it is there."""
+    for listed, (filename, _) in supplied.items():
+        if _audit.normalize(listed) == _audit.normalize(name):
+            path = licenses / filename
+            return path if path.is_file() else None
+    return None
+
+
+def _entries_without_texts(entries, licenses: pathlib.Path, supplied: dict) -> list[str]:
+    """Each entry that has neither ``licenses/<name>/`` holding a file nor a
+    ``SUPPLIED_BY_HAND`` text that is there."""
+    missing = []
+    for name in sorted(entries):
+        folder = licenses / name
+        if folder.is_dir() and any(p.is_file() for p in folder.rglob("*")):
+            continue
+        if _supplied_text(name, licenses, supplied):
+            continue
+        missing.append(name)
+    return missing
 
 
 def _datas_strings() -> list[str]:
@@ -196,15 +230,46 @@ class TestTheNoticesAreBundled(unittest.TestCase):
         self.assertGreaterEqual(len(entries), 10,
                                 f"only {sorted(entries)} parsed as package entries")
         dirs = {p.name for p in LICENSES.iterdir() if p.is_dir()}
-        for name in sorted(entries):
+        for name in _entries_without_texts(entries, LICENSES, _audit.SUPPLIED_BY_HAND):
             with self.subTest(entry=name):
-                self.assertIn(name, dirs,
-                              f"{name} is listed and licenses/{name}/ is not there")
-                self.assertTrue(any(p.is_file() for p in (LICENSES / name).rglob("*")),
-                                f"licenses/{name}/ ships no file")
+                self.fail(f"{name} is listed and licenses/{name}/ is not there or "
+                          "ships no file, and SUPPLIED_BY_HAND in "
+                          "tools/notices_audit.py names no text for it")
         for name in sorted(dirs - set(entries)):
             with self.subTest(directory=name):
                 self.fail(f"licenses/{name}/ ships and no package entry names it")
+
+    def test_every_text_supplied_by_hand_is_there(self):
+        """The audit accepts an empty wheel only for these, so each text must be
+        at the top of licenses/, where the table test then requires its row."""
+        for name, (filename, why) in sorted(_audit.SUPPLIED_BY_HAND.items()):
+            with self.subTest(name):
+                self.assertTrue((LICENSES / filename).is_file(),
+                                f"SUPPLIED_BY_HAND names licenses/{filename} for {name}")
+                self.assertTrue(why.strip(), f"{name} is supplied by hand for no stated reason")
+
+    def test_an_entry_supplied_by_hand_needs_no_directory_and_nothing_else_does(self):
+        """The list is empty today, so the real notices cannot exercise this.
+        A licenses/ tree made here can: one package with its directory, one
+        whose wheel shipped nothing and whose text is supplied by hand."""
+        with tempfile.TemporaryDirectory() as tmp:
+            licenses = pathlib.Path(tmp)
+            (licenses / "numpy").mkdir()
+            (licenses / "numpy" / "LICENSE.txt").write_text("BSD\n", encoding="utf-8")
+            (licenses / "LGPL-3.0.txt").write_text("LGPL\n", encoding="utf-8")
+            entries = {"numpy": [], "PySide6": []}
+            listed = {"pyside6": ("LGPL-3.0.txt", "the 6.11.2 wheel ships none")}
+            self.assertEqual(_entries_without_texts(entries, licenses, listed), [],
+                             "a listed entry with its text there was refused")
+            self.assertEqual(_entries_without_texts(entries, licenses, {}), ["PySide6"],
+                             "an unlisted entry with no directory was accepted")
+            self.assertEqual(
+                _entries_without_texts(entries, licenses,
+                                       {"PySide6": ("GPL-3.0.txt", "not there")}),
+                ["PySide6"], "a listed entry whose text is missing was accepted")
+            (licenses / "numpy" / "LICENSE.txt").unlink()
+            self.assertEqual(_entries_without_texts(entries, licenses, listed), ["numpy"],
+                             "an empty directory was taken for texts")
 
     def test_every_quoted_copyright_line_is_in_that_packages_own_files(self) -> None:
         """A quoted line is verbatim from the package's licence file, so it must
@@ -219,16 +284,27 @@ class TestTheNoticesAreBundled(unittest.TestCase):
         quoted = sum(len(lines) for lines in entries.values())
         self.assertGreaterEqual(quoted, 10,
                                 f"{quoted} quoted lines parsed -- too few to be the audit")
+        checked = 0
         for name, lines in sorted(entries.items()):
             folder = LICENSES / name
-            if not folder.is_dir():
+            sources = [p for p in folder.rglob("*") if p.is_file()] if folder.is_dir() else []
+            supplied = _supplied_text(name, LICENSES, _audit.SUPPLIED_BY_HAND)
+            if supplied:
+                sources.append(supplied)
+            if not sources:
                 continue  # the entry-to-directory test reports this one
             corpus = "\n".join(_collapse(p.read_text(encoding="utf-8", errors="replace"))
-                               for p in folder.rglob("*") if p.is_file())
+                               for p in sources)
             for line in lines:
+                checked += 1
                 with self.subTest(entry=name, line=line):
                     self.assertIn(_collapse(line), corpus,
                                   f"{name}: this quote is not in licenses/{name}/")
+        # Found is not checked: an entry with no texts is skipped above, so a
+        # lookup that stopped finding the texts would skip every line and pass.
+        self.assertGreaterEqual(checked, 10,
+                                f"{quoted} quoted lines parsed and only {checked} "
+                                "checked against a license file")
 
     def test_the_notices_carry_no_semicolon_and_no_dash(self) -> None:
         """The notices are a deliverable, and a deliverable carries no semicolon

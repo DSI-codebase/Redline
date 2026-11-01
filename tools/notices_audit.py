@@ -8,20 +8,23 @@ files from the Windows wheels into ``licenses/``.
 Run it with the interpreter that ran PyInstaller, after
 ``pyinstaller packaging/DSI_Redline.spec --noconfirm`` from the repository
 root. ``THIRD-PARTY-NOTICES.md`` ("How to re-run the audit") is the procedure
-this belongs to. Stdlib only, like ``tools/run_tests.py``.
+this belongs to, and the Build Windows workflow runs it after every build that
+installs PyDRC. Stdlib only, like ``tools/run_tests.py``.
 
 WHAT IT DOES, IN ORDER
 ----------------------
-1. Reads the build: ``<workpath>/DSI_Redline/PYZ-00.toc`` (a Python literal,
-   read with ``ast.literal_eval``), ``base_library.zip`` beside it, and every
-   file under ``<distpath>/DSI Redline/_internal/``.
+1. Reads the build: ``<workpath>/DSI_Redline/PYZ-00.toc`` and ``PKG-00.toc``
+   (Python literals, read with ``ast.literal_eval``), ``base_library.zip``
+   beside them, and every file under ``<distpath>/DSI Redline/_internal/``.
+   ``PKG-00.toc`` lists the archive appended to the executable: ``main.py``,
+   PyInstaller's bootstrap, and the run-time hooks.
 2. For every installed distribution, counts the ``RECORD`` files that reach the
-   bundle: a module whose real path is in the PYZ toc (or whose name is in
-   ``base_library.zip``), a file at the same relative path under
+   bundle: a module or script whose real path is in either toc (or whose name
+   is in ``base_library.zip``), a file at the same relative path under
    ``_internal/``, or a vendored native library (``<dist>.libs/x``) present by
    basename. Prints each distribution with those three numbers and a SHIPS
-   mark, then the ``_internal/`` files no distribution claims, grouped by
-   top-level entry, so the remainder is a number rather than an assumption.
+   mark, then the ``_internal/`` files and the modules no distribution claims,
+   grouped, so the remainder is a number rather than an assumption.
 3. ``pip download``\\s the Windows wheel of each shipping distribution. The
    installer is Windows, and a wheel's license files are platform-specific:
    numpy 2.4.6's ``LICENSE.txt`` is 914 lines on Windows and 935 on Linux.
@@ -36,11 +39,18 @@ Every subdirectory of ``licenses/`` is this tool's output and is rewritten to
 the shipping set. The files at the top of ``licenses/`` (the FSF and Apache
 texts no wheel supplies) are written by hand and left alone.
 
+A package whose wheel ships no license file of its own is refused unless
+``SUPPLIED_BY_HAND`` names it and the text that covers it. That text sits at
+the top of ``licenses/`` and is reported as its own state, never as copied.
+
 IT EXITS 2 AND WRITES NOTHING rather than writing an empty or partial answer:
-no PYZ toc, no ``base_library.zip``, no ``_internal/``, no executable beside it,
-no distributions, a distribution with no readable ``RECORD``, nothing ships,
+no PYZ toc, no PKG toc, either toc listing nothing with a file, no
+``base_library.zip``, no ``_internal/``, no executable beside it, no
+distributions, a distribution with no readable ``RECORD``, nothing ships,
 PyDRC does not ship, the wrong setuptools on a non-Windows build, a wheel
-missing, or a wheel that yields no license file of its own.
+missing, a wheel that yields no license file of its own and is not listed,
+or a ``SUPPLIED_BY_HAND`` entry that is stale (its package no longer ships or
+now has a license file) or names a text that is not there.
 
 THREE TRAPS, MEASURED ON 2026-10-31, WHICH THIS HANDLES
 -------------------------------------------------------
@@ -61,12 +71,11 @@ THREE TRAPS, MEASURED ON 2026-10-31, WHICH THIS HANDLES
 
 WHAT IT DOES NOT READ
 ---------------------
-The archive PyInstaller appends to the executable: its bootstrap and the
-run-time hooks. In the v1.8.1 build (2026-11-01, from the build log) those were
-four hooks from ``PyInstaller/hooks/rthooks`` (inspect, pkgutil,
-multiprocessing, pyside6), whose distribution is counted anyway. A run-time
-hook from another distribution would not be seen here. Nor does it read the
-Python interpreter's own license, which the notices record as not checked.
+The Python interpreter's own license, which the notices record as not checked.
+Until 2026-11-01 it did not read ``PKG-00.toc`` either, so a run-time hook from
+any distribution but PyInstaller would have shipped inside the executable with
+that distribution reported as not shipping. In the v1.8.1 build all four hooks
+are PyInstaller's own (inspect, pkgutil, multiprocessing, pyside6).
 """
 
 from __future__ import annotations
@@ -100,6 +109,19 @@ REQUIRED = {"pydrc": "the release build installs PyDRC whenever PYDRC_TOKEN is "
                      "requirements-drc.txt at the ref packaging/pydrc-ref.txt "
                      "names, rebuild, and run this again"}
 
+# A package whose wheel ships no license file of its own, mapped to the file at
+# the top of licenses/ that supplies its text instead, and why. The PySide6 and
+# shiboken6 6.11.2 wheels were that case (measured 2026-09-01 as shipping none),
+# and an entry for one reads
+#     "PySide6": ("LGPL-3.0.txt", "the 6.11.2 wheel ships no license file"),
+# ONLY AN EMPTY WHEEL NEEDS AN ENTRY. The 6.11.3 Qt wheels ship
+# LicenseRef-Qt-Commercial.txt, so they are not listed, although
+# licenses/LGPL-3.0.txt is supplied for them too (tests/test_notices_ship.py
+# holds that file). An entry is refused when its package's wheel ships a
+# license file again and when its package no longer ships, so the list cannot
+# outlive its reason.
+SUPPLIED_BY_HAND: dict[str, tuple[str, str]] = {}
+
 RUNNER_SETUPTOOLS = "65.5.0"
 
 PIP_DOWNLOAD = ("download", "--no-deps", "--only-binary=:all:",
@@ -130,6 +152,38 @@ class Refusal(Exception):
 
 # --------------------------------------------------------------- the build --
 
+def _toc_entries(data) -> list:
+    """The ``(name, path, typecode)`` list inside a PyInstaller toc literal.
+
+    ``PYZ-00.toc`` is ``(pyz path, [entries])`` and ``PKG-00.toc`` is an
+    eleven-field tuple with its entries third, so the list is found by its
+    shape rather than by its position.
+    """
+    if isinstance(data, list):
+        return data
+    for field in data if isinstance(data, tuple) else ():
+        if (isinstance(field, list) and field
+                and all(isinstance(e, (tuple, list)) and len(e) == 3 for e in field)):
+            return field
+    return []
+
+
+def _read_toc(path: pathlib.Path, typecodes) -> tuple[dict[str, str], int]:
+    """``({real path: name}, pathless)`` for the entries whose typecode starts
+    with one of ``typecodes`` (every entry when it is None)."""
+    toc, pathless = {}, 0
+    for entry in _toc_entries(ast.literal_eval(path.read_text(encoding="utf-8"))):
+        if not isinstance(entry, (tuple, list)) or len(entry) < 3:
+            continue
+        if typecodes and not str(entry[2]).startswith(typecodes):
+            continue
+        if isinstance(entry[1], str) and os.path.isabs(entry[1]):
+            toc[os.path.realpath(entry[1])] = entry[0]
+        else:
+            pathless += 1
+    return toc, pathless
+
+
 def read_pyz_toc(path: pathlib.Path) -> tuple[dict[str, str], int]:
     """``({real path: module name}, pathless)`` for the modules in ``PYZ-00.toc``.
 
@@ -142,19 +196,30 @@ def read_pyz_toc(path: pathlib.Path) -> tuple[dict[str, str], int]:
     if not path.is_file():
         raise Refusal(f"no PYZ toc at {path}. Build packaging/DSI_Redline.spec "
                       "first, and pass the --workpath PyInstaller used")
-    data = ast.literal_eval(path.read_text(encoding="utf-8"))
-    entries = data[1] if isinstance(data, tuple) and len(data) == 2 else data
-    toc, pathless = {}, 0
-    for entry in entries:
-        if not (isinstance(entry, (tuple, list)) and len(entry) >= 2):
-            continue
-        if isinstance(entry[1], str) and os.path.isabs(entry[1]):
-            toc[os.path.realpath(entry[1])] = entry[0]
-        else:
-            pathless += 1
+    toc, pathless = _read_toc(path, None)
     if not toc:
         raise Refusal(f"{path} parsed and lists no module with a file")
     return toc, pathless
+
+
+def read_pkg_toc(path: pathlib.Path) -> dict[str, str]:
+    """``{real path: name}`` for the code in the archive appended to the executable.
+
+    That archive is not under ``_internal/`` and not in the PYZ: it holds the
+    app's own ``main.py``, PyInstaller's bootstrap, and the run-time hooks,
+    small scripts that run before the app does. A run-time hook can come from
+    a distribution other than PyInstaller (``pyinstaller-hooks-contrib``, or a
+    package that ships its own hooks), and its code then ships inside the
+    executable, so the scripts and modules here are matched like PYZ modules.
+    The rest of the archive (its options and the PYZ itself) is not code.
+    """
+    if not path.is_file():
+        raise Refusal(f"no PKG toc at {path}, so this is not a finished "
+                      "PyInstaller build")
+    toc, _ = _read_toc(path, ("PYSOURCE", "PYMODULE"))
+    if not toc:
+        raise Refusal(f"{path} parsed and lists no script with a file")
+    return toc
 
 
 def read_base_library(path: pathlib.Path) -> set[str]:
@@ -485,6 +550,8 @@ def run(args) -> int:
     build = pathlib.Path(args.workpath) / SPEC_NAME
     internal = pathlib.Path(args.distpath) / APP_NAME / "_internal"
     toc, pathless = read_pyz_toc(build / "PYZ-00.toc")
+    pkg = read_pkg_toc(build / "PKG-00.toc")
+    code = {**toc, **pkg}
     base_modules = read_base_library(build / "base_library.zip")
     bundle, links = read_bundle(internal)
     executables = executables_beside(internal)
@@ -497,11 +564,12 @@ def run(args) -> int:
                       + (", ".join(args.site_packages) if args.site_packages else "sys.path"))
 
     print(f"Build:  {build}  ({len(toc)} PYZ modules with a file, {pathless} "
-          f"without one, {len(base_modules)} in base_library.zip)")
+          f"without one, {len(pkg)} scripts and modules in the executable's "
+          f"archive, {len(base_modules)} in base_library.zip)")
     print(f"Folder: {internal}  ({len(bundle)} files, {links} symlinks resolved "
           f"to their targets, beside: {', '.join(executables)})")
     print()
-    rows = measure(dists, toc, base_modules, bundle, executables)
+    rows = measure(dists, code, base_modules, bundle, executables)
     _print_table(rows)
     shipping = [r for r in rows if r.ships]
     unread = [r for r in rows if not r.readable]
@@ -513,9 +581,10 @@ def run(args) -> int:
           f"({sum(loose.values())} of {len(bundle)}):")
     for top, n in loose.items():
         print(f"  {n:5d}  {top}")
-    loose_mods = unclaimed_modules(rows, toc)
-    print(f"\nPYZ modules no distribution claims, by search-path root "
-          f"({sum(loose_mods.values())} of {len(toc)}):")
+    loose_mods = unclaimed_modules(rows, code)
+    print(f"\nModules in the PYZ and the executable's archive that no "
+          f"distribution claims, by search-path root "
+          f"({sum(loose_mods.values())} of {len(code)}):")
     for root, n in loose_mods.items():
         print(f"  {n:5d}  {root}")
     print()
@@ -550,6 +619,14 @@ def run(args) -> int:
         raise Refusal(f"{', '.join(executables)} is PyInstaller's bootloader and "
                       "no pyinstaller distribution is installed here, so this is "
                       "not the interpreter that ran the build")
+    supplied = {normalize(k): (k, f) for k, (f, _) in SUPPLIED_BY_HAND.items()}
+    gone = sorted(name for key, (name, _) in supplied.items()
+                  if key not in by_key or not by_key[key].ships)
+    if gone:
+        raise Refusal(f"SUPPLIED_BY_HAND names {', '.join(gone)}, which does not "
+                      "ship from this build. Remove the entry from "
+                      "tools/notices_audit.py, and the text from licenses/ if "
+                      "nothing else needs it")
 
     third_party = [r for r in shipping if r.key not in OWN]
     wheels = pathlib.Path(args.wheels) if args.wheels else build.parent / "notices-wheels"
@@ -568,10 +645,26 @@ def run(args) -> int:
         raise Refusal(f"{len(missing)} of {len(third_party)} wheels are missing:\n  "
                       + "\n  ".join(missing))
 
-    wanted, empty = {}, []
+    out = pathlib.Path(args.licenses)
+    wanted, by_hand, empty, unsupplied, stale = {}, {}, [], [], []
     for r in third_party:
         files, rules = license_files(found[r.name])
         own = [rel for rel in files if rules[rel] != "vendored"]
+        hand = supplied.get(r.key)
+        if hand and own:
+            stale.append(f"{r.name}=={r.version}: {found[r.name].name} ships "
+                         f"{len(own)} license files of its own")
+            continue
+        if hand:
+            if not (out / hand[1]).is_file():
+                unsupplied.append(f"{r.name}=={r.version}: licenses/{hand[1]}")
+                continue
+            by_hand[r.name] = hand[1]
+            if files:
+                wanted[r.name] = files
+            print(f"  {r.name} {r.version}: {found[r.name].name}, no license file "
+                  f"of its own, supplied by hand as licenses/{hand[1]}")
+            continue
         if not own:
             empty.append(f"{r.name}=={r.version} ({found[r.name].name}"
                          + (f", {len(files)} vendored only" if files else "") + ")")
@@ -583,13 +676,25 @@ def run(args) -> int:
     if empty:
         raise Refusal(f"{len(empty)} wheels yield no license file of their own:\n  "
                       + "\n  ".join(empty)
-                      + "\nA package that ships no license text needs one supplied "
-                        "by hand, and that is a decision for the notices, not for this tool")
+                      + "\nSupply the text at the top of licenses/, list it in the "
+                        "notices, and name it in SUPPLIED_BY_HAND in tools/notices_audit.py")
+    if unsupplied:
+        raise Refusal("SUPPLIED_BY_HAND names a text that is not there:\n  "
+                      + "\n  ".join(unsupplied))
+    if stale:
+        raise Refusal("SUPPLIED_BY_HAND lists packages whose wheels now ship a "
+                      "license file, so the entry no longer does anything:\n  "
+                      + "\n  ".join(stale)
+                      + "\nRemove each from tools/notices_audit.py")
 
-    out = pathlib.Path(args.licenses)
     report = write_licenses(out, wanted)
     total = sum(len(f) for f in wanted.values())
-    print(f"\nWrote {out}: {len(wanted)} directories, {total} files.")
+    copied = len(third_party) - len(by_hand)
+    print(f"\n{len(third_party)} third-party packages ship: {copied} with license "
+          f"files of their own, {len(by_hand)} supplied by hand"
+          + (f" ({', '.join(f'{n}: licenses/{f}' for n, f in sorted(by_hand.items()))})"
+             if by_hand else "") + ".")
+    print(f"Wrote {out}: {len(wanted)} directories, {total} files.")
     for state in ("added", "changed", "removed", "unchanged"):
         names = report[state]
         print(f"  {state:9} {len(names):3d}" + (f"  {', '.join(names)}" if names and state != "unchanged" else ""))

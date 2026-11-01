@@ -1,0 +1,7 @@
+# licenses/ holds license texts copied byte for byte from the Windows wheels by
+# tools/notices_audit.py, and the Build Windows workflow checks them against the
+# bundle with git status. 32 of its 71 files carry CR bytes (measured
+# 2026-11-01), and numpy's LICENSE.txt mixes CRLF and LF lines, so no checkout
+# may convert line endings here: the installer then carries the wheels' own
+# bytes, and git status compares what the audit wrote with what was committed.
+licenses/** -text
