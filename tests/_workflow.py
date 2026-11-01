@@ -7,9 +7,15 @@ file for a written-down account, and
 `test_the_frozen_build_stays_pinned_and_says_why` reads the pin's reason,
 which is a YAML comment this loader drops. Measured 2026-11-01 by an AST sweep
 of tests/ and by an `open` audit hook over a full suite run with 0 skipped:
-those two are the only reads of a workflow that do not come through here. No
-test holds that, so a new hand reader would make the first line false without
-failing anything.
+those two are the only reads of a workflow that do not come through here.
+
+This said "No test holds that, so a new hand reader would make the first line
+false without failing anything." `tests/test_workflows_are_read_in_one_place.py`
+holds it now, with an AST sweep of its own: an open or a parse of a workflow
+anywhere else in tests/ fails, and so does an allowance for one of those two
+that no longer reads raw. The audit hook is not part of it, so a read through a
+path the sweep cannot spell, such as a glob of the repository root, is outside
+it.
 
 Three tests read the workflows by hand, and each excused it with a sentence
 saying PyYAML is not a dependency here. `requirements.txt` has declared
