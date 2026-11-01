@@ -1,0 +1,7 @@
+# The license texts ship byte for byte as each package's wheel holds them, and
+# THIRD-PARTY-NOTICES.md quotes sha256 values for two of them. A Windows
+# checkout converts LF to CRLF in text files, and that put CRLF into 38 of the
+# 71 files under _internal/licenses/ in the Windows build of 2026-11-01 (Build
+# Windows run 41265620753). `-text` turns the conversion off for these files
+# only. tests/test_notices_ship.py asks git, per file, that it stays off.
+licenses/** -text
