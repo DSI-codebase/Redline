@@ -139,7 +139,9 @@ Cutting a release is therefore three steps in this order:
 3. Tag the app (`v1.5.0`).
 
 Tagging the app before step 2 produces a release whose notes name a moving
-branch, which is the one thing the pin exists to prevent. **Build Windows** also
+branch, which is the one thing the pin exists to prevent. Between steps 2 and 3,
+re-run the notices audit (next section), so the build it reads installs the
+PyDRC the release will. **Build Windows** also
 takes a `pydrc_ref` input when run manually, which overrides the file for that
 one run — useful for testing a rule change against the app without committing a
 pin.
@@ -150,3 +152,46 @@ and the tag pushed after. The second path is the common one and it is how
 `v1.5.0` shipped with an empty body: the workflow only wrote notes when it
 created the release itself. It now fills in the line either way, appending to
 whatever a human wrote rather than replacing it.
+
+### The notices name what the build ships
+
+`THIRD-PARTY-NOTICES.md` and `licenses/` ship inside the installer, and they
+must name every distribution the bundle carries. `requirements.txt` cannot say
+which those are: the 2026-09-01 notices named ten packages and the v1.8.1
+bundle carried 39, most of them installed by those ten. `tools/notices_audit.py`
+reads the build instead. Run it between steps 2 and 3 above:
+
+1. In a fresh virtual environment on Python 3.11, install what **Build Windows**
+   installs, PyDRC at the ref `packaging/pydrc-ref.txt` names, and setuptools
+   at the Windows runner's version:
+   ```
+   pip install -r requirements.txt -r packaging/requirements-build.txt "setuptools==65.5.0"
+   pip install "pydrc[dxf] @ git+https://github.com/DSI-codebase/PyDRC@<ref>"
+   ```
+   A newer setuptools vendors `backports`, and httpx2's `from backports.zstd
+   import` then pulls all of setuptools into a bundle the Windows build does
+   not carry. `shipped` prints a NOTE when it sees setuptools in the list.
+2. `pyinstaller packaging/DSI_Redline.spec --noconfirm`
+3. `python tools/notices_audit.py shipped --build build/DSI_Redline --dist "dist/DSI Redline" --write build/shipped.txt`,
+   under the interpreter that built the bundle. It prints every installed
+   distribution with its three counts, then the files no distribution claims.
+   On Linux those are host libraries and `libpython`. Read anything else.
+4. `python tools/notices_audit.py fetch build/shipped.txt --dest build/wheels`
+   downloads each one's Windows wheel, because a wheel's license file can
+   differ by platform.
+5. `python tools/notices_audit.py copy build/shipped.txt --wheels build/wheels --check`
+   exits 0 when `licenses/` already matches and 1 listing each difference.
+   Without `--check` it rewrites the per-distribution folders, and `--prune`
+   also removes the folder of a package that no longer ships. The top-level
+   texts are the project's own and are never touched.
+6. `python tools/notices_audit.py holders build/shipped.txt --wheels build/wheels`
+   prints each package's license string and the lines that look like copyright
+   statements. Update the entries in `THIRD-PARTY-NOTICES.md` from it, reading
+   each line in its file, because it is a candidate list.
+7. `python tools/run_tests.py tests.test_notices_ship tests.test_notices_audit`.
+   The first holds each quoted line to the file it came from, the table to the
+   folders, and the prose to the no-semicolon rule.
+
+Every subcommand exits 2 rather than writing an empty answer: a missing input,
+a build with no PYZ table of contents, no installed distribution read, nothing
+shipping, or a wheel that is missing or holds no license file.

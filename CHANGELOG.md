@@ -23,6 +23,12 @@ rules as v1.8.0.
   deprecates `fitz`, the module name DSI Redline used for it, and says a future
   release removes that name. The app now imports `pymupdf`, which PyMuPDF has
   supported since 1.24.3, so nothing changes in how it works today.
+- **The third-party notices name every package the installer carries.**
+  `THIRD-PARTY-NOTICES.md` named ten, and the installer carries 39, most of them
+  installed by those ten. Each is listed with its license and its copyright
+  lines, and the `licenses` folder beside the app holds each package's own
+  license files, copied unchanged. PyMuPDF's license question is still open, as
+  the notices say.
 
 ## v1.8.0
 
