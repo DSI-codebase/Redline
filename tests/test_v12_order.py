@@ -6,7 +6,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 from app.model.annotations import Annotation, KIND_RECT
 
@@ -29,7 +29,7 @@ class _Base(unittest.TestCase):
         from app.main_window import MainWindow
         tmp = tempfile.mkdtemp()
         src = os.path.join(tmp, "d.pdf")
-        d = fitz.open(); d.new_page(width=400, height=300); d.save(src); d.close()
+        d = pymupdf.open(); d.new_page(width=400, height=300); d.save(src); d.close()
         win = MainWindow(); win.load_document(src)
         return win
 

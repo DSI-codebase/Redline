@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-import fitz
+import pymupdf
 
 from PySide6.QtCore import Qt, QRectF, QPointF, Signal, QTimer
 from PySide6.QtGui import QPainter, QColor, QBrush, QKeySequence, QShortcut
@@ -130,7 +130,7 @@ class PdfView(QGraphicsView):
 
         # in-document search (Ctrl+F)
         self._search_bar = None
-        self._search_matches = []        # [(pno, fitz.Rect)] — display coords
+        self._search_matches = []        # [(pno, pymupdf.Rect)] — display coords
         self._search_hits = []           # rich Match records, same order
         self._search_capped = False
         self._search_index = -1
@@ -1323,7 +1323,7 @@ class PdfView(QGraphicsView):
             rm = page.rotation_matrix
             out = []
             for w in page.get_text("words"):
-                r = fitz.Rect(w[0], w[1], w[2], w[3]) * rm
+                r = pymupdf.Rect(w[0], w[1], w[2], w[3]) * rm
                 r.normalize()
                 out.append((r.x0, r.y0, r.x1, r.y1, w[4], w[5], w[6], w[7]))
             return out
@@ -1611,11 +1611,11 @@ class PdfView(QGraphicsView):
                         try:
                             rm = self.document.fitz_doc[m.page].rotation_matrix
                         except Exception:
-                            rm = fitz.Matrix(1.0, 1.0)
+                            rm = pymupdf.Matrix(1.0, 1.0)
                         rms[m.page] = rm
-                    vr = fitz.Rect(m.rect) * rm
+                    vr = pymupdf.Rect(m.rect) * rm
                 else:
-                    vr = fitz.Rect(m.rect)     # marks are already page-local
+                    vr = pymupdf.Rect(m.rect)     # marks are already page-local
                 vr.normalize()
                 self._search_matches.append((m.page, vr))
         # fill the results index first: _focus_current_match syncs the list's

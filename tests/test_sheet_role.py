@@ -8,7 +8,7 @@ drafting rather than defects.
 
 import unittest
 
-import fitz
+import pymupdf
 
 from app.extraction.component_parser import ComponentConfig, ComponentParser
 from app.extraction.rung import extract_rungs
@@ -38,7 +38,7 @@ def _title_block(page, title):
 
 def _sheet(title, rotation=270, body=""):
     """A page with ``title`` in the title block and optional body text."""
-    doc = fitz.open()
+    doc = pymupdf.open()
     page = doc.new_page(width=W, height=H)
     _title_block(page, title)
     if body:
@@ -118,7 +118,7 @@ class TestDetectRole(unittest.TestCase):
         doc.close()
 
     def test_unrotated_pages_work_too(self):
-        doc = fitz.open()
+        doc = pymupdf.open()
         page = doc.new_page(width=1224.0, height=792.0)
         page.insert_text((900.0, 760.0), "NETWORK TOPOLOGY")
         self.assertEqual(detect_role(page), TOPOLOGY)
@@ -130,7 +130,7 @@ class TestDocumentRoles(unittest.TestCase):
         titles = ["TITLE PAGE", "SYMBOLS PAGE", "BILL OF MATERIALS",
                   "BACK PANEL LAYOUT", "DIGITAL INPUTS", "TERMINAL BLOCK LAYOUT",
                   "24 VDC DISTRIBUTION"]
-        doc = fitz.open()
+        doc = pymupdf.open()
         for t in titles:
             page = doc.new_page(width=W, height=H)
             _title_block(page, t)
@@ -153,7 +153,7 @@ class TestElGenerationTitleBlock(unittest.TestCase):
     """
 
     def _ladder(self):
-        doc = fitz.open()
+        doc = pymupdf.open()
         page = el.new_page(doc)
         el.title_block(page, "120VAC POWER DISTRIBUTION", "300", "301")
         wires, tags = el.ladder_body(page, "300")
@@ -197,7 +197,7 @@ class TestElGenerationTitleBlock(unittest.TestCase):
 
     def test_layout_titles_under_the_label_are_still_layouts(self):
         for title in ("RELAY ENCLOSURE LAYOUT", "PLC ENCLOSURE / PANEL LAYOUT"):
-            doc = fitz.open()
+            doc = pymupdf.open()
             try:
                 page = el.new_page(doc)
                 el.title_block(page, title, "011", "012")
@@ -206,7 +206,7 @@ class TestElGenerationTitleBlock(unittest.TestCase):
                 doc.close()
 
     def test_classifies_an_el_generation_set(self):
-        doc = fitz.open()
+        doc = pymupdf.open()
         try:
             el.build_set(doc)
             got = detect_document_roles(doc)

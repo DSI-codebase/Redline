@@ -118,7 +118,7 @@ def role_from_text(text: str, config: Optional[SheetRoleConfig] = None) -> Optio
 
 def _titleblock_text(page, config: SheetRoleConfig) -> str:
     """Text from the title-block band, in displayed space."""
-    import fitz
+    import pymupdf
     try:
         raw = page.get_text("words") or []
         rot = page.rotation_matrix
@@ -130,7 +130,7 @@ def _titleblock_text(page, config: SheetRoleConfig) -> str:
     band = []
     for w in raw:
         try:
-            r = (fitz.Rect(w[0], w[1], w[2], w[3]) * rot).normalize()
+            r = (pymupdf.Rect(w[0], w[1], w[2], w[3]) * rot).normalize()
         except Exception:
             continue
         if r.x0 >= x_min and r.y0 >= y_min:
@@ -291,9 +291,9 @@ def jev_document_roles(doc, pages, *, ask=None, api_key: str = "",
 def jev_roles_for_path(pdf_path: str, pages, **kwargs) -> dict:
     """:func:`jev_document_roles` on a file this function opens and closes, for
     a worker thread that must not touch the open document. Never raises."""
-    import fitz
+    import pymupdf
     try:
-        doc = fitz.open(pdf_path)
+        doc = pymupdf.open(pdf_path)
     except Exception:
         return {}
     try:

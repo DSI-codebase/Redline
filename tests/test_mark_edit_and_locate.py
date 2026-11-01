@@ -22,7 +22,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 from app.model.annotations import (
     Annotation, AnnotationStore,
@@ -47,7 +47,7 @@ NOTE_KINDS = (KIND_HIGHLIGHT, KIND_PEN, KIND_RECT, KIND_CIRCLE, KIND_ARROW,
 
 def _pdf(dirpath, w, h):
     src = os.path.join(dirpath, "sheet.pdf")
-    d = fitz.open()
+    d = pymupdf.open()
     d.new_page(width=w, height=h)
     d.save(src)
     d.close()

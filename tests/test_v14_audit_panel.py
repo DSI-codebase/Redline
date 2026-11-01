@@ -20,7 +20,7 @@ try:
 except Exception:                                     # pragma: no cover
     _QT_OK = False
 
-import fitz
+import pymupdf
 
 from app import audit
 from app.audit.findings import (AuditRun, Coverage, Finding, DEFINITE,
@@ -30,7 +30,7 @@ HAVE_PYDRC = audit.available()
 
 
 def _drawing(path):
-    doc = fitz.open()
+    doc = pymupdf.open()
     for title, number, body in (
         ("TITLE PAGE", "EL2507777-000", ()),
         ("24 VDC DISTRIBUTION", "EL2507777-400", ("400010", "PB-40010")),

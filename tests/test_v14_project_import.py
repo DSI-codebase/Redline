@@ -175,11 +175,11 @@ class TestImportProject(unittest.TestCase):
 @unittest.skipUnless(HAVE_EZDXF and HAVE_PYDRC, "needs ezdxf and pydrc")
 class TestDocumentPersistence(unittest.TestCase):
     def test_import_survives_a_reopen(self):
-        import fitz
+        import pymupdf
         from app.model.document import Document
         tmp = tempfile.mkdtemp()
         src = os.path.join(tmp, "a.pdf")
-        pdf = fitz.open()
+        pdf = pymupdf.open()
         pdf.new_page(width=612, height=792).insert_text((72, 72), "x")
         pdf.save(src)
         pdf.close()

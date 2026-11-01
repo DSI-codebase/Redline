@@ -54,11 +54,14 @@ except Exception:
 icon_path = os.path.join(ROOT, "app", "assets", "app.ico")  # brand icon
 
 # PyMuPDF's optional add-ons stay OUT of the frozen build. From PyMuPDF 2.0 the
-# wheel carries `pymupdf.layout` and requires `pymupdf4llm`, and `import fitz`
-# imports both, each inside `try/except ImportError`. The layout package then
-# loads an ONNX model from YAML and .onnx files beside its own modules, which
-# the analysis does not collect (no hook for them in hooks-contrib 2026.9), so
-# v1.8.0 died on launch with FileNotFoundError on layout_rf2.4.1+imf1.yaml.
+# wheel carries `pymupdf.layout` and requires `pymupdf4llm`, and
+# `import pymupdf` imports both, each inside `try/except ImportError` in
+# pymupdf/__init__.py. The app imports `pymupdf` rather than the deprecated
+# `fitz` shim, and the shim runs that same __init__, so the rename changed
+# nothing here. The layout package then loads an ONNX model from YAML
+# and .onnx files beside its own modules, which the analysis does not collect
+# (no hook for them in hooks-contrib 2026.9), so v1.8.0 died on launch with
+# FileNotFoundError on layout_rf2.4.1+imf1.yaml.
 # Redline calls neither (no find_tables, get_layout or to_markdown), so a
 # module that is absent is the state PyMuPDF already handles, and it is the
 # state every PyMuPDF 1.x build ran in. Collecting the models instead would

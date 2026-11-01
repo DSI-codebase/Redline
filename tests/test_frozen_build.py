@@ -118,7 +118,7 @@ class TestTheSpecLeavesPyMuPDFsAddOnsOut(unittest.TestCase):
                 self.assertIn(
                     name, excludes,
                     f"{name} is bundled again. PyMuPDF 2.0 imports it from "
-                    "`import fitz`, and pymupdf.layout then loads ONNX model "
+                    "`import pymupdf`, and pymupdf.layout then loads ONNX model "
                     "files the analysis does not collect: v1.8.0's launch crash.")
 
     def test_the_reader_does_not_see_a_name_in_a_comment(self):

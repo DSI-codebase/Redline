@@ -117,11 +117,11 @@ class TestLiveToggle(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     def test_toggling_done_updates_on_sheet(self):
-        import tempfile, fitz
+        import tempfile, pymupdf
         from app.main_window import MainWindow
         tmp = tempfile.mkdtemp()
         src = os.path.join(tmp, "d.pdf")
-        d = fitz.open(); d.new_page(width=400, height=300); d.save(src); d.close()
+        d = pymupdf.open(); d.new_page(width=400, height=300); d.save(src); d.close()
         win = MainWindow(); win.load_document(src)
         ann = Annotation(page=0, kind=KIND_RECT, rect=(20, 20, 120, 80),
                          is_todo=True, todo_done=False)

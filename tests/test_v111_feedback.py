@@ -7,7 +7,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import fitz
+import pymupdf
 
 from app.model.annotations import (
     Annotation, KIND_HIGHLIGHT, KIND_ARROW, KIND_RECT, KIND_CLOUD, KIND_COMMENT,
@@ -60,7 +60,7 @@ class TestFillDialog(unittest.TestCase):
 
 class TestNotesAsStickyComments(unittest.TestCase):
     def _blank(self, path):
-        d = fitz.open(); d.new_page(width=400, height=300); d.save(path); d.close()
+        d = pymupdf.open(); d.new_page(width=400, height=300); d.save(path); d.close()
 
     def test_note_emits_sticky_and_reloads_without_duplication(self):
         tmp = tempfile.mkdtemp()
@@ -74,13 +74,13 @@ class TestNotesAsStickyComments(unittest.TestCase):
             Annotation(page=0, kind=KIND_HIGHLIGHT, rect=(30, 80, 150, 100),
                        color=(0, 1, 0), opacity=0.4),          # no note
         ]
-        d = fitz.open(src)
+        d = pymupdf.open(src)
         write_annotations_to_pdf(d, anns)
         mp = marked_pdf_path(src)
         d.save(mp, garbage=3, deflate=True)
         d.close()
 
-        d2 = fitz.open(mp)
+        d2 = pymupdf.open(mp)
         stickies = [a for a in d2[0].annots()
                     if a.type[1] == "Text"
                     and (a.info.get("name") or "").endswith(_NOTE_SUFFIX)]
@@ -90,7 +90,7 @@ class TestNotesAsStickyComments(unittest.TestCase):
         self.assertEqual(contents, ["check this", "reroute"])
 
         # reload: the auxiliary stickies are skipped, notes stay on the parents
-        loaded = load_pdf_annotations(fitz.open(mp), DEFAULT_IGNORE_PATTERNS)
+        loaded = load_pdf_annotations(pymupdf.open(mp), DEFAULT_IGNORE_PATTERNS)
         self.assertEqual(len(loaded), 3)            # 2 highlights + 1 arrow, no extra comments
         self.assertNotIn(KIND_COMMENT, [a.kind for a in loaded])
         noted = sorted(a.text for a in loaded if a.text)
@@ -100,14 +100,14 @@ class TestNotesAsStickyComments(unittest.TestCase):
         tmp = tempfile.mkdtemp()
         src = os.path.join(tmp, "d.pdf")
         self._blank(src)
-        d = fitz.open(src)
+        d = pymupdf.open(src)
         write_annotations_to_pdf(d, [Annotation(page=0, kind=KIND_RECT,
                                                 rect=(20, 20, 120, 80), color=(1, 0, 0),
                                                 text="raise this", author="Eli")])
         mp = marked_pdf_path(src)
         d.save(mp)
         d.close()
-        d2 = fitz.open(mp)
+        d2 = pymupdf.open(mp)
         types = sorted(a.type[1] for a in d2[0].annots())
         d2.close()
         self.assertEqual(types, ["Square", "Text"])   # rect + its sticky note
@@ -118,7 +118,7 @@ class TestFlattenedExport(unittest.TestCase):
         from app.model.document import Document
         tmp = tempfile.mkdtemp()
         src = os.path.join(tmp, "d.pdf")
-        d = fitz.open(); d.new_page(width=400, height=300); d.save(src); d.close()
+        d = pymupdf.open(); d.new_page(width=400, height=300); d.save(src); d.close()
         doc = Document(src); doc.load()
         doc.store.add(Annotation(page=0, kind=KIND_RECT, rect=(30, 30, 150, 90),
                                  color=(1, 0, 0), fill_color=(0, 0.6, 1)))
@@ -128,7 +128,7 @@ class TestFlattenedExport(unittest.TestCase):
         baked = doc.export_flattened_pdf(flat)
         doc.close()
         self.assertTrue(baked)
-        d2 = fitz.open(flat)
+        d2 = pymupdf.open(flat)
         # no live annotations remain — they're page content now
         self.assertEqual(sum(len(list(p.annots() or [])) for p in d2), 0)
         # and they render with annots disabled (i.e. every viewer shows them)
@@ -154,7 +154,7 @@ class TestReopenRendersMarks(unittest.TestCase):
         from app.model.document import Document
         tmp = tempfile.mkdtemp()
         src = os.path.join(tmp, "draw.pdf")
-        d = fitz.open(); pg = d.new_page(width=612, height=792)
+        d = pymupdf.open(); pg = d.new_page(width=612, height=792)
         if rotation:
             pg.set_rotation(rotation)
         d.save(src); d.close()
@@ -232,7 +232,7 @@ class TestRectangleCloud(unittest.TestCase):
         from app.main_window import MainWindow
         tmp = tempfile.mkdtemp()
         src = os.path.join(tmp, "d.pdf")
-        d = fitz.open(); d.new_page(width=400, height=300); d.save(src); d.close()
+        d = pymupdf.open(); d.new_page(width=400, height=300); d.save(src); d.close()
         win = MainWindow(); win.load_document(src)
         win.view.tool.current = T.TOOL_CLOUD
         return win
