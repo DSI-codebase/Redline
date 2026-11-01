@@ -4,6 +4,17 @@ All notable changes to **DSI Redline** are documented here. Versions are tagged
 `vX.Y.Z`; each tag triggers the Windows build that publishes the installer and a
 portable zip to the matching GitHub release.
 
+## Unreleased
+
+- **Text size, from 50% to 300%.** **Settings ▸ General ▸ Text size** is a
+  slider that sets the size of the text in every menu, pane, tab, table and
+  dialog, as a percentage of the system's text size. 100% is the size every
+  earlier release used. A sample line shows the size before you press OK, OK
+  changes every open pane with no restart, and the app opens at that size
+  next time. Widths that hold text grow with it: the zoom box, the PDF Tools
+  rail and options panel, the File view's rail and the find panel. The drawing
+  is unchanged, because the zoom sizes it. The startup splash keeps its size.
+
 ## v1.8.0
 
 Design rule checking in this release is PyDRC `v0.23.1` (`6360563`). v1.7.0

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
 )
 
+from .. import text_scale
 from . import pdf_ops as ops
 from .runner import run_with_progress
 
@@ -41,7 +42,7 @@ class _PreviewDialog(QDialog):
         lay.addWidget(QLabel("Text read from the box:"))
         self.raw = QPlainTextEdit(raw_text or "(nothing found)")
         self.raw.setReadOnly(True)
-        self.raw.setMaximumHeight(80)
+        text_scale.sized(self.raw, setMaximumHeight=80)
         lay.addWidget(self.raw)
         row = QHBoxLayout()
         row.addWidget(QLabel("Rule:"))

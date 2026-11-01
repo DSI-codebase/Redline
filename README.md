@@ -189,8 +189,9 @@ and Navigation sidebars. **View ▸ Reset panel layout** restores the default.
 
 Your name (commenter), wire field widths & zero-padding, full-label regex override,
 labels-per-wire, the SHX/junk ignore-pattern list, "treat all comments as TODO",
-OCR/AI toggles, the **Claude API key + live status check**, and export defaults — all
-persisted between sessions. **Help ▸ About** shows the app name, version and copyright.
+OCR/AI toggles, the **Claude API key + live status check**, export defaults and the
+**text size** of every menu, pane and dialog (50% to 300%, applied on OK with no
+restart) — all persisted between sessions. **Help ▸ About** shows the app name, version and copyright.
 
 ---
 
@@ -212,6 +213,8 @@ app/
                              sheet roles
   printing.py                Printer, print + preview dialogs, page raster
   config.py                  Persisted settings (QSettings) + defaults
+  text_scale.py              Settings ▸ Text size: the one percentage every
+                             UI text size, and every width holding text, follows
   help.py                    In-app user-manual (vault) reader
   viewer/                    Continuous-scroll canvas, annotation items, tools, undo
   model/                     Document, annotation model, PDF+SQLite storage,

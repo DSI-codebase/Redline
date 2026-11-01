@@ -27,6 +27,8 @@ from PySide6.QtWidgets import (
     QSizePolicy,
 )
 
+from .. import text_scale
+
 ROLE_INDEX = Qt.UserRole            # int: match index, or -1 for a header row
 ROLE_PARTS = Qt.UserRole + 1        # (before, match, after, decode, is_mark)
 
@@ -66,8 +68,8 @@ class _ResultDelegate(QStyledItemDelegate):
 
     def sizeHint(self, option, index):
         is_header = index.data(ROLE_INDEX) == -1
-        return QSize(option.rect.width(),
-                     self.HEADER_H if is_header else self.ROW_H)
+        return QSize(option.rect.width(), text_scale.px(
+                     self.HEADER_H if is_header else self.ROW_H))
 
     def paint(self, painter: QPainter, option, index):
         painter.save()
@@ -188,7 +190,7 @@ class SearchBar(QFrame):
         self.config = config
         self.setObjectName("SearchBar")
         self.setFrameShape(QFrame.StyledPanel)
-        self.setFixedWidth(self.PANEL_W)
+        text_scale.sized(self, setFixedWidth=self.PANEL_W)
 
         self._debounce = QTimer(self)
         self._debounce.setSingleShot(True)
@@ -215,7 +217,7 @@ class SearchBar(QFrame):
 
         self.count = QLabel("0/0")
         self.count.setObjectName("SearchCount")
-        self.count.setMinimumWidth(52)
+        text_scale.sized(self.count, setMinimumWidth=52)
         self.count.setAlignment(Qt.AlignCenter)
 
         self.btn_prev = self._tool("▲", "Previous match (Shift+Enter / Shift+F3)",
@@ -254,7 +256,7 @@ class SearchBar(QFrame):
         self.results.setObjectName("SearchResults")
         self.results.setUniformItemSizes(False)
         self.results.setMouseTracking(True)
-        self.results.setMaximumHeight(self.LIST_MAX_H)
+        text_scale.sized(self.results, setMaximumHeight=self.LIST_MAX_H)
         self.results.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.results.setItemDelegate(_ResultDelegate(self.results))
         self.results.itemClicked.connect(self._activate_item)
@@ -271,7 +273,7 @@ class SearchBar(QFrame):
         self._completer.setCompletionMode(QCompleter.PopupCompletion)
         self.input.setCompleter(self._completer)
 
-        self.setStyleSheet("""
+        text_scale.style(self, """
             QFrame#SearchBar {
                 background: #fbfbfb; border: 1px solid #b4b4b4; border-radius: 7px;
             }
@@ -434,8 +436,9 @@ class SearchBar(QFrame):
             content = 2 * self.results.frameWidth()
             for i in range(self.results.count()):
                 is_header = self.results.item(i).data(ROLE_INDEX) == -1
-                content += d.HEADER_H if is_header else d.ROW_H
-            self.results.setFixedHeight(min(content, self.LIST_MAX_H))
+                content += text_scale.px(d.HEADER_H if is_header else d.ROW_H)
+            self.results.setFixedHeight(
+                min(content, text_scale.px(self.LIST_MAX_H)))
         self.results.setVisible(show)
         self._update_list_button(len(self._match_rows),
                                  "+" in self.count.text())

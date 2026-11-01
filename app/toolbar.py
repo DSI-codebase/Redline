@@ -36,6 +36,7 @@ from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QLabel,
                                QPushButton, QSpinBox, QToolBar)
 
+from . import text_scale
 from .viewer import tools as T
 
 
@@ -157,7 +158,7 @@ def build(win):
     win.zoom_combo.addItems(
         ["50%", "75%", "100%", "125%", "150%", "200%", "400%"])
     win.zoom_combo.setCurrentText("100%")
-    win.zoom_combo.setFixedWidth(72)
+    text_scale.sized(win.zoom_combo, setFixedWidth=72)
     win.zoom_combo.lineEdit().setAlignment(Qt.AlignCenter)
     win.zoom_combo.setToolTip(
         "Zoom level — pick a preset or type a percentage")
