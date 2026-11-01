@@ -5,7 +5,7 @@ Two workflows, both under `.github/workflows/`.
 | Workflow | Runs on | Does |
 |---|---|---|
 | **Tests** (`tests.yml`) | every push, every pull request | the suite, on Ubuntu and Windows, and once more on Ubuntu at the PyMuPDF floor |
-| **Build Windows** (`build-windows.yml`) | manual dispatch, `v*` tags | the suite, then the portable app, a launch of it, the installer, and the release |
+| **Build Windows** (`build-windows.yml`) | manual dispatch, `v*` tags | the suite, then the portable app, a launch of it, a check of the notices against it, the installer, and the release |
 
 ## Running the suite
 
@@ -179,7 +179,9 @@ Cutting a release is therefore three steps in this order:
 Tagging the app before step 2 produces a release whose notes name a moving
 branch, which is the one thing the pin exists to prevent. Between steps 2 and 3,
 re-run the notices audit (next section), so the build it reads installs the
-PyDRC the release will. **Build Windows** also
+PyDRC the release will, and commit what it changes. **Build Windows** runs the
+audit's check on the bundle it builds, and on a `v*` tag it fails before
+anything is packaged when `licenses/` differs (next section). **Build Windows** also
 takes a `pydrc_ref` input when run manually, which overrides the file for that
 one run — useful for testing a rule change against the app without committing a
 pin.
@@ -211,9 +213,16 @@ reads the build instead. Run it between steps 2 and 3 above:
    not carry. `shipped` prints a NOTE when it sees setuptools in the list.
 2. `pyinstaller packaging/DSI_Redline.spec --noconfirm`
 3. `python tools/notices_audit.py shipped --build build/DSI_Redline --dist "dist/DSI Redline" --write build/shipped.txt`,
-   under the interpreter that built the bundle. It prints every installed
-   distribution with its three counts, then the files no distribution claims.
-   On Linux those are host libraries and `libpython`. Read anything else.
+   under the interpreter that built the bundle. It reads the PYZ archive
+   (`PYZ-00.toc`), the archive appended to `DSI Redline.exe` (`PKG-00.toc`,
+   which holds `main.py`, PyInstaller's bootstrap and the run-time hooks, and
+   only its `PYSOURCE` and `PYMODULE` entries count) and `_internal/`. It
+   prints every installed distribution with a count for each, then the
+   archive's scripts and the `_internal/` files no distribution claims. On
+   Linux the files are host libraries and `libpython`, and the scripts are
+   `main` and the modules PyInstaller compiles into `build/` (measured
+   2026-11-01: 10 scripts and modules, 5 of them PyInstaller's). Read anything
+   else.
 4. `python tools/notices_audit.py fetch build/shipped.txt --dest build/wheels`
    downloads each one's Windows wheel, because a wheel's license file can
    differ by platform.
@@ -221,7 +230,9 @@ reads the build instead. Run it between steps 2 and 3 above:
    exits 0 when `licenses/` already matches and 1 listing each difference.
    Without `--check` it rewrites the per-distribution folders, and `--prune`
    also removes the folder of a package that no longer ships. The top-level
-   texts are the project's own and are never touched.
+   texts are the project's own and are never touched. A package whose wheel
+   ships no license file is printed as `by hand:` with the text that covers it,
+   and counted apart from the ones with files of their own (below).
 6. `python tools/notices_audit.py holders build/shipped.txt --wheels build/wheels`
    prints each package's license string and the lines that look like copyright
    statements. Update the entries in `THIRD-PARTY-NOTICES.md` from it, reading
@@ -231,5 +242,52 @@ reads the build instead. Run it between steps 2 and 3 above:
    folders, and the prose to the no-semicolon rule.
 
 Every subcommand exits 2 rather than writing an empty answer: a missing input,
-a build with no PYZ table of contents, no installed distribution read, nothing
-shipping, or a wheel that is missing or holds no license file.
+a build with no PYZ or no PKG table of contents or one that lists no code, no
+installed distribution read, nothing shipping, a wheel that is missing, or a
+wheel that holds no license file and is not supplied by hand.
+
+**A wheel that ships no license file** has happened once: the PySide6 and
+shiboken6 6.11.2 wheels shipped none (2026-09-01). Supply the text at the top of
+`licenses/`, give it a row in the notices' table, and name both in
+`SUPPLIED_BY_HAND` in `tools/notices_audit.py` with the reason. The list is
+empty while every shipping wheel has a file of its own. The 6.11.3 Qt wheels
+ship `LicenseRef-Qt-Commercial.txt`. An entry is refused (exit 2) when its text
+is not there, when its wheel ships a license file again, and when its package
+no longer ships, and names match the way pip matches them.
+`tests/test_notices_ship.py` reads the list from the tool, so an entry with no
+`licenses/<name>/` passes only when it is listed and its text is there.
+
+### Build Windows checks the notices before it packages
+
+v1.8.0 was tagged with notices listing ten packages while its bundle carried 42
+distributions (the 2026-10-31 audit), and the audit above was a hand step. So
+**Build Windows** runs "Check the notices against the bundle" after the
+self-test and before Inno Setup: `shipped`, `fetch` and `copy --check` as in
+steps 3 to 5, then `git status --porcelain -- licenses/`.
+
+`copy --check` compares without writing, and its lines name a package that
+joined (`missing:`), moved (`changed:`) or left (`stale:`). `git status` says
+whether `licenses/` in the checkout is still the commit, because PyInstaller
+copied the checkout's folder into the bundle and a release ships what is
+committed. Each exit code is kept with `|| rc=$?`, never through a pipe.
+
+| run | a difference, a refusal, or `licenses/` not the commit | everything matches |
+|---|---|---|
+| `v*` tag, `PYDRC_TOKEN` set | `::error::`, and the job fails before anything is packaged | passes |
+| manual, `PYDRC_TOKEN` set | `::warning::`, and the build goes on | passes |
+| no `PYDRC_TOKEN` | not run, and a warning says the notices were NOT checked | not run |
+
+Without the token nothing is checked, because the audit measures the release
+set and that includes PyDRC and the packages it brings. A failure is fixed by
+running steps 1 to 7, committing `licenses/` and `THIRD-PARTY-NOTICES.md`, and
+tagging again.
+
+**It compares license files, not versions.** A package that moved to a version
+whose license file is byte for byte the same passes. Measured on a Linux build
+on 2026-11-01: anyio resolved to 4.16.0 while the notices name 4.15.1, and
+`copy --check` reported 39 distributions, 67 files and 0 differences. Step 6
+is where a version heading is corrected.
+
+`tests/test_notices_audit.py` holds the step's position and its exit-code
+handling, and drives its real `run:` block under Actions' bash flags
+(`--noprofile --norc -eo pipefail`) with the audit stubbed and git real.

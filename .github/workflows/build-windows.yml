@@ -224,6 +224,66 @@ jobs:
             exit 1
           }
 
+      # THIRD-PARTY-NOTICES.md and licenses/ ship inside this bundle, and v1.8.0
+      # was tagged with notices naming ten packages while its bundle carried 42
+      # distributions. So the bundle just built is checked against them before
+      # anything is packaged. tools/notices_audit.py lists what the bundle
+      # carries (`shipped`), fetches each one's Windows wheel, and `copy --check`
+      # compares licenses/ with those wheels WITHOUT WRITING: exit 1 and a line
+      # per file missing, changed, extra or stale, which is a package that
+      # joined, moved or left. git status then says whether licenses/ is still
+      # the commit, because PyInstaller copied this checkout's licenses/ and a
+      # release must ship what is committed. A tag build fails on either, and on
+      # a refusal. A manual run warns. Without PYDRC_TOKEN nothing is checked,
+      # because the audit measures the release set and that includes PyDRC and
+      # the packages it brings. Each exit code is kept with `|| rc=$?` and never
+      # read through a pipe, whose status is the last command's.
+      - name: Check the notices against the bundle
+        shell: bash
+        env:
+          IS_TAG: ${{ startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          if [ -z "$PYDRC_TOKEN" ]; then
+            echo "::warning::THIRD-PARTY-NOTICES.md and licenses/ were NOT checked against this bundle. The audit measures the release set, which includes PyDRC, and this build has no PYDRC_TOKEN."
+            exit 0
+          fi
+          rc=0
+          stage=shipped
+          python tools/notices_audit.py shipped --build build/DSI_Redline --dist "dist/DSI Redline" --write build/shipped.txt || rc=$?
+          if [ "$rc" -eq 0 ]; then
+            stage=fetch
+            python tools/notices_audit.py fetch build/shipped.txt --dest build/wheels || rc=$?
+          fi
+          if [ "$rc" -eq 0 ]; then
+            stage="copy --check"
+            python tools/notices_audit.py copy build/shipped.txt --wheels build/wheels --check || rc=$?
+          fi
+          # A failed listing is not an empty one: git exiting 128 is not "clean".
+          git_rc=0
+          changed=$(git status --porcelain -- licenses/) || git_rc=$?
+          problems=""
+          if [ "$rc" -eq 1 ] && [ "$stage" = "copy --check" ]; then
+            problems="copy --check exited 1: licenses/ differs from the Windows wheels of the packages this bundle carries (the lines above)."
+          elif [ "$rc" -ne 0 ]; then
+            problems="tools/notices_audit.py $stage exited $rc, so the notices were not checked against this bundle. Its reason is above."
+          fi
+          if [ "$git_rc" -ne 0 ]; then
+            problems="$problems git status exited $git_rc, so whether licenses/ is the commit is unknown."
+          elif [ -n "$changed" ]; then
+            printf '%s\n' "$changed"
+            problems="$problems licenses/ is not the commit in this checkout (the paths above), so this bundle does not carry the committed notices."
+          fi
+          if [ -z "$problems" ]; then
+            echo "Notices: licenses/ matches the Windows wheels of every package this bundle carries, and it is the commit."
+            exit 0
+          fi
+          problems="${problems# } Re-run the audit as CI.md describes under The notices name what the build ships, update THIRD-PARTY-NOTICES.md and licenses/, and commit both before tagging."
+          if [ "$IS_TAG" = "true" ]; then
+            echo "::error::$problems"
+            exit 1
+          fi
+          echo "::warning::$problems This is a manual run, so it does not fail. A tag build fails here."
+
       - name: Build installer (Inno Setup)
         run: |
           choco install innosetup --no-progress -y

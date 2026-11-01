@@ -103,9 +103,9 @@ An installer that cannot say which rules it contains is one nobody can reproduce
 a commit SHA** before installing, and that SHA lands in the build log and the
 release notes — so a branch cannot move underneath a build and two runs of one
 tag cannot quietly differ. Cutting a release is three steps **in this order**:
-tag PyDRC; set `packaging/pydrc-ref.txt` to that tag here and commit it; tag the
-app. Tagging the app before step 2 produces a release whose notes name a moving
-branch, which is the one thing the pin exists to prevent.
+tag PyDRC; pin that tag in `packaging/pydrc-ref.txt`, re-run the notices audit
+(`CI.md`) and commit what changed; tag the app, which Build Windows fails when
+`licenses/` differs from the bundle. A tag before step 2 names a moving branch.
 
 The version is declared in **three** places — `app/__init__.py`,
 `packaging/installer.iss` and a `CHANGELOG.md` section — and
