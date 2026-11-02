@@ -97,4 +97,14 @@
 # `ce8f085` (0.24.0) that day and adds an `owner` approval role, which the
 # commit before this one accepts. The next release sets a tag here first,
 # per the three steps above.
-main
+#
+# PREPARED 2026-11-02, from `main` to `v0.24.0`, for the app's v1.9.0 release.
+# THIS PIN IS UNRESOLVABLE UNTIL PyDRC IS TAGGED: `git ls-remote --tags
+# https://github.com/DSI-codebase/PyDRC v0.24.0` lists nothing on the day this
+# was written (its newest tag is v0.23.1, and ls-remote exits 0 on an empty
+# match), and step 1 above is a new tag
+# this time because `main` carries 0.24.0 (the `owner` approval role, a
+# `phases` calculator fix) and `v0.23.1` does not. Do not tag the app before
+# `v0.24.0` exists in `DSI-codebase/PyDRC`, and fill the SHA into CHANGELOG.md,
+# v1.9.0. Set this back to `main` after the release.
+v0.24.0
