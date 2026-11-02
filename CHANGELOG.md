@@ -6,7 +6,7 @@ portable zip to the matching GitHub release.
 
 ## v1.9.0
 
-Design rule checking in this release is PyDRC `v0.24.0` (`<sha, fill in after the PyDRC tag>`).
+Design rule checking in this release is PyDRC `v0.24.0` (`5b766be`).
 `drc-base` stays at 1.38.0 and `erc-nec-2026` moves from 1.2.0 to 1.3.0.
 
 v1.8.1 was never tagged or released. Its entries below ship in this release, and
