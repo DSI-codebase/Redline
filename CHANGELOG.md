@@ -4,7 +4,13 @@ All notable changes to **DSI Redline** are documented here. Versions are tagged
 `vX.Y.Z`; each tag triggers the Windows build that publishes the installer and a
 portable zip to the matching GitHub release.
 
-## Unreleased
+## v1.9.0
+
+Design rule checking in this release is PyDRC `v0.24.0` (`<sha, fill in after the PyDRC tag>`).
+`drc-base` stays at 1.38.0 and `erc-nec-2026` moves from 1.2.0 to 1.3.0.
+
+v1.8.1 was never tagged or released. Its entries below ship in this release, and
+v1.8.0 remains the last published installer.
 
 - **OCR reports itself unavailable for a Tesseract it cannot use.** With a
   Tesseract older than 3.05, or one whose `tesseract --version` output
