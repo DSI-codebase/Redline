@@ -1,6 +1,6 @@
 # Gates
 
-Loaded every turn. Three rules; the catalogue of how each one has been broken here is
+Loaded every turn. Four rules; the catalogue of how each one has been broken here is
 `/writing-a-gate`, which is typed rather than fired.
 
 ## Falsify it before you trust it
@@ -14,8 +14,9 @@ line overwrites `$?`. Measure an exit code without a pipe.
 
 ## Three numbers, never two
 
-Passed and failed is not the whole answer. Skipped, unreachable, not-checked-out,
-could-not-read and not-installed are their own states, and folding any of them into
+Report **passed, failed and skipped**, each as its own count. Passed and failed is not the
+whole answer. Skipped covers unreachable, not-checked-out, could-not-read and
+not-installed: each of those is its own state, so name which one it was, and folding any of them into
 "clean" is how a gate reports success without having run. A skip is how coverage
 evaporates under a green tick.
 
