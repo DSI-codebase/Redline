@@ -58,6 +58,25 @@ wording keep their characters.
 
 An instruction to the reader that takes more than one action is written as numbered steps.
 
+## End on the session's state
+
+The Claude app's session list shows a session as complete whenever a turn ends,
+and as needing the user only while a question tool is pending. So a turn that
+stops on work the user asked for ends in one of two states. A reply that only
+answers a question needs neither.
+
+1. **Done.** The last message starts with "Done." and lists what is now the
+   user's, such as a pull request to merge or a step on their machine. Done
+   means everything the session made is pushed or in the user's hands and the
+   session has no step left, so it can be archived. A pull request waiting on CI
+   or review can be Done, because the session does not watch it.
+2. **Waiting on the user.** Ask through AskUserQuestion, not in prose. Where
+   that tool is absent, start the message with "Waiting:" and the one thing
+   needed.
+
+Never end on an offer of more work. Do it now, or list it as the user's to
+start. `/dsi-toolbox:wrap-up` is the full check before a session is archived.
+
 ## Say which gate passed
 
 "It works", "the suite is green", "CI is green on both runners", "the vendor tool
